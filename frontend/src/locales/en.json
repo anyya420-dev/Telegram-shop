@@ -1,0 +1,90 @@
+{
+  "nav": {
+    "shop": "Shop",
+    "casino": "Casino",
+    "balance": "Balance",
+    "profile": "Profile",
+    "support": "Support"
+  },
+  "shop": {
+    "title": "Shop",
+    "searchPlaceholder": "🔍 Search products...",
+    "allCategories": "All",
+    "loading": "Loading...",
+    "empty": "No products found"
+  },
+  "product": {
+    "back": "← Back",
+    "inStock": "In stock: {{count}} {{unit}}",
+    "outOfStock": "Out of stock",
+    "quantity": "Quantity",
+    "total": "Total",
+    "addToCart": "🛒 Add to cart",
+    "updateCart": "🛒 Update cart",
+    "added": "✓ Added",
+    "adding": "Adding...",
+    "goToCart": "Go to cart →",
+    "notInCity": "Product is not available in the selected city",
+    "notFound": "Product not found"
+  },
+  "cart": {
+    "title": "Cart",
+    "back": "←",
+    "empty": "Cart is empty",
+    "emptyHint": "Add products from the catalog",
+    "goToShop": "Go to shop",
+    "itemCount_one": "{{count}} item",
+    "itemCount_other": "{{count}} items",
+    "pricePerUnit": "{{price}} / {{unit}}",
+    "itemTotal": "Total: {{total}}",
+    "items": "Items ({{count}})",
+    "discount": "Discount",
+    "delivery": "Delivery",
+    "orderTotal": "Total",
+    "soon": "— (soon)",
+    "checkout": "💳 Checkout (soon)",
+    "checkoutNote": "Payment will be available in the next version",
+    "recommended": "🔥 You might also like"
+  },
+  "profile": {
+    "title": "Profile",
+    "defaultName": "User",
+    "telegramId": "Telegram ID",
+    "city": "City",
+    "cityNotSelected": "Not selected",
+    "balance": "Balance",
+    "balanceSoon": "Balance will be available later",
+    "orders": "My orders",
+    "ordersSoon": "Order history will be available later",
+    "language": "Language",
+    "selectCity": "📍 Select city",
+    "cancel": "Cancel",
+    "languageRu": "🇷🇺 Russian",
+    "languageEn": "🇬🇧 English"
+  },
+  "city": {
+    "title": "Select city",
+    "subtitle": "The product catalog depends on the selected city",
+    "loading": "Loading..."
+  },
+  "balance": {
+    "title": "Balance",
+    "text": "Balance will be available later",
+    "soon": "Soon"
+  },
+  "casino": {
+    "title": "Casino",
+    "text": "Casino will be available later",
+    "soon": "Soon"
+  },
+  "support": {
+    "title": "Support",
+    "text": "Support will be available later",
+    "soon": "Soon"
+  },
+  "common": {
+    "loading": "Loading...",
+    "soon": "Soon",
+    "back": "← Back"
+  }
+}

@@ -5,10 +5,12 @@ import { api } from '../lib/api';
 import ProductCard from '../components/ProductCard/ProductCard';
 import { Product, ProductCategory } from '../types/product';
 import styles from './ShopPage.module.css';
+import { useTranslation } from 'react-i18next';
 
 export default function ShopPage() {
   const { selectedCity, cart } = useApp();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
@@ -44,7 +46,7 @@ export default function ShopPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.title}>Магазин</h1>
+          <h1 className={styles.title}>{t('shop.title')}</h1>
           {selectedCity && (
             <span className={styles.city}>📍 {selectedCity.name}</span>
           )}
@@ -64,7 +66,7 @@ export default function ShopPage() {
         <input
           className={styles.search}
           type="text"
-          placeholder="🔍 Поиск товаров..."
+          placeholder={t('shop.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -75,7 +77,7 @@ export default function ShopPage() {
           className={`${styles.catBtn} ${activeCategoryId === null ? styles.catActive : ''}`}
           onClick={() => setActiveCategoryId(null)}
         >
-          Все
+          {t('shop.allCategories')}
         </button>
         {categories.map((cat) => (
           <button
@@ -95,7 +97,7 @@ export default function ShopPage() {
       ) : products.length === 0 ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>📦</div>
-          <p>Товары не найдены</p>
+          <p>{t('shop.empty')}</p>
         </div>
       ) : (
         <div className={styles.grid}>

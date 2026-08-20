@@ -1,5 +1,6 @@
 import { Product } from '../../types/product';
 import styles from './ProductCard.module.css';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   product: Product;
@@ -8,6 +9,7 @@ interface Props {
 
 export default function ProductCard({ product, onClick }: Props) {
   const pc = product.productCities[0];
+  const { t } = useTranslation();
 
   return (
     <div className={styles.card} onClick={onClick}>
@@ -18,7 +20,7 @@ export default function ProductCard({ product, onClick }: Props) {
           <div className={styles.noImage}>📦</div>
         )}
         {pc && !pc.isAvailable && (
-          <div className={styles.outOfStock}>Нет в наличии</div>
+          <div className={styles.outOfStock}>{t('product.outOfStock')}</div>
         )}
         {product.isRecommended && (
           <div className={styles.badge}>🔥</div>

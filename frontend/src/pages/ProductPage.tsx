@@ -3,13 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
 import { roundToStep } from '../lib/utils';
-import { Product, ProductCity } from '../types/product';
+import { Product } from '../types/product';
 import styles from './ProductPage.module.css';
+import { useTranslation } from 'react-i18next';
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { selectedCity, addToCart, cart } = useApp();
+  const { t } = useTranslation();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
@@ -68,8 +70,8 @@ export default function ProductPage() {
   if (!product) {
     return (
       <div className={styles.error}>
-        <p>Товар не найден</p>
-        <button onClick={() => navigate(-1)}>← Назад</button>
+        <p>{t('product.notFound')}</p>
+        <button onClick={() => navigate(-1)}>{t('product.back')}</button>
       </div>
     );
   }
@@ -79,7 +81,7 @@ export default function ProductPage() {
   return (
     <div className={styles.page}>
       <button className={styles.back} onClick={() => navigate(-1)}>
-        ← Назад
+        {t('product.back')}
       </button>
 
       <div className={styles.imageWrap}>
@@ -111,15 +113,15 @@ export default function ProductPage() {
               />
               <span className={styles.stockText}>
                 {pc.isAvailable
-                  ? `В наличии: ${pc.stock} ${pc.unit}`
-                  : 'Нет в наличии'}
+                  ? t('product.inStock', { count: pc.stock, unit: pc.unit })
+                  : t('product.outOfStock')}
               </span>
             </div>
 
             {pc.isAvailable && (
               <>
                 <div className={styles.qtySection}>
-                  <span className={styles.qtyLabel}>Количество</span>
+                  <span className={styles.qtyLabel}>{t('product.quantity')}</span>
                   <div className={styles.qtyControl}>
                     <button
                       className={styles.qtyBtn}
@@ -142,7 +144,7 @@ export default function ProductPage() {
                 </div>
 
                 <div className={styles.totalRow}>
-                  <span className={styles.totalLabel}>Итого</span>
+                  <span className={styles.totalLabel}>{t('product.total')}</span>
                   <span className={styles.totalPrice}>
                     ${(product.price * quantity).toFixed(2)}
                   </span>
@@ -154,12 +156,12 @@ export default function ProductPage() {
                   disabled={adding || added}
                 >
                   {added
-                    ? '✓ Добавлено'
+                    ? t('product.added')
                     : adding
-                    ? 'Добавляем...'
+                    ? t('product.adding')
                     : itemInCart
-                    ? '🛒 Обновить корзину'
-                    : '🛒 Добавить в корзину'}
+                    ? t('product.updateCart')
+                    : t('product.addToCart')}
                 </button>
 
                 {itemInCart && (
@@ -167,7 +169,7 @@ export default function ProductPage() {
                     className={styles.viewCartBtn}
                     onClick={() => navigate('/shop/cart')}
                   >
-                    Перейти в корзину →
+                    {t('product.goToCart')}
                   </button>
                 )}
               </>
@@ -175,10 +177,11 @@ export default function ProductPage() {
           </>
         ) : (
           <div className={styles.notInCity}>
-            Товар недоступен в выбранном городе
+            {t('product.notInCity')}
           </div>
         )}
       </div>
     </div>
   );
 }
+

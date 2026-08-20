@@ -2,17 +2,19 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import styles from './Layout.module.css';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const NAV_ITEMS = [
-  { path: '/shop', icon: '🛍', label: 'Магазин' },
-  { path: '/casino', icon: '🎰', label: 'Казино' },
-  { path: '/balance', icon: '💰', label: 'Баланс' },
-  { path: '/profile', icon: '👤', label: 'Профиль' },
-  { path: '/support', icon: '🎧', label: 'Поддержка' },
+  { path: '/shop', icon: '🛍', labelKey: 'nav.shop' },
+  { path: '/casino', icon: '🎰', labelKey: 'nav.casino' },
+  { path: '/balance', icon: '💰', labelKey: 'nav.balance' },
+  { path: '/profile', icon: '👤', labelKey: 'nav.profile' },
+  { path: '/support', icon: '🎧', labelKey: 'nav.support' },
 ];
 
 export default function Layout() {
   const { loading, user } = useApp();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -47,7 +49,7 @@ export default function Layout() {
             onClick={() => navigate(item.path)}
           >
             <span className={styles.navIcon}>{item.icon}</span>
-            <span className={styles.navLabel}>{item.label}</span>
+            <span className={styles.navLabel}>{t(item.labelKey)}</span>
           </button>
         ))}
       </nav>

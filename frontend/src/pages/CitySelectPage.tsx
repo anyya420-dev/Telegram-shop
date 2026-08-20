@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useApp, City } from '../context/AppContext';
 import { api } from '../lib/api';
 import styles from './CitySelectPage.module.css';
+import { useTranslation } from 'react-i18next';
 
 export default function CitySelectPage() {
   const { setCity, user } = useApp();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
   const [selecting, setSelecting] = useState<number | null>(null);
@@ -35,10 +37,8 @@ export default function CitySelectPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.icon}>📍</div>
-        <h1 className={styles.title}>Выберите город</h1>
-        <p className={styles.subtitle}>
-          Каталог товаров зависит от выбранного города
-        </p>
+        <h1 className={styles.title}>{t('city.title')}</h1>
+        <p className={styles.subtitle}>{t('city.subtitle')}</p>
       </div>
 
       {loading ? (

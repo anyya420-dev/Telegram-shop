@@ -180,3 +180,20 @@
   font-size: 15px;
   margin-top: 4px;
 }
+
+.langBtn {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 18px;
+  cursor: pointer;
+  margin-left: 6px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.langActive {
+  opacity: 1;
+  border-color: var(--accent);
+}
