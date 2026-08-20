@@ -3,7 +3,9 @@ import type { Language } from '../types'
 import { en } from './locales/en'
 import { ru } from './locales/ru'
 
-type TranslationDictionary = typeof ru
+type TranslationDictionary = {
+  [key: string]: string | TranslationDictionary
+}
 
 type I18nContextValue = {
   language: Language
@@ -12,10 +14,10 @@ type I18nContextValue = {
   t: (key: string, params?: Record<string, string | number>) => string
 }
 
-const dictionaries: Record<Language, TranslationDictionary> = {
+const dictionaries = {
   ru,
   en,
-}
+} satisfies Record<Language, TranslationDictionary>
 
 const locales: Record<Language, string> = {
   ru: 'ru-RU',
@@ -25,9 +27,9 @@ const locales: Record<Language, string> = {
 const I18nContext = createContext<I18nContextValue | null>(null)
 
 function resolveValue(dictionary: TranslationDictionary, key: string) {
-  return key.split('.').reduce<unknown>((value, part) => {
+  return key.split('.').reduce<string | TranslationDictionary | undefined>((value, part) => {
     if (value && typeof value === 'object' && part in value) {
-      return (value as Record<string, unknown>)[part]
+      return value[part]
     }
 
     return undefined
