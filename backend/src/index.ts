@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import cors from 'cors'
 import express from 'express'
+import rateLimit from 'express-rate-limit'
 import {
   buildCartResponse,
   createSessionToken,
@@ -30,32 +31,13 @@ function parsePositiveInt(value: unknown) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
-function createRateLimiter(windowMs: number, maxRequests: number) {
-  const hits = new Map<string, { count: number; resetAt: number }>()
-
-  return (request: express.Request, response: express.Response, next: express.NextFunction) => {
-    const key = request.ip ?? request.socket.remoteAddress ?? 'anonymous'
-    const now = Date.now()
-    const current = hits.get(key)
-
-    if (!current || current.resetAt <= now) {
-      hits.set(key, { count: 1, resetAt: now + windowMs })
-      next()
-      return
-    }
-
-    if (current.count >= maxRequests) {
-      response.status(429).json({ message: 'Too many requests, please try again later' })
-      return
-    }
-
-    current.count += 1
-    hits.set(key, current)
-    next()
-  }
-}
-
-const authRateLimiter = createRateLimiter(60_000, 60)
+const authRateLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests, please try again later' },
+})
 
 async function getAuthorizedUser(request: express.Request, response: express.Response) {
   const authorization = request.header('authorization') ?? request.header('x-session-token') ?? ''
