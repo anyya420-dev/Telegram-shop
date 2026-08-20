@@ -1,0 +1,21 @@
+{
+  "name": "telegram-shop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram Web App shop monorepo",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "bot"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace frontend",
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:bot": "npm run dev --workspace bot",
+    "build": "npm run build --workspace frontend && npm run build --workspace backend && npm run build --workspace bot",
+    "typecheck": "npm run typecheck --workspace frontend && npm run typecheck --workspace backend && npm run typecheck --workspace bot",
+    "db:generate": "npm run db:generate --workspace backend",
+    "db:push": "npm run db:push --workspace backend",
+    "db:seed": "npm run db:seed --workspace backend"
+  }
+}
