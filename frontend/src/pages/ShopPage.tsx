@@ -1,113 +1,109 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
-import { api } from '../lib/api';
-import ProductCard from '../components/ProductCard/ProductCard';
-import { Product, ProductCategory } from '../types/product';
-import styles from './ShopPage.module.css';
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ProductCard } from '../components/ProductCard'
+import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
+import { getLocalizedCategoryName, getLocalizedCityName } from '../lib/localized'
 
 export default function ShopPage() {
-  const { selectedCity, cart } = useApp();
-  const navigate = useNavigate();
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const { user, categories, products, cart, refreshCatalog, openCityPicker } = useApp()
+  const [search, setSearch] = useState('')
+  const [activeCategoryId, setActiveCategoryId] = useState<number | 'all'>('all')
+  const { language, t } = useI18n()
 
-  const cartCount = cart.items.length;
+  const cityName = user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('common.notSelected')
+  const cartCount = cart?.items.length ?? 0
 
-  useEffect(() => {
-    api.get<ProductCategory[]>('/categories').then(setCategories);
-  }, []);
-
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (selectedCity) params.set('cityId', String(selectedCity.id));
-      if (activeCategoryId) params.set('categoryId', String(activeCategoryId));
-      if (search) params.set('search', search);
-      const suffix = params.toString();
-      const data = await api.get<Product[]>(`/products${suffix ? `?${suffix}` : ''}`);
-      setProducts(data);
-    } finally {
-      setLoading(false);
+  const heroMessage = useMemo(() => {
+    if (!user?.selectedCity) {
+      return t('shop.heroMessageNoCity')
     }
-  }, [selectedCity, activeCategoryId, search]);
 
-  useEffect(() => {
-    void fetchProducts();
-  }, [fetchProducts]);
+    return t('shop.heroMessageDefault')
+  }, [t, user?.selectedCity])
 
   return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <h1 className={styles.title}>Магазин</h1>
-          {selectedCity && (
-            <span className={styles.city}>📍 {selectedCity.name}</span>
-          )}
+    <div className="page-stack">
+      <section className="hero-card">
+        <div>
+          <span className="eyebrow">{t('shop.heroBadge')}</span>
+          <h1>{t('shop.heroTitle')}</h1>
+          <p>{heroMessage}</p>
         </div>
-        <button
-          className={styles.cartBtn}
-          onClick={() => navigate('/shop/cart')}
-        >
-          🛒
-          {cartCount > 0 && (
-            <span className={styles.cartBadge}>{cartCount}</span>
-          )}
-        </button>
-      </div>
-
-      <div className={styles.searchWrap}>
-        <input
-          className={styles.search}
-          type="text"
-          placeholder="🔍 Поиск товаров..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
-      <div className={styles.categories}>
-        <button
-          className={`${styles.catBtn} ${activeCategoryId === null ? styles.catActive : ''}`}
-          onClick={() => setActiveCategoryId(null)}
-        >
-          Все
-        </button>
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
-            onClick={() => setActiveCategoryId(cat.id)}
-          >
-            {cat.name}
+        <div className="hero-card__actions">
+          <button className="secondary-button" type="button" onClick={openCityPicker}>
+            📍 {cityName}
           </button>
-        ))}
-      </div>
+          <Link className="primary-button" to="/shop/cart">
+            {t('shop.cartButton', { count: cartCount })}
+          </Link>
+        </div>
+      </section>
 
-      {loading ? (
-        <div className={styles.loadingState}>
-          <div className={styles.spinner} />
-        </div>
-      ) : products.length === 0 ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyIcon}>📦</div>
-          <p>Товары не найдены</p>
-        </div>
-      ) : (
-        <div className={styles.grid}>
-          {products.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onClick={() => navigate(`/shop/product/${product.id}`)}
+      <section className="panel-card">
+        <div className="search-row">
+          <label className="search-field">
+            <span>🔍</span>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t('shop.searchPlaceholder')}
             />
-          ))}
+          </label>
+          <button className="secondary-button" type="button" onClick={() => refreshCatalog(search, activeCategoryId)}>
+            {t('shop.searchButton')}
+          </button>
         </div>
-      )}
+        <div className="category-row">
+          <button
+            type="button"
+            className={`category-pill ${activeCategoryId === 'all' ? 'category-pill--active' : ''}`}
+            onClick={() => {
+              setActiveCategoryId('all')
+              void refreshCatalog(search, 'all')
+            }}
+          >
+            {t('shop.allCategories')}
+          </button>
+          {categories.map((category) => {
+            const isActive = activeCategoryId === category.id
+
+            return (
+              <button
+                key={category.id}
+                type="button"
+                className={`category-pill ${isActive ? 'category-pill--active' : ''}`}
+                onClick={() => {
+                  setActiveCategoryId(category.id)
+                  void refreshCatalog(search, category.id)
+                }}
+              >
+                {getLocalizedCategoryName(category, language)}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="section-heading">
+        <div>
+          <span className="eyebrow">{t('shop.catalogBadge')}</span>
+          <h2>{t('shop.catalogTitle')}</h2>
+        </div>
+      </section>
+
+      <section className="product-grid">
+        {products.map((product) => (
+          <ProductCard key={product.productCityId} product={product} />
+        ))}
+      </section>
+
+      {products.length === 0 ? (
+        <section className="empty-state">
+          <h3>{t('shop.emptyTitle')}</h3>
+          <p>{t('shop.emptyDescription')}</p>
+        </section>
+      ) : null}
     </div>
-  );
+  )
 }

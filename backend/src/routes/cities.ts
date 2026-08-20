@@ -1,18 +1,15 @@
-import { Router } from 'express';
-import prisma from '../lib/prisma';
+import { Router } from 'express'
+import { mapCity, prisma } from '../lib.js'
 
-const router = Router();
+const router = Router()
 
-router.get('/', async (_req, res) => {
-  try {
-    const cities = await prisma.city.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-    });
-    res.json(cities);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch cities' });
-  }
-});
+router.get('/', async (_request, response) => {
+  const cities = await prisma.city.findMany({
+    where: { isActive: true },
+    orderBy: { sortOrder: 'asc' },
+  })
 
-export default router;
+  response.json(cities.map(mapCity))
+})
+
+export default router

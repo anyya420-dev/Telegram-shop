@@ -1,18 +1,18 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AppProvider } from './context/AppContext';
-import Layout from './components/Layout/Layout';
-import ShopPage from './pages/ShopPage';
-import ProductPage from './pages/ProductPage';
-import CartPage from './pages/CartPage';
-import CasinoPage from './pages/CasinoPage';
-import BalancePage from './pages/BalancePage';
-import ProfilePage from './pages/ProfilePage';
-import SupportPage from './pages/SupportPage';
-import CitySelectPage from './pages/CitySelectPage';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Layout } from './components/Layout/Layout'
+import { AppProvider } from './context/AppContext'
+import BalancePage from './pages/BalancePage'
+import CartPage from './pages/CartPage'
+import CasinoPage from './pages/CasinoPage'
+import CitySelectPage from './pages/CitySelectPage'
+import ProductPage from './pages/ProductPage'
+import ProfilePage from './pages/ProfilePage'
+import ShopPage from './pages/ShopPage'
+import SupportPage from './pages/SupportPage'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AppProvider>
         <Routes>
           <Route path="/select-city" element={<CitySelectPage />} />
@@ -25,9 +25,10 @@ export default function App() {
             <Route path="balance" element={<BalancePage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="support" element={<SupportPage />} />
+            <Route path="*" element={<Navigate to="/shop" replace />} />
           </Route>
         </Routes>
       </AppProvider>
-    </BrowserRouter>
-  );
+    </HashRouter>
+  )
 }

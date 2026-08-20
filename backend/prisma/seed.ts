@@ -1,120 +1,148 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client'
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 async function main() {
-  // Cities
+  await prisma.cartItem.deleteMany()
+  await prisma.cart.deleteMany()
+  await prisma.productCity.deleteMany()
+  await prisma.product.deleteMany()
+  await prisma.category.deleteMany()
+  await prisma.city.deleteMany()
+  await prisma.user.deleteMany()
+
   const warsaw = await prisma.city.upsert({
     where: { name: 'Варшава' },
-    update: {},
-    create: { name: 'Варшава', isActive: true, sortOrder: 1 },
-  });
+    update: { nameEn: 'Warsaw', isActive: true, sortOrder: 1 },
+    create: { name: 'Варшава', nameEn: 'Warsaw', isActive: true, sortOrder: 1 },
+  })
   const krakow = await prisma.city.upsert({
     where: { name: 'Краков' },
-    update: {},
-    create: { name: 'Краков', isActive: true, sortOrder: 2 },
-  });
+    update: { nameEn: 'Krakow', isActive: true, sortOrder: 2 },
+    create: { name: 'Краков', nameEn: 'Krakow', isActive: true, sortOrder: 2 },
+  })
   const wroclaw = await prisma.city.upsert({
     where: { name: 'Вроцлав' },
-    update: {},
-    create: { name: 'Вроцлав', isActive: true, sortOrder: 3 },
-  });
+    update: { nameEn: 'Wroclaw', isActive: true, sortOrder: 3 },
+    create: { name: 'Вроцлав', nameEn: 'Wroclaw', isActive: true, sortOrder: 3 },
+  })
 
-  // Categories
   const clothing = await prisma.category.upsert({
     where: { name: 'Одежда' },
-    update: {},
-    create: { name: 'Одежда', isActive: true, sortOrder: 1 },
-  });
+    update: { nameEn: 'Clothing', isActive: true, sortOrder: 1 },
+    create: { name: 'Одежда', nameEn: 'Clothing', isActive: true, sortOrder: 1 },
+  })
   const electronics = await prisma.category.upsert({
     where: { name: 'Электроника' },
-    update: {},
-    create: { name: 'Электроника', isActive: true, sortOrder: 2 },
-  });
+    update: { nameEn: 'Electronics', isActive: true, sortOrder: 2 },
+    create: { name: 'Электроника', nameEn: 'Electronics', isActive: true, sortOrder: 2 },
+  })
   const home = await prisma.category.upsert({
     where: { name: 'Дом' },
-    update: {},
-    create: { name: 'Дом', isActive: true, sortOrder: 3 },
-  });
+    update: { nameEn: 'Home', isActive: true, sortOrder: 3 },
+    create: { name: 'Дом', nameEn: 'Home', isActive: true, sortOrder: 3 },
+  })
   const accessories = await prisma.category.upsert({
     where: { name: 'Аксессуары' },
-    update: {},
-    create: { name: 'Аксессуары', isActive: true, sortOrder: 4 },
-  });
+    update: { nameEn: 'Accessories', isActive: true, sortOrder: 4 },
+    create: { name: 'Аксессуары', nameEn: 'Accessories', isActive: true, sortOrder: 4 },
+  })
 
-  // Products
   const coffee = await prisma.product.upsert({
     where: { id: 1 },
-    update: {},
+    update: {
+      nameEn: 'Premium Coffee',
+      descriptionEn: 'Selected whole-bean coffee with a rich taste and aroma.',
+    },
     create: {
       name: 'Кофе Premium',
+      nameEn: 'Premium Coffee',
       description: 'Отборный зерновой кофе высшего качества. Насыщенный вкус и аромат.',
+      descriptionEn: 'Selected whole-bean coffee with a rich taste and aroma.',
       price: 20,
       image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600',
       categoryId: home.id,
       isActive: true,
       isRecommended: true,
     },
-  });
+  })
 
   const headphones = await prisma.product.upsert({
     where: { id: 2 },
-    update: {},
+    update: {
+      nameEn: 'Wireless Headphones',
+      descriptionEn: 'Wireless headphones with noise cancellation and 30 hours of battery life.',
+    },
     create: {
       name: 'Наушники Wireless',
+      nameEn: 'Wireless Headphones',
       description: 'Беспроводные наушники с шумоподавлением. 30 часов работы.',
+      descriptionEn: 'Wireless headphones with noise cancellation and 30 hours of battery life.',
       price: 150,
       image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
       categoryId: electronics.id,
       isActive: true,
       isRecommended: true,
     },
-  });
+  })
 
   const tshirt = await prisma.product.upsert({
     where: { id: 3 },
-    update: {},
+    update: {
+      nameEn: 'Classic T-shirt',
+      descriptionEn: 'A minimalist T-shirt made from premium cotton with a clean fit.',
+    },
     create: {
       name: 'Футболка Classic',
+      nameEn: 'Classic T-shirt',
       description: 'Минималистичная футболка из premium-хлопка. Идеальный крой.',
+      descriptionEn: 'A minimalist T-shirt made from premium cotton with a clean fit.',
       price: 35,
       image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600',
       categoryId: clothing.id,
       isActive: true,
       isRecommended: false,
     },
-  });
+  })
 
   const charger = await prisma.product.upsert({
     where: { id: 4 },
-    update: {},
+    update: {
+      nameEn: 'USB-C Charger 65W',
+      descriptionEn: 'A fast charger for laptops and phones with a compact design.',
+    },
     create: {
       name: 'Зарядка USB-C 65W',
+      nameEn: 'USB-C Charger 65W',
       description: 'Быстрая зарядка для ноутбуков и телефонов. Компактный дизайн.',
+      descriptionEn: 'A fast charger for laptops and phones with a compact design.',
       price: 45,
       image: 'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=600',
       categoryId: electronics.id,
       isActive: true,
       isRecommended: false,
     },
-  });
+  })
 
   const lamp = await prisma.product.upsert({
     where: { id: 5 },
-    update: {},
+    update: {
+      nameEn: 'Desk Lamp',
+      descriptionEn: 'A modern LED lamp with adjustable brightness and USB charging.',
+    },
     create: {
       name: 'Лампа настольная',
+      nameEn: 'Desk Lamp',
       description: 'Современная LED лампа с регулировкой яркости. Заряжается от USB.',
+      descriptionEn: 'A modern LED lamp with adjustable brightness and USB charging.',
       price: 60,
       image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600',
       categoryId: home.id,
       isActive: true,
       isRecommended: false,
     },
-  });
+  })
 
-  // ProductCity links
-  // Coffee: Warsaw and Krakow with different quantities
   await prisma.productCity.upsert({
     where: { productId_cityId: { productId: coffee.id, cityId: warsaw.id } },
     update: {},
@@ -128,7 +156,7 @@ async function main() {
       unit: 'кг',
       isAvailable: true,
     },
-  });
+  })
   await prisma.productCity.upsert({
     where: { productId_cityId: { productId: coffee.id, cityId: krakow.id } },
     update: {},
@@ -142,9 +170,8 @@ async function main() {
       unit: 'кг',
       isAvailable: true,
     },
-  });
+  })
 
-  // Headphones: all cities
   for (const city of [warsaw, krakow, wroclaw]) {
     await prisma.productCity.upsert({
       where: { productId_cityId: { productId: headphones.id, cityId: city.id } },
@@ -159,10 +186,9 @@ async function main() {
         unit: 'шт.',
         isAvailable: true,
       },
-    });
+    })
   }
 
-  // T-shirt: Warsaw and Wroclaw
   for (const city of [warsaw, wroclaw]) {
     await prisma.productCity.upsert({
       where: { productId_cityId: { productId: tshirt.id, cityId: city.id } },
@@ -177,10 +203,9 @@ async function main() {
         unit: 'шт.',
         isAvailable: true,
       },
-    });
+    })
   }
 
-  // Charger: all cities
   for (const city of [warsaw, krakow, wroclaw]) {
     await prisma.productCity.upsert({
       where: { productId_cityId: { productId: charger.id, cityId: city.id } },
@@ -195,10 +220,9 @@ async function main() {
         unit: 'шт.',
         isAvailable: true,
       },
-    });
+    })
   }
 
-  // Lamp: Krakow and Wroclaw
   for (const city of [krakow, wroclaw]) {
     await prisma.productCity.upsert({
       where: { productId_cityId: { productId: lamp.id, cityId: city.id } },
@@ -213,12 +237,17 @@ async function main() {
         unit: 'шт.',
         isAvailable: true,
       },
-    });
+    })
   }
 
-  console.log('Seed completed successfully');
+  console.log('Seed completed successfully')
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .catch(async (error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

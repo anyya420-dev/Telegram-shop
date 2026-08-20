@@ -1,18 +1,15 @@
-import { Router } from 'express';
-import prisma from '../lib/prisma';
+import { Router } from 'express'
+import { mapCategory, prisma } from '../lib.js'
 
-const router = Router();
+const router = Router()
 
-router.get('/', async (_req, res) => {
-  try {
-    const categories = await prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-    });
-    res.json(categories);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch categories' });
-  }
-});
+router.get('/', async (_request, response) => {
+  const categories = await prisma.category.findMany({
+    where: { isActive: true },
+    orderBy: { sortOrder: 'asc' },
+  })
 
-export default router;
+  response.json(categories.map(mapCategory))
+})
+
+export default router

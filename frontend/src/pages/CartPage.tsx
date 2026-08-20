@@ -1,169 +1,103 @@
-import { useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
-import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
-import { roundToStep } from '../lib/utils';
-import { Product } from '../types/product';
-import styles from './CartPage.module.css';
-
-function getItemsLabel(count: number): string {
-  const lastTwo = count % 100;
-  const lastOne = count % 10;
-
-  if (lastTwo >= 11 && lastTwo <= 14) {
-    return 'товаров';
-  }
-
-  if (lastOne === 1) {
-    return 'товар';
-  }
-
-  if (lastOne >= 2 && lastOne <= 4) {
-    return 'товара';
-  }
-
-  return 'товаров';
-}
+import { Link } from 'react-router-dom'
+import { ProductCard } from '../components/ProductCard'
+import { QuantitySelector } from '../components/QuantitySelector'
+import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
+import { formatCurrency } from '../lib/format'
+import { getLocalizedProductDescription, getLocalizedProductName } from '../lib/localized'
 
 export default function CartPage() {
-  const { cart, updateCartItem, removeFromCart, selectedCity } = useApp();
-  const navigate = useNavigate();
-  const [recommended, setRecommended] = useState<Product[]>([]);
+  const { cart, recommended, updateCartItem, removeCartItem } = useApp()
+  const { language, t } = useI18n()
 
-  useEffect(() => {
-    const params = selectedCity ? `?cityId=${selectedCity.id}` : '';
-    api.get<Product[]>(`/products/recommended/list${params}`).then(setRecommended);
-  }, [selectedCity]);
-
-  function renderCartItem(item: typeof cart.items[number]) {
-    const productCity = item.product.productCities[0];
-    const unit = productCity?.unit || 'шт.';
-    const step = productCity?.quantityStep || 1;
-    const minimum = productCity?.minimumQuantity || step;
-    const maximum = productCity?.maximumQuantity;
-    const nextDown = roundToStep(item.quantity - step, step);
-    const nextUp = roundToStep(item.quantity + step, step);
-
+  if (!cart || cart.items.length === 0) {
     return (
-      <div key={item.id} className={styles.item}>
-        <div className={styles.itemImg}>
-          {item.product.image ? (
-            <img src={item.product.image} alt={item.product.name} />
-          ) : (
-            <span>📦</span>
-          )}
-        </div>
-        <div className={styles.itemInfo}>
-          <p className={styles.itemName}>{item.product.name}</p>
-          <p className={styles.itemPrice}>${item.product.price} / {unit}</p>
-          <p className={styles.itemTotal}>
-            Итого: ${(item.product.price * item.quantity).toFixed(2)}
-          </p>
-        </div>
-        <div className={styles.itemActions}>
-          <button
-            className={styles.qtyBtn}
-            onClick={() =>
-              nextDown >= minimum
-                ? void updateCartItem(item.productId, nextDown)
-                : void removeFromCart(item.productId)
-            }
-          >
-            {nextDown < minimum ? '🗑' : '−'}
-          </button>
-          <span className={styles.qty}>{item.quantity}</span>
-          <button
-            className={styles.qtyBtn}
-            onClick={() => void updateCartItem(item.productId, nextUp)}
-            disabled={maximum !== undefined && nextUp > maximum}
-          >
-            +
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (cart.items.length === 0) {
-    return (
-      <div className={styles.empty}>
-        <button className={styles.back} onClick={() => navigate('/shop')}>← Назад</button>
-        <div className={styles.emptyContent}>
-          <div className={styles.emptyIcon}>🛒</div>
-          <h2 className={styles.emptyTitle}>Корзина пуста</h2>
-          <p className={styles.emptyText}>Добавьте товары из каталога</p>
-          <button className={styles.shopBtn} onClick={() => navigate('/shop')}>
-            Перейти в магазин
-          </button>
-        </div>
-      </div>
-    );
+      <section className="placeholder-card">
+        <span className="eyebrow">{t('cart.badge')}</span>
+        <h1>{t('cart.emptyTitle')}</h1>
+        <p>{t('cart.emptyDescription')}</p>
+        <Link className="primary-button" to="/shop">{t('cart.goToShop')}</Link>
+      </section>
+    )
   }
 
   return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <button className={styles.back} onClick={() => navigate(-1)}>←</button>
-        <h1 className={styles.title}>Корзина</h1>
-        <span className={styles.count}>
-          {cart.items.length} {getItemsLabel(cart.items.length)}
-        </span>
-      </div>
-
-      <div className={styles.items}>
-        {cart.items.map(renderCartItem)}
-      </div>
-
-      <div className={styles.summary}>
-        <div className={styles.summaryRow}>
-          <span>Товары ({cart.items.length})</span>
-          <span>${cart.total.toFixed(2)}</span>
+    <div className="page-stack">
+      <section className="section-heading">
+        <div>
+          <span className="eyebrow">{t('cart.badge')}</span>
+          <h1>{t('cart.title')}</h1>
         </div>
-        <div className={`${styles.summaryRow} ${styles.placeholder}`}>
-          <span>Скидка</span>
-          <span className={styles.soon}>— (скоро)</span>
-        </div>
-        <div className={`${styles.summaryRow} ${styles.placeholder}`}>
-          <span>Доставка</span>
-          <span className={styles.soon}>— (скоро)</span>
-        </div>
-        <div className={`${styles.summaryRow} ${styles.total}`}>
-          <span>Итого</span>
-          <span>${cart.total.toFixed(2)}</span>
-        </div>
+      </section>
 
-        <button className={styles.checkoutBtn} disabled>
-          💳 Оформить заказ (скоро)
-        </button>
-        <p className={styles.checkoutNote}>
-          Оплата будет доступна в следующей версии
-        </p>
-      </div>
-
-      {recommended.length > 0 && (
-        <div className={styles.recommended}>
-          <h3 className={styles.recTitle}>🔥 Вам может понравиться</h3>
-          <div className={styles.recList}>
-            {recommended.map((p) => (
-              <div
-                key={p.id}
-                className={styles.recCard}
-                onClick={() => navigate(`/shop/product/${p.id}`)}
-              >
-                <div className={styles.recImg}>
-                  {p.image ? (
-                    <img src={p.image} alt={p.name} />
-                  ) : (
-                    <span>📦</span>
-                  )}
+      <section className="cart-list">
+        {cart.items.map((item) => (
+          <article key={item.id} className="cart-card">
+            <img className="cart-card__image" src={item.productCity.image || '/favicon.svg'} alt={getLocalizedProductName(item.productCity, language)} />
+            <div className="cart-card__content">
+              <div className="cart-card__header">
+                <div>
+                  <h2>{getLocalizedProductName(item.productCity, language)}</h2>
+                  <p>{getLocalizedProductDescription(item.productCity, language)}</p>
                 </div>
-                <p className={styles.recName}>{p.name}</p>
-                <p className={styles.recPrice}>${p.price}</p>
+                <button className="ghost-button" type="button" onClick={() => void removeCartItem(item.id)}>
+                  {t('cart.remove')}
+                </button>
               </div>
+              <QuantitySelector
+                minimum={item.productCity.minimumQuantity}
+                step={item.productCity.quantityStep}
+                maximum={item.productCity.maximumQuantity}
+                unit={item.productCity.unit}
+                unitTranslations={item.productCity.unitTranslations}
+                value={item.quantity}
+                onChange={(value) => {
+                  void updateCartItem(item.id, value)
+                }}
+              />
+              <div className="cart-card__footer">
+                <span>{t('cart.perUnit', { price: formatCurrency(item.productCity.price, language) })}</span>
+                <strong>{formatCurrency(item.lineTotal, language)}</strong>
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section className="summary-card">
+        <div className="summary-row">
+          <span>{t('cart.goodsTotal')}</span>
+          <strong>{formatCurrency(cart.subtotal, language)}</strong>
+        </div>
+        <div className="summary-row muted">
+          <span>{t('cart.discounts')}</span>
+          <span>{formatCurrency(cart.discount, language)}</span>
+        </div>
+        <div className="summary-row muted">
+          <span>{t('cart.delivery')}</span>
+          <span>{formatCurrency(cart.deliveryFee, language)}</span>
+        </div>
+        <div className="summary-row summary-row--total">
+          <span>{t('cart.total')}</span>
+          <strong>{formatCurrency(cart.total, language)}</strong>
+        </div>
+      </section>
+
+      {recommended.length > 0 ? (
+        <section className="page-stack">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">{t('cart.recommendedBadge')}</span>
+              <h2>{t('cart.recommendedTitle')}</h2>
+            </div>
+          </div>
+          <div className="product-grid">
+            {recommended.map((product) => (
+              <ProductCard key={product.productCityId} product={product} />
             ))}
           </div>
-        </div>
-      )}
+        </section>
+      ) : null}
     </div>
-  );
+  )
 }

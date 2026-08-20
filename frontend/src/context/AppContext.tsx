@@ -1,215 +1,240 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-} from 'react';
-import { api } from '../lib/api';
-import { useNavigate } from 'react-router-dom';
-import { ProductCity } from '../types/product';
+import { createContext, useContext, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { api } from '../api/client'
+import { useI18n } from '../i18n'
+import { getTelegramContext } from '../lib/telegram'
+import type { Cart, Category, City, Language, ProductSummary, UserProfile } from '../types'
 
-interface TelegramWebAppUser {
-  id: number;
-  username?: string;
-  first_name?: string;
-  last_name?: string;
+type AppState = {
+  loading: boolean
+  error: string | null
+  telegramEnvironment: boolean
+  user: UserProfile | null
+  cities: City[]
+  categories: Category[]
+  products: ProductSummary[]
+  cart: Cart | null
+  recommended: ProductSummary[]
+  cityPickerOpen: boolean
+  openCityPicker: () => void
+  closeCityPicker: () => void
+  refreshCatalog: (search?: string, categoryId?: number | 'all') => Promise<void>
+  selectCity: (cityId: number) => Promise<void>
+  updateLanguagePreference: (language: Language) => Promise<void>
+  addToCart: (productCityId: number, quantity: number) => Promise<void>
+  updateCartItem: (itemId: number, quantity: number) => Promise<void>
+  removeCartItem: (itemId: number) => Promise<void>
+  setError: (value: string | null) => void
 }
 
-interface TelegramWebApp {
-  initDataUnsafe?: {
-    user?: TelegramWebAppUser;
-  };
-  ready: () => void;
-  expand: () => void;
+const AppContext = createContext<AppState | null>(null)
+
+function emptyCart(): Cart {
+  return {
+    id: 0,
+    items: [],
+    subtotal: 0,
+    deliveryFee: 0,
+    discount: 0,
+    total: 0,
+  }
 }
 
-export interface City {
-  id: number;
-  name: string;
-  isActive: boolean;
+function translateError(error: unknown, t: (key: string) => string, fallbackKey: string) {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
+    return t(`errors.${error.code}`)
+  }
+
+  return t(`errors.${fallbackKey}`)
 }
 
-export interface User {
-  id: number;
-  telegramId: string;
-  username: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  selectedCityId: number | null;
-  selectedCity: City | null;
-}
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [telegramEnvironment, setTelegramEnvironment] = useState(false)
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [cities, setCities] = useState<City[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [products, setProducts] = useState<ProductSummary[]>([])
+  const [cart, setCart] = useState<Cart>(emptyCart())
+  const [recommended, setRecommended] = useState<ProductSummary[]>([])
+  const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  const { setLanguage, t } = useI18n()
 
-export interface CartItem {
-  id: number;
-  cartId: number;
-  productId: number;
-  quantity: number;
-  product: {
-    id: number;
-    name: string;
-    price: number;
-    image: string | null;
-    category: { name: string };
-    productCities: ProductCity[];
-  };
-}
-
-export interface Cart {
-  id?: number;
-  items: CartItem[];
-  total: number;
-}
-
-interface AppContextValue {
-  user: User | null;
-  cart: Cart;
-  selectedCity: City | null;
-  loading: boolean;
-  refreshCart: () => void;
-  setCity: (city: City) => Promise<void>;
-  addToCart: (productId: number, quantity: number) => Promise<void>;
-  updateCartItem: (productId: number, quantity: number) => Promise<void>;
-  removeFromCart: (productId: number) => Promise<void>;
-}
-
-const AppContext = createContext<AppContextValue | null>(null);
-
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [cart, setCart] = useState<Cart>({ items: [], total: 0 });
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-
-  const fetchCart = useCallback(async (telegramId: string) => {
-    try {
-      const data = await api.get<Cart>(`/cart/${telegramId}`);
-      setCart(data);
-    } catch {
-      // ignore
+  async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
+    if (!user?.selectedCityId) {
+      setProducts([])
+      return
     }
-  }, []);
+
+    try {
+      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
+      setProducts(response.products)
+    } catch (catalogError) {
+      setError(translateError(catalogError, t, 'catalog_refresh_failed'))
+    }
+  }
 
   useEffect(() => {
-    async function init() {
+    async function bootstrap() {
       try {
-        const tg = (window as Window & {
-          Telegram?: { WebApp?: TelegramWebApp };
-        }).Telegram?.WebApp;
-        const demoStorageKey = 'telegram-shop-demo-user-id';
-        const storedDemoId = window.localStorage.getItem(demoStorageKey);
-        const generatedDemoId =
-          storedDemoId ||
-          `demo_${window.crypto?.randomUUID?.() ?? Date.now().toString()}`;
-        let telegramId = generatedDemoId;
-        let username: string | undefined;
-        let firstName: string | undefined;
-        let lastName: string | undefined;
+        setLoading(true)
+        setError(null)
+        const telegram = getTelegramContext()
+        api.setSessionToken(null)
+        const response = await api.bootstrap({
+          initData: telegram.initData,
+          telegramUser: telegram.user,
+          isTelegramEnvironment: telegram.isTelegramEnvironment,
+        })
 
-        if (tg && tg.initDataUnsafe?.user) {
-          const tgUser = tg.initDataUnsafe.user;
-          telegramId = String(tgUser.id);
-          username = tgUser.username;
-          firstName = tgUser.first_name;
-          lastName = tgUser.last_name;
-          tg.ready();
-          tg.expand();
+        api.setSessionToken(response.sessionToken)
+        setTelegramEnvironment(response.telegramEnvironment)
+        setUser(response.user)
+        setLanguage(response.user.language)
+        setCities(response.cities)
+        setCategories(response.categories)
+
+        if (!response.user.selectedCityId) {
+          setProducts([])
+          setCart(emptyCart())
+          setRecommended([])
         } else {
-          if (!storedDemoId) {
-            window.localStorage.setItem(demoStorageKey, generatedDemoId);
-          }
-          telegramId = generatedDemoId;
+          const [catalogResponse, cartResponse] = await Promise.all([
+            api.getCatalog({ cityId: response.user.selectedCityId }),
+            api.getCart(),
+          ])
+          setProducts(catalogResponse.products)
+          setCart(cartResponse.cart)
+          setRecommended(cartResponse.recommended)
         }
-
-        const userData = await api.post<User>('/users/auth', {
-          telegramId,
-          username,
-          firstName,
-          lastName,
-        });
-
-        setUser(userData);
-        await fetchCart(telegramId);
-
-        if (!userData.selectedCityId) {
-          navigate('/select-city');
-        }
-      } catch (e) {
-        console.error('Init error', e);
+      } catch (bootstrapError) {
+        setError(translateError(bootstrapError, t, 'shop_load_failed'))
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }
-    void init();
-  }, [navigate, fetchCart]);
 
-  const setCity = useCallback(
-    async (city: City) => {
-      if (!user) return;
-      const updated = await api.patch<User>(`/users/${user.telegramId}/city`, {
-        cityId: city.id,
-      });
-      setUser(updated);
-    },
-    [user]
-  );
+    void bootstrap()
+  }, [setLanguage])
 
-  const refreshCart = useCallback(() => {
-    if (user) {
-      void fetchCart(user.telegramId);
+  async function selectCity(cityId: number) {
+    if (!user) {
+      return
     }
-  }, [user, fetchCart]);
 
-  const addToCart = useCallback(
-    async (productId: number, quantity: number) => {
-      if (!user) return;
-      await api.post(`/cart/${user.telegramId}/items`, { productId, quantity });
-      await fetchCart(user.telegramId);
-    },
-    [user, fetchCart]
-  );
+    try {
+      setError(null)
+      const response = await api.updateCity(cityId)
+      setUser(response.user)
+      setCityPickerOpen(false)
 
-  const updateCartItem = useCallback(
-    async (productId: number, quantity: number) => {
-      if (!user) return;
-      await api.patch(`/cart/${user.telegramId}/items`, { productId, quantity });
-      await fetchCart(user.telegramId);
-    },
-    [user, fetchCart]
-  );
+      const productsResponse = await api.getCatalog({ cityId })
+      const cartResponse = await api.getCart()
+      setProducts(productsResponse.products)
+      setCart(cartResponse.cart)
+      setRecommended(cartResponse.recommended)
+    } catch (cityError) {
+      setError(translateError(cityError, t, 'city_not_found'))
+      throw cityError
+    }
+  }
 
-  const removeFromCart = useCallback(
-    async (productId: number) => {
-      if (!user) return;
-      await api.delete(`/cart/${user.telegramId}/items/${productId}`);
-      await fetchCart(user.telegramId);
-    },
-    [user, fetchCart]
-  );
+  async function updateLanguagePreference(language: Language) {
+    if (!user || user.language === language) {
+      return
+    }
 
-  const selectedCity = user?.selectedCity ?? null;
+    try {
+      setError(null)
+      const response = await api.updateLanguage(language)
+      setUser(response.user)
+      setLanguage(response.user.language)
+    } catch (languageError) {
+      setError(translateError(languageError, t, 'language_update_failed'))
+      throw languageError
+    }
+  }
 
-  return (
-    <AppContext.Provider
-      value={{
-        user,
-        cart,
-        selectedCity,
-        loading,
-        refreshCart,
-        setCity,
-        addToCart,
-        updateCartItem,
-        removeFromCart,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  );
+  async function addToCart(productCityId: number, quantity: number) {
+    if (!user) {
+      return
+    }
+
+    try {
+      setError(null)
+      const response = await api.addCartItem({ productCityId, quantity })
+      setCart(response.cart)
+      setRecommended(response.recommended)
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    }
+  }
+
+  async function updateCartItem(itemId: number, quantity: number) {
+    if (!user) {
+      return
+    }
+
+    try {
+      setError(null)
+      const response = await api.updateCartItem(itemId, { quantity })
+      setCart(response.cart)
+      setRecommended(response.recommended)
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    }
+  }
+
+  async function removeCartItem(itemId: number) {
+    if (!user) {
+      return
+    }
+
+    try {
+      setError(null)
+      const response = await api.removeCartItem(itemId)
+      setCart(response.cart)
+      setRecommended(response.recommended)
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    }
+  }
+
+  const value = {
+    loading,
+    error,
+    telegramEnvironment,
+    user,
+    cities,
+    categories,
+    products,
+    cart,
+    recommended,
+    cityPickerOpen,
+    openCityPicker: () => setCityPickerOpen(true),
+    closeCityPicker: () => setCityPickerOpen(false),
+    refreshCatalog,
+    selectCity,
+    updateLanguagePreference,
+    addToCart,
+    updateCartItem,
+    removeCartItem,
+    setError,
+  } satisfies AppState
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
 
 export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used inside AppProvider');
-  return ctx;
+  const context = useContext(AppContext)
+
+  if (!context) {
+    throw new Error('App context is unavailable')
+  }
+
+  return context
 }

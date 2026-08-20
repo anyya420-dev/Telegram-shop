@@ -1,184 +1,141 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
-import { api } from '../lib/api';
-import { roundToStep } from '../lib/utils';
-import { Product, ProductCity } from '../types/product';
-import styles from './ProductPage.module.css';
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { api } from '../api/client'
+import { QuantitySelector } from '../components/QuantitySelector'
+import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
+import { formatCurrency, formatQuantity } from '../lib/format'
+import { getLocalizedProductCategoryName, getLocalizedProductDescription, getLocalizedProductName, getLocalizedUnit } from '../lib/localized'
+import type { ProductDetail } from '../types'
+
+function translateError(error: unknown, t: (key: string) => string, fallbackKey: string) {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
+    return t(`errors.${error.code}`)
+  }
+
+  return t(`errors.${fallbackKey}`)
+}
 
 export default function ProductPage() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { selectedCity, addToCart, cart } = useApp();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [quantity, setQuantity] = useState(1);
-  const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState(false);
+  const { id } = useParams<{ id: string }>()
+  const { user, products, addToCart } = useApp()
+  const { language, t } = useI18n()
+  const [product, setProduct] = useState<ProductDetail | null>(null)
+  const [quantity, setQuantity] = useState<number>(1)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const cachedProduct = useMemo(() => products.find((item) => item.id === Number(id)) ?? null, [id, products])
 
   useEffect(() => {
-    async function load() {
+    async function loadProduct() {
+      if (!id || !user?.selectedCityId) {
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
       try {
-        const params = selectedCity ? `?cityId=${selectedCity.id}` : '';
-        const data = await api.get<Product>(`/products/${id}${params}`);
-        setProduct(data);
-        const pc = data.productCities[0];
-        if (pc) setQuantity(pc.minimumQuantity);
+        if (cachedProduct) {
+          setProduct(cachedProduct)
+          setQuantity(cachedProduct.minimumQuantity)
+          return
+        }
+
+        const response = await api.getProduct(Number(id), user.selectedCityId)
+        setProduct(response.product)
+        setQuantity(response.product.minimumQuantity)
+      } catch (productError) {
+        setError(translateError(productError, t, 'product_load_failed'))
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }
-    void load();
-  }, [id, selectedCity]);
 
-  const pc = product?.productCities[0];
-
-  function increment() {
-    if (!pc) return;
-    const next = roundToStep(quantity + pc.quantityStep, pc.quantityStep);
-    if (next <= pc.maximumQuantity) setQuantity(next);
-  }
-
-  function decrement() {
-    if (!pc) return;
-    const next = roundToStep(quantity - pc.quantityStep, pc.quantityStep);
-    if (next >= pc.minimumQuantity) setQuantity(next);
-  }
-
-  async function handleAddToCart() {
-    if (!product || !pc) return;
-    setAdding(true);
-    try {
-      await addToCart(product.id, quantity);
-      setAdded(true);
-      window.setTimeout(() => setAdded(false), 2000);
-    } finally {
-      setAdding(false);
-    }
-  }
+    void loadProduct()
+  }, [cachedProduct, id, t, user?.selectedCityId])
 
   if (loading) {
     return (
-      <div className={styles.loading}>
-        <div className={styles.spinner} />
-      </div>
-    );
+      <section className="placeholder-card">
+        <h1>{t('common.loadingProduct')}</h1>
+      </section>
+    )
   }
 
   if (!product) {
     return (
-      <div className={styles.error}>
-        <p>Товар не найден</p>
-        <button onClick={() => navigate(-1)}>← Назад</button>
-      </div>
-    );
+      <section className="placeholder-card">
+        <h1>{t('product.notFoundTitle')}</h1>
+        <p>{t('product.notFoundDescription')}</p>
+        <Link className="primary-button" to="/shop">
+          {t('product.backToCatalog')}
+        </Link>
+      </section>
+    )
   }
 
-  const itemInCart = cart.items.find((i) => i.productId === product.id);
+  const unit = getLocalizedUnit(product.unit, language, product.unitTranslations)
+  const imageSrc = product.image || '/favicon.svg'
 
   return (
-    <div className={styles.page}>
-      <button className={styles.back} onClick={() => navigate(-1)}>
-        ← Назад
-      </button>
-
-      <div className={styles.imageWrap}>
-        {product.image ? (
-          <img src={product.image} alt={product.name} className={styles.image} />
-        ) : (
-          <div className={styles.noImage}>📦</div>
-        )}
-      </div>
-
-      <div className={styles.content}>
-        <div className={styles.categoryTag}>{product.category.name}</div>
-        <h1 className={styles.name}>{product.name}</h1>
-
-        <div className={styles.priceRow}>
-          <span className={styles.price}>${product.price}</span>
-          {pc && <span className={styles.unit}>/ {pc.unit}</span>}
-        </div>
-
-        {product.description && (
-          <p className={styles.description}>{product.description}</p>
-        )}
-
-        {pc ? (
-          <>
-            <div className={styles.stockRow}>
-              <span
-                className={`${styles.stockDot} ${pc.isAvailable ? styles.inStock : styles.outOfStock}`}
-              />
-              <span className={styles.stockText}>
-                {pc.isAvailable
-                  ? `В наличии: ${pc.stock} ${pc.unit}`
-                  : 'Нет в наличии'}
-              </span>
+    <div className="page-stack">
+      <Link className="back-link" to="/shop">{t('product.backToCatalog')}</Link>
+      <section className="product-hero">
+        <img className="product-hero__image" src={imageSrc} alt={getLocalizedProductName(product, language)} />
+        <div className="panel-card panel-card--dense">
+          <span className="eyebrow">{getLocalizedProductCategoryName(product, language)}</span>
+          <h1>{getLocalizedProductName(product, language)}</h1>
+          <p>{getLocalizedProductDescription(product, language)}</p>
+          <div className="detail-grid">
+            <div>
+              <span className="field-label">{t('product.price')}</span>
+              <strong>{formatCurrency(product.price, language)}</strong>
             </div>
-
-            {pc.isAvailable && (
-              <>
-                <div className={styles.qtySection}>
-                  <span className={styles.qtyLabel}>Количество</span>
-                  <div className={styles.qtyControl}>
-                    <button
-                      className={styles.qtyBtn}
-                      onClick={decrement}
-                      disabled={quantity <= pc.minimumQuantity}
-                    >
-                      −
-                    </button>
-                    <span className={styles.qtyValue}>
-                      {quantity} {pc.unit}
-                    </span>
-                    <button
-                      className={styles.qtyBtn}
-                      onClick={increment}
-                      disabled={quantity >= pc.maximumQuantity}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div className={styles.totalRow}>
-                  <span className={styles.totalLabel}>Итого</span>
-                  <span className={styles.totalPrice}>
-                    ${(product.price * quantity).toFixed(2)}
-                  </span>
-                </div>
-
-                <button
-                  className={`${styles.addBtn} ${added ? styles.addedBtn : ''}`}
-                  onClick={handleAddToCart}
-                  disabled={adding || added}
-                >
-                  {added
-                    ? '✓ Добавлено'
-                    : adding
-                    ? 'Добавляем...'
-                    : itemInCart
-                    ? '🛒 Обновить корзину'
-                    : '🛒 Добавить в корзину'}
-                </button>
-
-                {itemInCart && (
-                  <button
-                    className={styles.viewCartBtn}
-                    onClick={() => navigate('/shop/cart')}
-                  >
-                    Перейти в корзину →
-                  </button>
-                )}
-              </>
-            )}
-          </>
-        ) : (
-          <div className={styles.notInCity}>
-            Товар недоступен в выбранном городе
+            <div>
+              <span className="field-label">{t('product.availability')}</span>
+              <strong>{formatQuantity(product.stock, language)} {unit}</strong>
+            </div>
+            <div>
+              <span className="field-label">{t('product.minimum')}</span>
+              <strong>{formatQuantity(product.minimumQuantity, language)} {unit}</strong>
+            </div>
+            <div>
+              <span className="field-label">{t('product.step')}</span>
+              <strong>{formatQuantity(product.quantityStep, language)} {unit}</strong>
+            </div>
           </div>
-        )}
-      </div>
+          <QuantitySelector
+            minimum={product.minimumQuantity}
+            step={product.quantityStep}
+            maximum={product.maximumQuantity}
+            unit={product.unit}
+            unitTranslations={product.unitTranslations}
+            value={quantity}
+            onChange={setQuantity}
+          />
+          {error ? <p className="error-text">{error}</p> : null}
+          <button
+            className="primary-button"
+            type="button"
+            disabled={submitting}
+            onClick={async () => {
+              setSubmitting(true)
+              setError(null)
+              try {
+                await addToCart(product.productCityId, quantity)
+              } catch (cartError) {
+                setError(translateError(cartError, t, 'cart_update_failed'))
+              } finally {
+                setSubmitting(false)
+              }
+            }}
+          >
+            {t('product.addToCart')}
+          </button>
+        </div>
+      </section>
     </div>
-  );
+  )
 }

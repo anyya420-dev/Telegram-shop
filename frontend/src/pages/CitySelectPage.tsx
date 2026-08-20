@@ -1,33 +1,29 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useApp, City } from '../context/AppContext';
-import { api } from '../lib/api';
-import styles from './CitySelectPage.module.css';
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
+import { getLocalizedCityName } from '../lib/localized'
+import styles from './CitySelectPage.module.css'
 
 export default function CitySelectPage() {
-  const { setCity, user } = useApp();
-  const navigate = useNavigate();
-  const [cities, setCities] = useState<City[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selecting, setSelecting] = useState<number | null>(null);
-
-  useEffect(() => {
-    api.get<City[]>('/cities').then(setCities).finally(() => setLoading(false));
-  }, []);
+  const { cities, loading, selectCity, user } = useApp()
+  const { language, t } = useI18n()
+  const navigate = useNavigate()
+  const [selecting, setSelecting] = useState<number | null>(null)
 
   useEffect(() => {
     if (user?.selectedCityId) {
-      navigate('/shop', { replace: true });
+      navigate('/shop', { replace: true })
     }
-  }, [user, navigate]);
+  }, [navigate, user])
 
-  async function handleSelect(city: City) {
-    setSelecting(city.id);
+  async function handleSelect(cityId: number) {
+    setSelecting(cityId)
     try {
-      await setCity(city);
-      navigate('/shop');
+      await selectCity(cityId)
+      navigate('/shop', { replace: true })
     } finally {
-      setSelecting(null);
+      setSelecting(null)
     }
   }
 
@@ -35,15 +31,13 @@ export default function CitySelectPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.icon}>📍</div>
-        <h1 className={styles.title}>Выберите город</h1>
-        <p className={styles.subtitle}>
-          Каталог товаров зависит от выбранного города
-        </p>
+        <h1 className={styles.title}>{t('cityPicker.title')}</h1>
+        <p className={styles.subtitle}>{t('cityPicker.helper')}</p>
       </div>
 
       {loading ? (
         <div className={styles.loadingState}>
-          <div className={styles.spinner} />
+          <div className={styles.spinner} aria-hidden="true" />
         </div>
       ) : (
         <div className={styles.list}>
@@ -51,15 +45,16 @@ export default function CitySelectPage() {
             <button
               key={city.id}
               className={`${styles.cityBtn} ${selecting === city.id ? styles.selected : ''}`}
-              onClick={() => handleSelect(city)}
+              onClick={() => handleSelect(city.id)}
               disabled={selecting !== null}
+              type="button"
             >
-              <span className={styles.cityName}>{city.name}</span>
+              <span className={styles.cityName}>{getLocalizedCityName(city, language)}</span>
               <span className={styles.arrow}>→</span>
             </button>
           ))}
         </div>
       )}
     </div>
-  );
+  )
 }
