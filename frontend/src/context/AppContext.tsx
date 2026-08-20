@@ -117,23 +117,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     void bootstrap()
-  }, [setLanguage, t])
+  }, [setLanguage])
 
   async function selectCity(cityId: number) {
     if (!user) {
       return
     }
 
-    setError(null)
-    const response = await api.updateCity(cityId)
-    setUser(response.user)
-    setCityPickerOpen(false)
+    try {
+      setError(null)
+      const response = await api.updateCity(cityId)
+      setUser(response.user)
+      setCityPickerOpen(false)
 
-    const productsResponse = await api.getCatalog({ cityId })
-    const cartResponse = await api.getCart()
-    setProducts(productsResponse.products)
-    setCart(cartResponse.cart)
-    setRecommended(cartResponse.recommended)
+      const productsResponse = await api.getCatalog({ cityId })
+      const cartResponse = await api.getCart()
+      setProducts(productsResponse.products)
+      setCart(cartResponse.cart)
+      setRecommended(cartResponse.recommended)
+    } catch (cityError) {
+      const translatedError = translateError(cityError, t, 'city_not_found')
+      setError(translatedError)
+      throw cityError
+    }
   }
 
   async function updateLanguagePreference(language: Language) {
@@ -157,10 +163,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    setError(null)
-    const response = await api.addCartItem({ productCityId, quantity })
-    setCart(response.cart)
-    setRecommended(response.recommended)
+    try {
+      setError(null)
+      const response = await api.addCartItem({ productCityId, quantity })
+      setCart(response.cart)
+      setRecommended(response.recommended)
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    }
   }
 
   async function updateCartItem(itemId: number, quantity: number) {
@@ -168,10 +179,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    setError(null)
-    const response = await api.updateCartItem(itemId, { quantity })
-    setCart(response.cart)
-    setRecommended(response.recommended)
+    try {
+      setError(null)
+      const response = await api.updateCartItem(itemId, { quantity })
+      setCart(response.cart)
+      setRecommended(response.recommended)
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    }
   }
 
   async function removeCartItem(itemId: number) {
@@ -179,10 +195,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    setError(null)
-    const response = await api.removeCartItem(itemId)
-    setCart(response.cart)
-    setRecommended(response.recommended)
+    try {
+      setError(null)
+      const response = await api.removeCartItem(itemId)
+      setCart(response.cart)
+      setRecommended(response.recommended)
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    }
   }
 
   const value = {
