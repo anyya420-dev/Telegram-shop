@@ -30,6 +30,33 @@ function parsePositiveInt(value: unknown) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+function createRateLimiter(windowMs: number, maxRequests: number) {
+  const hits = new Map<string, { count: number; resetAt: number }>()
+
+  return (request: express.Request, response: express.Response, next: express.NextFunction) => {
+    const key = request.ip ?? request.socket.remoteAddress ?? 'anonymous'
+    const now = Date.now()
+    const current = hits.get(key)
+
+    if (!current || current.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs })
+      next()
+      return
+    }
+
+    if (current.count >= maxRequests) {
+      response.status(429).json({ message: 'Too many requests, please try again later' })
+      return
+    }
+
+    current.count += 1
+    hits.set(key, current)
+    next()
+  }
+}
+
+const authRateLimiter = createRateLimiter(60_000, 60)
+
 async function getAuthorizedUser(request: express.Request, response: express.Response) {
   const authorization = request.header('authorization') ?? request.header('x-session-token') ?? ''
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : authorization
@@ -50,7 +77,7 @@ async function getAuthorizedUser(request: express.Request, response: express.Res
   return user
 }
 
-app.post('/api/session/bootstrap', async (request, response) => {
+app.post('/api/session/bootstrap', authRateLimiter, async (request, response) => {
   let telegramUser: { id: string; username?: string; first_name: string } | null = null
   const initData = String(request.body.initData ?? '')
 
@@ -174,7 +201,7 @@ app.get('/api/products/:productId', async (request, response) => {
   response.json({ product: mapProduct(productCity) })
 })
 
-app.get('/api/cart', async (request, response) => {
+app.get('/api/cart', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
 
   if (!user) {
@@ -185,7 +212,7 @@ app.get('/api/cart', async (request, response) => {
   response.json(await buildCartResponse(user.id))
 })
 
-app.patch('/api/users/city', async (request, response) => {
+app.patch('/api/users/city', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
 
   if (!user) {
@@ -218,7 +245,7 @@ app.patch('/api/users/city', async (request, response) => {
   response.json({ user: updatedUser })
 })
 
-app.post('/api/cart/items', async (request, response) => {
+app.post('/api/cart/items', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
 
   if (!user) {
@@ -282,7 +309,7 @@ app.post('/api/cart/items', async (request, response) => {
   response.json(await buildCartResponse(user.id))
 })
 
-app.patch('/api/cart/items/:itemId', async (request, response) => {
+app.patch('/api/cart/items/:itemId', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
 
   if (!user) {
@@ -328,7 +355,7 @@ app.patch('/api/cart/items/:itemId', async (request, response) => {
   response.json(await buildCartResponse(user.id))
 })
 
-app.delete('/api/cart/items/:itemId', async (request, response) => {
+app.delete('/api/cart/items/:itemId', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
 
   if (!user) {
