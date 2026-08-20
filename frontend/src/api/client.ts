@@ -1,12 +1,14 @@
 import type { BootstrapResponse, Cart, ProductDetail, ProductSummary, TelegramIdentity, UserProfile } from '../types'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api'
+let sessionToken: string | null = null
 
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
       ...(init?.headers ?? {}),
     },
   })
@@ -20,6 +22,9 @@ async function request<T>(path: string, init?: RequestInit) {
 }
 
 export const api = {
+  setSessionToken(token: string | null) {
+    sessionToken = token
+  },
   bootstrap(payload: { initData: string; telegramUser: TelegramIdentity; isTelegramEnvironment: boolean }) {
     return request<BootstrapResponse>('/session/bootstrap', {
       method: 'POST',
@@ -42,29 +47,29 @@ export const api = {
   getProduct(productId: number, cityId: number) {
     return request<{ product: ProductDetail }>(`/products/${productId}?cityId=${cityId}`)
   },
-  getCart(telegramId: string) {
-    return request<{ cart: Cart; recommended: ProductSummary[] }>(`/cart?telegramId=${telegramId}`)
+  getCart() {
+    return request<{ cart: Cart; recommended: ProductSummary[] }>('/cart')
   },
-  updateCity(telegramId: string, cityId: number) {
-    return request<{ user: UserProfile }>(`/users/${telegramId}/city`, {
+  updateCity(cityId: number) {
+    return request<{ user: UserProfile }>('/users/city', {
       method: 'PATCH',
       body: JSON.stringify({ cityId }),
     })
   },
-  addCartItem(payload: { telegramId: string; productCityId: number; quantity: number }) {
+  addCartItem(payload: { productCityId: number; quantity: number }) {
     return request<{ cart: Cart; recommended: ProductSummary[] }>('/cart/items', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
   },
-  updateCartItem(itemId: number, payload: { telegramId: string; quantity: number }) {
+  updateCartItem(itemId: number, payload: { quantity: number }) {
     return request<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     })
   },
-  removeCartItem(itemId: number, telegramId: string) {
-    return request<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}?telegramId=${telegramId}`, {
+  removeCartItem(itemId: number) {
+    return request<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, {
       method: 'DELETE',
     })
   },

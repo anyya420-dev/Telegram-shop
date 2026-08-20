@@ -1,13 +1,99 @@
+import { PrismaClient } from '@prisma/client'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+
 process.env.DATABASE_URL ??= 'file:./dev.db'
 
-import { PrismaClient } from '@prisma/client'
-
 export const prisma = new PrismaClient()
+export const DEMO_TELEGRAM_USER = {
+  id: '900000001',
+  username: 'demo_customer',
+  first_name: 'Demo',
+}
 
-export const DEMO_TELEGRAM_ID = '900000001'
+const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
+
+type TelegramUserPayload = {
+  id: string
+  username?: string
+  first_name: string
+}
 
 export function normalizeQuantity(value: number) {
   return Number(value.toFixed(2))
+}
+
+export function createSessionToken(telegramId: string) {
+  const signature = createHmac('sha256', SESSION_SECRET).update(telegramId).digest('hex')
+  return `${telegramId}.${signature}`
+}
+
+export function verifySessionToken(token: string | undefined) {
+  if (!token) {
+    return null
+  }
+
+  const [telegramId, signature] = token.split('.')
+
+  if (!telegramId || !signature) {
+    return null
+  }
+
+  const expectedSignature = createHmac('sha256', SESSION_SECRET).update(telegramId).digest('hex')
+  const received = Buffer.from(signature)
+  const expected = Buffer.from(expectedSignature)
+
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    return null
+  }
+
+  return telegramId
+}
+
+export function verifyTelegramInitData(initData: string, botToken: string) {
+  const params = new URLSearchParams(initData)
+  const hash = params.get('hash')
+
+  if (!hash) {
+    return null
+  }
+
+  params.delete('hash')
+
+  const dataCheckString = [...params.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')
+
+  const secret = createHmac('sha256', 'WebAppData').update(botToken).digest()
+  const calculatedHash = createHmac('sha256', secret).update(dataCheckString).digest('hex')
+  const received = Buffer.from(hash, 'hex')
+  const expected = Buffer.from(calculatedHash, 'hex')
+
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    return null
+  }
+
+  const rawUser = params.get('user')
+
+  if (!rawUser) {
+    return null
+  }
+
+  try {
+    const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string }
+
+    if (!parsedUser.id || !parsedUser.first_name) {
+      return null
+    }
+
+    return {
+      id: String(parsedUser.id),
+      username: parsedUser.username,
+      first_name: parsedUser.first_name,
+    } satisfies TelegramUserPayload
+  } catch {
+    return null
+  }
 }
 
 export function isAllowedQuantity(quantity: number, minimum: number, step: number, maximum: number) {

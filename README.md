@@ -48,8 +48,10 @@ VITE_API_URL=http://localhost:3001/api
 PORT=3001
 DATABASE_URL=file:./dev.db
 FRONTEND_URL=http://localhost:5173
+ALLOW_DEMO_MODE=true
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 WEB_APP_URL=http://localhost:5173
+SESSION_SECRET=change_me_for_production
 ```
 
 ## Установка зависимостей

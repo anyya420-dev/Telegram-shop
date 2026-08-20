@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { buildQuantityOptions, formatQuantity } from '../lib/format'
 
 type QuantitySelectorProps = {
@@ -10,7 +11,7 @@ type QuantitySelectorProps = {
 }
 
 export function QuantitySelector({ minimum, step, maximum, unit, value, onChange }: QuantitySelectorProps) {
-  const options = buildQuantityOptions(minimum, step, maximum)
+  const options = useMemo(() => buildQuantityOptions(minimum, step, maximum), [maximum, minimum, step])
 
   return (
     <div className="quantity-selector">

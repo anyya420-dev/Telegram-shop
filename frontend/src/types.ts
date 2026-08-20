@@ -65,6 +65,7 @@ export type Cart = {
 
 export type BootstrapResponse = {
   telegramEnvironment: boolean
+  sessionToken: string
   user: UserProfile
   cities: City[]
   categories: Category[]

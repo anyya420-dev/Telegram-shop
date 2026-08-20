@@ -55,8 +55,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
-    setProducts(response.products)
+    try {
+      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
+      setProducts(response.products)
+    } catch (catalogError) {
+      setError(catalogError instanceof Error ? catalogError.message : 'Не удалось обновить каталог')
+    }
   }
 
   useEffect(() => {
@@ -65,12 +69,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLoading(true)
         setError(null)
         const telegram = getTelegramContext()
+        api.setSessionToken(null)
         const response = await api.bootstrap({
           initData: telegram.initData,
           telegramUser: telegram.user,
           isTelegramEnvironment: telegram.isTelegramEnvironment,
         })
 
+        api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
         setUser(response.user)
         setCities(response.cities)
@@ -81,7 +87,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else {
           const [catalogResponse, cartResponse] = await Promise.all([
             api.getCatalog({ cityId: response.user.selectedCityId }),
-            api.getCart(response.user.telegramId),
+            api.getCart(),
           ])
           setProducts(catalogResponse.products)
           setCart(cartResponse.cart)
@@ -102,12 +108,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const response = await api.updateCity(user.telegramId, cityId)
+    setError(null)
+    const response = await api.updateCity(cityId)
     setUser(response.user)
     setCityPickerOpen(false)
 
     const productsResponse = await api.getCatalog({ cityId })
-    const cartResponse = await api.getCart(user.telegramId)
+    const cartResponse = await api.getCart()
     setProducts(productsResponse.products)
     setCart(cartResponse.cart)
     setRecommended(cartResponse.recommended)
@@ -118,7 +125,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const response = await api.addCartItem({ telegramId: user.telegramId, productCityId, quantity })
+    setError(null)
+    const response = await api.addCartItem({ productCityId, quantity })
     setCart(response.cart)
     setRecommended(response.recommended)
   }
@@ -128,7 +136,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const response = await api.updateCartItem(itemId, { telegramId: user.telegramId, quantity })
+    setError(null)
+    const response = await api.updateCartItem(itemId, { quantity })
     setCart(response.cart)
     setRecommended(response.recommended)
   }
@@ -138,7 +147,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    const response = await api.removeCartItem(itemId, user.telegramId)
+    setError(null)
+    const response = await api.removeCartItem(itemId)
     setCart(response.cart)
     setRecommended(response.recommended)
   }

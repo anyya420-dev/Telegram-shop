@@ -1,11 +1,22 @@
 import 'dotenv/config'
 import cors from 'cors'
 import express from 'express'
-import { buildCartResponse, getOrCreateCart, isAllowedQuantity, mapProduct, prisma } from './lib.js'
+import {
+  buildCartResponse,
+  createSessionToken,
+  DEMO_TELEGRAM_USER,
+  getOrCreateCart,
+  isAllowedQuantity,
+  mapProduct,
+  prisma,
+  verifySessionToken,
+  verifyTelegramInitData,
+} from './lib.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3001)
 const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+const allowDemoMode = process.env.ALLOW_DEMO_MODE === 'true' || process.env.NODE_ENV !== 'production'
 
 app.use(cors({ origin: frontendUrl }))
 app.use(express.json())
@@ -14,11 +25,53 @@ app.get('/health', (_request, response) => {
   response.json({ ok: true })
 })
 
-app.post('/api/session/bootstrap', async (request, response) => {
-  const telegramUser = request.body.telegramUser
+function parsePositiveInt(value: unknown) {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
 
-  if (!telegramUser?.id || !telegramUser?.first_name) {
-    response.status(400).json({ message: 'Telegram user data is required' })
+async function getAuthorizedUser(request: express.Request, response: express.Response) {
+  const authorization = request.header('authorization') ?? request.header('x-session-token') ?? ''
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : authorization
+  const telegramId = verifySessionToken(token)
+
+  if (!telegramId) {
+    response.status(401).json({ message: 'Invalid session token' })
+    return null
+  }
+
+  const user = await prisma.user.findUnique({ where: { telegramId } })
+
+  if (!user) {
+    response.status(404).json({ message: 'User not found' })
+    return null
+  }
+
+  return user
+}
+
+app.post('/api/session/bootstrap', async (request, response) => {
+  let telegramUser: { id: string; username?: string; first_name: string } | null = null
+  const initData = String(request.body.initData ?? '')
+
+  if (initData) {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN
+
+    if (!botToken) {
+      response.status(503).json({ message: 'Telegram bot token is required for Web App verification' })
+      return
+    }
+
+    telegramUser = verifyTelegramInitData(initData, botToken)
+
+    if (!telegramUser) {
+      response.status(401).json({ message: 'Telegram init data verification failed' })
+      return
+    }
+  } else if (allowDemoMode) {
+    telegramUser = DEMO_TELEGRAM_USER
+  } else {
+    response.status(401).json({ message: 'Telegram init data is required' })
     return
   }
 
@@ -46,7 +99,8 @@ app.post('/api/session/bootstrap', async (request, response) => {
   ])
 
   response.json({
-    telegramEnvironment: Boolean(request.body.isTelegramEnvironment),
+    telegramEnvironment: Boolean(initData),
+    sessionToken: createSessionToken(user.telegramId),
     user,
     cities,
     categories,
@@ -54,12 +108,12 @@ app.post('/api/session/bootstrap', async (request, response) => {
 })
 
 app.get('/api/catalog', async (request, response) => {
-  const cityId = Number(request.query.cityId)
+  const cityId = parsePositiveInt(request.query.cityId)
   const search = String(request.query.search ?? '').trim()
-  const categoryId = request.query.categoryId ? Number(request.query.categoryId) : undefined
+  const categoryId = request.query.categoryId ? parsePositiveInt(request.query.categoryId) ?? undefined : undefined
 
-  if (!Number.isInteger(cityId)) {
-    response.status(400).json({ message: 'cityId is required' })
+  if (!cityId) {
+    response.status(400).json({ message: 'cityId must be a positive integer' })
     return
   }
 
@@ -81,20 +135,20 @@ app.get('/api/catalog', async (request, response) => {
         },
       },
     },
-    orderBy: [
-      { product: { isRecommended: 'desc' } },
-      { product: { name: 'asc' } },
-    ],
+    orderBy: [{ product: { isRecommended: 'desc' } }, { product: { name: 'asc' } }],
   })
 
-  response.json({
-    products: productCities.map(mapProduct),
-  })
+  response.json({ products: productCities.map(mapProduct) })
 })
 
 app.get('/api/products/:productId', async (request, response) => {
-  const productId = Number(request.params.productId)
-  const cityId = Number(request.query.cityId)
+  const productId = parsePositiveInt(request.params.productId)
+  const cityId = parsePositiveInt(request.query.cityId)
+
+  if (!productId || !cityId) {
+    response.status(400).json({ message: 'productId and cityId must be positive integers' })
+    return
+  }
 
   const productCity = await prisma.productCity.findFirst({
     where: {
@@ -121,12 +175,9 @@ app.get('/api/products/:productId', async (request, response) => {
 })
 
 app.get('/api/cart', async (request, response) => {
-  const telegramId = String(request.query.telegramId ?? '')
-
-  const user = await prisma.user.findUnique({ where: { telegramId } })
+  const user = await getAuthorizedUser(request, response)
 
   if (!user) {
-    response.status(404).json({ message: 'User not found' })
     return
   }
 
@@ -134,14 +185,17 @@ app.get('/api/cart', async (request, response) => {
   response.json(await buildCartResponse(user.id))
 })
 
-app.patch('/api/users/:telegramId/city', async (request, response) => {
-  const telegramId = String(request.params.telegramId)
-  const cityId = Number(request.body.cityId)
-
-  const user = await prisma.user.findUnique({ where: { telegramId } })
+app.patch('/api/users/city', async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
 
   if (!user) {
-    response.status(404).json({ message: 'User not found' })
+    return
+  }
+
+  const cityId = parsePositiveInt(request.body.cityId)
+
+  if (!cityId) {
+    response.status(400).json({ message: 'cityId must be a positive integer' })
     return
   }
 
@@ -156,7 +210,7 @@ app.patch('/api/users/:telegramId/city', async (request, response) => {
   await prisma.cartItem.deleteMany({ where: { cartId: cart.id } })
 
   const updatedUser = await prisma.user.update({
-    where: { telegramId },
+    where: { telegramId: user.telegramId },
     data: { selectedCityId: cityId },
     include: { selectedCity: true },
   })
@@ -165,14 +219,17 @@ app.patch('/api/users/:telegramId/city', async (request, response) => {
 })
 
 app.post('/api/cart/items', async (request, response) => {
-  const telegramId = String(request.body.telegramId ?? '')
-  const productCityId = Number(request.body.productCityId)
-  const quantity = Number(request.body.quantity)
-
-  const user = await prisma.user.findUnique({ where: { telegramId } })
+  const user = await getAuthorizedUser(request, response)
 
   if (!user) {
-    response.status(404).json({ message: 'User not found' })
+    return
+  }
+
+  const productCityId = parsePositiveInt(request.body.productCityId)
+  const quantity = Number(request.body.quantity)
+
+  if (!productCityId) {
+    response.status(400).json({ message: 'productCityId must be a positive integer' })
     return
   }
 
@@ -226,14 +283,17 @@ app.post('/api/cart/items', async (request, response) => {
 })
 
 app.patch('/api/cart/items/:itemId', async (request, response) => {
-  const itemId = Number(request.params.itemId)
-  const telegramId = String(request.body.telegramId ?? '')
-  const quantity = Number(request.body.quantity)
-
-  const user = await prisma.user.findUnique({ where: { telegramId } })
+  const user = await getAuthorizedUser(request, response)
 
   if (!user) {
-    response.status(404).json({ message: 'User not found' })
+    return
+  }
+
+  const itemId = parsePositiveInt(request.params.itemId)
+  const quantity = Number(request.body.quantity)
+
+  if (!itemId) {
+    response.status(400).json({ message: 'itemId must be a positive integer' })
     return
   }
 
@@ -269,13 +329,16 @@ app.patch('/api/cart/items/:itemId', async (request, response) => {
 })
 
 app.delete('/api/cart/items/:itemId', async (request, response) => {
-  const itemId = Number(request.params.itemId)
-  const telegramId = String(request.query.telegramId ?? '')
-
-  const user = await prisma.user.findUnique({ where: { telegramId } })
+  const user = await getAuthorizedUser(request, response)
 
   if (!user) {
-    response.status(404).json({ message: 'User not found' })
+    return
+  }
+
+  const itemId = parsePositiveInt(request.params.itemId)
+
+  if (!itemId) {
+    response.status(400).json({ message: 'itemId must be a positive integer' })
     return
   }
 
