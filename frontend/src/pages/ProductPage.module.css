@@ -1,0 +1,253 @@
+.page {
+  padding-bottom: 32px;
+}
+
+.back {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  color: var(--accent);
+  font-size: 15px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.imageWrap {
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.noImage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60px;
+}
+
+.content {
+  padding: 20px 20px 0;
+}
+
+.categoryTag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  border-radius: 100px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  line-height: 1.3;
+}
+
+.priceRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.price {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.unit {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.stockRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.stockDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.inStock { background: var(--success); }
+.outOfStock { background: var(--danger); }
+
+.stockText {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.qtySection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.qtyLabel {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.qtyControl {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.qtyBtn {
+  width: 42px;
+  height: 42px;
+  font-size: 20px;
+  font-weight: 300;
+  color: var(--text-primary);
+  background: transparent;
+  transition: background 0.1s;
+}
+
+.qtyBtn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+}
+
+.qtyBtn:disabled {
+  color: var(--text-muted);
+}
+
+.qtyValue {
+  min-width: 80px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0 4px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.totalRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.totalLabel {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.totalPrice {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.addBtn {
+  width: 100%;
+  padding: 16px;
+  background: var(--accent);
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: var(--radius-lg);
+  transition: all 0.15s;
+  margin-bottom: 10px;
+}
+
+.addBtn:hover:not(:disabled) {
+  background: var(--accent-dark);
+}
+
+.addBtn:disabled {
+  opacity: 0.7;
+}
+
+.addedBtn {
+  background: var(--success) !important;
+}
+
+.viewCartBtn {
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 500;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+}
+
+.notInCity {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 20px;
+  font-size: 14px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  gap: 16px;
+  color: var(--text-secondary);
+}

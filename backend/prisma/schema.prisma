@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int       @id @default(autoincrement())
+  telegramId     String    @unique @map("telegram_id")
+  username       String?
+  firstName      String?   @map("first_name")
+  lastName       String?   @map("last_name")
+  selectedCityId Int?      @map("selected_city_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  selectedCity   City?     @relation(fields: [selectedCityId], references: [id])
+  cart           Cart?
+
+  @@map("users")
+}
+
+model City {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  sortOrder    Int           @default(0) @map("sort_order")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  users        User[]
+  productCities ProductCity[]
+
+  @@map("cities")
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  isActive  Boolean   @default(true) @map("is_active")
+  sortOrder Int       @default(0) @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  products  Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id            Int           @id @default(autoincrement())
+  name          String
+  description   String?
+  price         Float
+  image         String?
+  categoryId    Int           @map("category_id")
+  isActive      Boolean       @default(true) @map("is_active")
+  isRecommended Boolean       @default(false) @map("is_recommended")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  category      Category      @relation(fields: [categoryId], references: [id])
+  productCities ProductCity[]
+  cartItems     CartItem[]
+
+  @@map("products")
+}
+
+model ProductCity {
+  id              Int      @id @default(autoincrement())
+  productId       Int      @map("product_id")
+  cityId          Int      @map("city_id")
+  stock           Int      @default(0)
+  minimumQuantity Float    @default(1) @map("minimum_quantity")
+  quantityStep    Float    @default(1) @map("quantity_step")
+  maximumQuantity Float    @default(100) @map("maximum_quantity")
+  unit            String   @default("шт.")
+  isAvailable     Boolean  @default(true) @map("is_available")
+
+  product         Product  @relation(fields: [productId], references: [id])
+  city            City     @relation(fields: [cityId], references: [id])
+
+  @@unique([productId, cityId])
+  @@map("product_cities")
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique @map("user_id")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cartId    Int      @map("cart_id")
+  productId Int      @map("product_id")
+  quantity  Float
+
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}

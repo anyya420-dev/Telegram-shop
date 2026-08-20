@@ -1,0 +1,93 @@
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  padding: 40px 20px 32px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cityBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.cityBtn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent);
+}
+
+.cityBtn.selected {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.cityBtn:disabled {
+  opacity: 0.6;
+}
+
+.cityName {
+  color: var(--text-primary);
+}
+
+.arrow {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.loadingState {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
