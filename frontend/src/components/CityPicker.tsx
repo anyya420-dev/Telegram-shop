@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
+import { getLocalizedCityName } from '../lib/localized'
 
 export function CityPicker() {
   const { cities, cityPickerOpen, closeCityPicker, selectCity, user } = useApp()
   const [pendingCityId, setPendingCityId] = useState<number | null>(null)
+  const { language, t } = useI18n()
 
   if (!cityPickerOpen) {
     return null
@@ -14,12 +17,12 @@ export function CityPicker() {
       <div className="modal-card">
         <div className="modal-card__header">
           <div>
-            <span className="eyebrow">Локация</span>
-            <h2>📍 Выберите город</h2>
+            <span className="eyebrow">{t('cityPicker.badge')}</span>
+            <h2>{t('cityPicker.title')}</h2>
           </div>
           {user?.selectedCityId ? (
             <button className="ghost-button" type="button" onClick={closeCityPicker}>
-              Позже
+              {t('common.later')}
             </button>
           ) : null}
         </div>
@@ -39,12 +42,12 @@ export function CityPicker() {
                 }
               }}
             >
-              <span>{city.name}</span>
+              <span>{getLocalizedCityName(city, language)}</span>
               <span>→</span>
             </button>
           ))}
         </div>
-        <p className="subtle-text">Каталог, наличие и шаг количества зависят от выбранного города.</p>
+        <p className="subtle-text">{t('cityPicker.helper')}</p>
       </div>
     </div>
   )

@@ -3,12 +3,23 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { QuantitySelector } from '../components/QuantitySelector'
 import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
 import { formatCurrency, formatQuantity } from '../lib/format'
+import { getLocalizedProductCategoryName, getLocalizedProductDescription, getLocalizedProductName, getLocalizedUnit } from '../lib/localized'
 import type { ProductDetail } from '../types'
+
+function translateError(error: unknown, t: (key: string) => string, fallbackKey: string) {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
+    return t(`errors.${error.code}`)
+  }
+
+  return t(`errors.${fallbackKey}`)
+}
 
 export function ProductPage() {
   const { productId } = useParams()
   const { user, products, addToCart } = useApp()
+  const { language, t } = useI18n()
   const [product, setProduct] = useState<ProductDetail | null>(null)
   const [quantity, setQuantity] = useState<number>(1)
   const [loading, setLoading] = useState(true)
@@ -36,19 +47,19 @@ export function ProductPage() {
         setProduct(response.product)
         setQuantity(response.product.minimumQuantity)
       } catch (productError) {
-        setError(productError instanceof Error ? productError.message : 'Не удалось загрузить товар')
+        setError(translateError(productError, t, 'product_load_failed'))
       } finally {
         setLoading(false)
       }
     }
 
     void loadProduct()
-  }, [cachedProduct, productId, user?.selectedCityId])
+  }, [cachedProduct, productId, t, user?.selectedCityId])
 
   if (loading) {
     return (
       <section className="placeholder-card">
-        <h1>Загрузка товара…</h1>
+        <h1>{t('common.loadingProduct')}</h1>
       </section>
     )
   }
@@ -56,40 +67,42 @@ export function ProductPage() {
   if (!product) {
     return (
       <section className="placeholder-card">
-        <h1>Товар не найден</h1>
-        <p>Вернитесь в каталог и выберите другой товар.</p>
+        <h1>{t('product.notFoundTitle')}</h1>
+        <p>{t('product.notFoundDescription')}</p>
         <Link className="primary-button" to="/">
-          К каталогу
+          {t('product.backToCatalog')}
         </Link>
       </section>
     )
   }
 
+  const unit = getLocalizedUnit(product.unit, language, product.unitTranslations)
+
   return (
     <div className="page-stack">
-      <Link className="back-link" to="/">← Назад в каталог</Link>
+      <Link className="back-link" to="/">{t('product.backToCatalog')}</Link>
       <section className="product-hero">
-        <img className="product-hero__image" src={product.image} alt={product.name} />
+        <img className="product-hero__image" src={product.image} alt={getLocalizedProductName(product, language)} />
         <div className="panel-card panel-card--dense">
-          <span className="eyebrow">{product.categoryName}</span>
-          <h1>{product.name}</h1>
-          <p>{product.description}</p>
+          <span className="eyebrow">{getLocalizedProductCategoryName(product, language)}</span>
+          <h1>{getLocalizedProductName(product, language)}</h1>
+          <p>{getLocalizedProductDescription(product, language)}</p>
           <div className="detail-grid">
             <div>
-              <span className="field-label">Цена</span>
-              <strong>{formatCurrency(product.price)}</strong>
+              <span className="field-label">{t('product.price')}</span>
+              <strong>{formatCurrency(product.price, language)}</strong>
             </div>
             <div>
-              <span className="field-label">Наличие</span>
-              <strong>{formatQuantity(product.stock)} {product.unit}</strong>
+              <span className="field-label">{t('product.availability')}</span>
+              <strong>{formatQuantity(product.stock, language)} {unit}</strong>
             </div>
             <div>
-              <span className="field-label">Минимум</span>
-              <strong>{formatQuantity(product.minimumQuantity)} {product.unit}</strong>
+              <span className="field-label">{t('product.minimum')}</span>
+              <strong>{formatQuantity(product.minimumQuantity, language)} {unit}</strong>
             </div>
             <div>
-              <span className="field-label">Шаг</span>
-              <strong>{formatQuantity(product.quantityStep)} {product.unit}</strong>
+              <span className="field-label">{t('product.step')}</span>
+              <strong>{formatQuantity(product.quantityStep, language)} {unit}</strong>
             </div>
           </div>
           <QuantitySelector
@@ -97,6 +110,7 @@ export function ProductPage() {
             step={product.quantityStep}
             maximum={product.maximumQuantity}
             unit={product.unit}
+            unitTranslations={product.unitTranslations}
             value={quantity}
             onChange={setQuantity}
           />
@@ -111,13 +125,13 @@ export function ProductPage() {
               try {
                 await addToCart(product.productCityId, quantity)
               } catch (cartError) {
-                setError(cartError instanceof Error ? cartError.message : 'Не удалось обновить корзину')
+                setError(translateError(cartError, t, 'cart_update_failed'))
               } finally {
                 setSubmitting(false)
               }
             }}
           >
-            Добавить в корзину
+            {t('product.addToCart')}
           </button>
         </div>
       </section>

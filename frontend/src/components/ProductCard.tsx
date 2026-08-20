@@ -1,29 +1,34 @@
 import { Link } from 'react-router-dom'
+import { useI18n } from '../i18n'
 import { formatCurrency, formatQuantity } from '../lib/format'
+import { getLocalizedProductCategoryName, getLocalizedProductDescription, getLocalizedProductName, getLocalizedUnit } from '../lib/localized'
 import type { ProductSummary } from '../types'
 
 export function ProductCard({ product }: { product: ProductSummary }) {
+  const { language, t } = useI18n()
+  const unit = getLocalizedUnit(product.unit, language, product.unitTranslations)
+
   return (
     <article className="product-card">
-      <img className="product-card__image" src={product.image} alt={product.name} />
+      <img className="product-card__image" src={product.image} alt={getLocalizedProductName(product, language)} />
       <div className="product-card__content">
         <div className="product-card__meta">
-          <span className="tag">{product.categoryName}</span>
-          {product.isRecommended ? <span className="tag tag--accent">🔥 Рекомендуем</span> : null}
+          <span className="tag">{getLocalizedProductCategoryName(product, language)}</span>
+          {product.isRecommended ? <span className="tag tag--accent">{t('product.recommended')}</span> : null}
         </div>
-        <h3>{product.name}</h3>
-        <p>{product.description}</p>
+        <h3>{getLocalizedProductName(product, language)}</h3>
+        <p>{getLocalizedProductDescription(product, language)}</p>
         <div className="product-card__footer">
           <div>
-            <strong>{formatCurrency(product.price)}</strong>
+            <strong>{formatCurrency(product.price, language)}</strong>
             <span>
-              от {formatQuantity(product.minimumQuantity)} {product.unit}
+              {t('product.from')} {formatQuantity(product.minimumQuantity, language)} {unit}
             </span>
           </div>
-          <div className="stock-chip">В наличии: {formatQuantity(product.stock)} {product.unit}</div>
+          <div className="stock-chip">{t('product.inStock', { value: formatQuantity(product.stock, language), unit })}</div>
         </div>
         <Link className="primary-button" to={`/product/${product.id}`}>
-          Открыть товар
+          {t('product.open')}
         </Link>
       </div>
     </article>

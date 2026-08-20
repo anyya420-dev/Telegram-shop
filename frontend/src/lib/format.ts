@@ -1,13 +1,25 @@
-export function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pl-PL', {
+import type { Language } from '../types'
+
+const locales: Record<Language, string> = {
+  ru: 'ru-RU',
+  en: 'en-US',
+}
+
+export function formatCurrency(value: number, language: Language) {
+  return new Intl.NumberFormat(locales[language], {
     style: 'currency',
     currency: 'PLN',
     maximumFractionDigits: 2,
   }).format(value)
 }
 
-export function formatQuantity(value: number) {
-  return Number.isInteger(value) ? `${value}` : value.toFixed(1)
+export function formatQuantity(value: number, language: Language) {
+  const formatter = new Intl.NumberFormat(locales[language], {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+    maximumFractionDigits: 2,
+  })
+
+  return formatter.format(value)
 }
 
 export function buildQuantityOptions(minimum: number, step: number, maximum: number) {

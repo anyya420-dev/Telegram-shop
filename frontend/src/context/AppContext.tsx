@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useI18n } from '../i18n'
 import { getTelegramContext } from '../lib/telegram'
-import type { Cart, Category, City, ProductSummary, UserProfile } from '../types'
+import type { Cart, Category, City, Language, ProductSummary, UserProfile } from '../types'
 
 type AppState = {
   loading: boolean
@@ -18,6 +19,7 @@ type AppState = {
   closeCityPicker: () => void
   refreshCatalog: (search?: string, categoryId?: number | 'all') => Promise<void>
   selectCity: (cityId: number) => Promise<void>
+  updateLanguagePreference: (language: Language) => Promise<void>
   addToCart: (productCityId: number, quantity: number) => Promise<void>
   updateCartItem: (itemId: number, quantity: number) => Promise<void>
   removeCartItem: (itemId: number) => Promise<void>
@@ -37,6 +39,18 @@ function emptyCart(): Cart {
   }
 }
 
+function translateError(
+  error: unknown,
+  t: (key: string) => string,
+  fallbackKey: string,
+) {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
+    return t(`errors.${error.code}`)
+  }
+
+  return t(`errors.${fallbackKey}`)
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +62,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<Cart>(emptyCart())
   const [recommended, setRecommended] = useState<ProductSummary[]>([])
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  const { setLanguage, t } = useI18n()
 
   async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
     if (!user?.selectedCityId) {
@@ -59,7 +74,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
       setProducts(response.products)
     } catch (catalogError) {
-      setError(catalogError instanceof Error ? catalogError.message : 'Не удалось обновить каталог')
+      setError(translateError(catalogError, t, 'catalog_refresh_failed'))
     }
   }
 
@@ -79,8 +94,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
         setUser(response.user)
+        setLanguage(response.user.language)
         setCities(response.cities)
-        setCategories([{ id: 0, name: 'Все', isActive: true, sortOrder: 0 }, ...response.categories])
+        setCategories(response.categories)
 
         if (!response.user.selectedCityId) {
           setCityPickerOpen(true)
@@ -94,14 +110,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setRecommended(cartResponse.recommended)
         }
       } catch (bootstrapError) {
-        setError(bootstrapError instanceof Error ? bootstrapError.message : 'Не удалось загрузить магазин')
+        setError(translateError(bootstrapError, t, 'shop_load_failed'))
       } finally {
         setLoading(false)
       }
     }
 
     void bootstrap()
-  }, [])
+  }, [setLanguage, t])
 
   async function selectCity(cityId: number) {
     if (!user) {
@@ -118,6 +134,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setProducts(productsResponse.products)
     setCart(cartResponse.cart)
     setRecommended(cartResponse.recommended)
+  }
+
+  async function updateLanguagePreference(language: Language) {
+    if (!user || user.language === language) {
+      return
+    }
+
+    try {
+      setError(null)
+      const response = await api.updateLanguage(language)
+      setUser(response.user)
+      setLanguage(response.user.language)
+    } catch (languageError) {
+      setError(translateError(languageError, t, 'language_update_failed'))
+      throw languageError
+    }
   }
 
   async function addToCart(productCityId: number, quantity: number) {
@@ -168,6 +200,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     closeCityPicker: () => setCityPickerOpen(false),
     refreshCatalog,
     selectCity,
+    updateLanguagePreference,
     addToCart,
     updateCartItem,
     removeCartItem,

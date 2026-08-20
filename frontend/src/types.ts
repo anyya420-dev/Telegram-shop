@@ -1,12 +1,18 @@
+export type Language = 'ru' | 'en'
+
+export type LocalizedText = Partial<Record<Language, string>>
+
 export type City = {
   id: number
   name: string
+  nameTranslations?: LocalizedText | null
   isActive: boolean
 }
 
 export type Category = {
   id: number
   name: string
+  nameTranslations?: LocalizedText | null
   isActive: boolean
   sortOrder: number
 }
@@ -18,6 +24,7 @@ export type UserProfile = {
   firstName: string
   selectedCityId: number | null
   selectedCity: City | null
+  language: Language
 }
 
 export type TelegramIdentity = {
@@ -31,11 +38,14 @@ export type ProductSummary = {
   productCityId: number
   cityId: number
   name: string
+  nameTranslations?: LocalizedText | null
   description: string
+  descriptionTranslations?: LocalizedText | null
   price: number
   image: string
   categoryId: number
   categoryName: string
+  categoryNameTranslations?: LocalizedText | null
   isRecommended: boolean
   stock: number
   isAvailable: boolean
@@ -43,6 +53,7 @@ export type ProductSummary = {
   quantityStep: number
   maximumQuantity: number
   unit: string
+  unitTranslations?: LocalizedText | null
 }
 
 export type ProductDetail = ProductSummary

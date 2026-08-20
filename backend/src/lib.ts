@@ -12,6 +12,8 @@ export const DEMO_TELEGRAM_USER = {
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
 
+export type AppLanguage = 'ru' | 'en'
+
 type TelegramUserPayload = {
   id: string
   username?: string
@@ -110,6 +112,13 @@ export function isAllowedQuantity(quantity: number, minimum: number, step: numbe
   )
 }
 
+function createTranslations(ru: string, en?: string | null) {
+  return {
+    ru,
+    en: en ?? ru,
+  }
+}
+
 export function mapProduct(productCity: {
   id: number
   cityId: number
@@ -122,13 +131,16 @@ export function mapProduct(productCity: {
   product: {
     id: number
     name: string
+    nameEn: string | null
     description: string
+    descriptionEn: string | null
     price: number
     image: string
     categoryId: number
     isRecommended: boolean
     category: {
       name: string
+      nameEn: string | null
     }
   }
 }) {
@@ -137,11 +149,14 @@ export function mapProduct(productCity: {
     productCityId: productCity.id,
     cityId: productCity.cityId,
     name: productCity.product.name,
+    nameTranslations: createTranslations(productCity.product.name, productCity.product.nameEn),
     description: productCity.product.description,
+    descriptionTranslations: createTranslations(productCity.product.description, productCity.product.descriptionEn),
     price: productCity.product.price,
     image: productCity.product.image,
     categoryId: productCity.product.categoryId,
     categoryName: productCity.product.category.name,
+    categoryNameTranslations: createTranslations(productCity.product.category.name, productCity.product.category.nameEn),
     isRecommended: productCity.product.isRecommended,
     stock: productCity.stock,
     isAvailable: productCity.isAvailable,

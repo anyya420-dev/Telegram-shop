@@ -12,17 +12,17 @@ async function main() {
   await prisma.user.deleteMany()
 
   const [warsaw, krakow, wroclaw] = await Promise.all([
-    prisma.city.create({ data: { name: 'Варшава', isActive: true } }),
-    prisma.city.create({ data: { name: 'Краков', isActive: true } }),
-    prisma.city.create({ data: { name: 'Вроцлав', isActive: true } }),
+    prisma.city.create({ data: { name: 'Варшава', nameEn: 'Warsaw', isActive: true } }),
+    prisma.city.create({ data: { name: 'Краков', nameEn: 'Krakow', isActive: true } }),
+    prisma.city.create({ data: { name: 'Вроцлав', nameEn: 'Wroclaw', isActive: true } }),
   ])
 
   const categories = await Promise.all([
-    prisma.category.create({ data: { name: 'Одежда', sortOrder: 1 } }),
-    prisma.category.create({ data: { name: 'Электроника', sortOrder: 2 } }),
-    prisma.category.create({ data: { name: 'Дом', sortOrder: 3 } }),
-    prisma.category.create({ data: { name: 'Аксессуары', sortOrder: 4 } }),
-    prisma.category.create({ data: { name: 'Другое', sortOrder: 5 } }),
+    prisma.category.create({ data: { name: 'Одежда', nameEn: 'Clothing', sortOrder: 1 } }),
+    prisma.category.create({ data: { name: 'Электроника', nameEn: 'Electronics', sortOrder: 2 } }),
+    prisma.category.create({ data: { name: 'Дом', nameEn: 'Home', sortOrder: 3 } }),
+    prisma.category.create({ data: { name: 'Аксессуары', nameEn: 'Accessories', sortOrder: 4 } }),
+    prisma.category.create({ data: { name: 'Другое', nameEn: 'Other', sortOrder: 5 } }),
   ])
 
   const byName = Object.fromEntries(categories.map((category) => [category.name, category]))
@@ -30,7 +30,9 @@ async function main() {
   const coffee = await prisma.product.create({
     data: {
       name: 'Кофе',
+      nameEn: 'Coffee',
       description: 'Свежая обжарка для дома и офиса с гибким выбором веса.',
+      descriptionEn: 'Fresh roast for home and office with flexible weight selection.',
       price: 20,
       image: '/products/coffee.svg',
       categoryId: byName['Дом'].id,
@@ -41,7 +43,9 @@ async function main() {
   const headphones = await prisma.product.create({
     data: {
       name: 'Наушники',
+      nameEn: 'Headphones',
       description: 'Беспроводные наушники с чистым звуком и холодным синим кейсом.',
+      descriptionEn: 'Wireless headphones with clear sound and a cool blue case.',
       price: 299,
       image: '/products/headphones.svg',
       categoryId: byName['Электроника'].id,
@@ -52,7 +56,9 @@ async function main() {
   const tshirt = await prisma.product.create({
     data: {
       name: 'Футболка',
+      nameEn: 'T-shirt',
       description: 'Минималистичная футболка премиального кроя для ежедневного гардероба.',
+      descriptionEn: 'A minimalist premium-fit T-shirt for an everyday wardrobe.',
       price: 85,
       image: '/products/tshirt.svg',
       categoryId: byName['Одежда'].id,
@@ -63,7 +69,9 @@ async function main() {
   const charger = await prisma.product.create({
     data: {
       name: 'Зарядка',
+      nameEn: 'Charger',
       description: 'Компактное зарядное устройство для смартфона и аксессуаров.',
+      descriptionEn: 'A compact charger for a smartphone and accessories.',
       price: 59,
       image: '/products/charger.svg',
       categoryId: byName['Аксессуары'].id,
@@ -152,7 +160,7 @@ async function main() {
         maximumQuantity: 4,
         unit: 'шт.',
         isAvailable: true,
-      }
+      },
     ],
   })
 }

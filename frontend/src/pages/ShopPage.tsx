@@ -2,29 +2,32 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ProductCard } from '../components/ProductCard'
 import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
+import { getLocalizedCategoryName, getLocalizedCityName } from '../lib/localized'
 
 export function ShopPage() {
   const { user, categories, products, cart, refreshCatalog, openCityPicker } = useApp()
   const [search, setSearch] = useState('')
   const [activeCategoryId, setActiveCategoryId] = useState<number | 'all'>('all')
+  const { language, t } = useI18n()
 
-  const cityName = user?.selectedCity?.name ?? 'Не выбран'
+  const cityName = user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('common.notSelected')
   const cartCount = cart?.items.length ?? 0
 
   const heroMessage = useMemo(() => {
     if (!user?.selectedCity) {
-      return 'Выберите город, чтобы увидеть доступные товары.'
+      return t('shop.heroMessageNoCity')
     }
 
-    return 'Премиальный каталог с быстрым выбором количества и минималистичным интерфейсом.'
-  }, [user?.selectedCity])
+    return t('shop.heroMessageDefault')
+  }, [t, user?.selectedCity])
 
   return (
     <div className="page-stack">
       <section className="hero-card">
         <div>
-          <span className="eyebrow">Telegram Web App</span>
-          <h1>Магазин</h1>
+          <span className="eyebrow">{t('shop.heroBadge')}</span>
+          <h1>{t('shop.heroTitle')}</h1>
           <p>{heroMessage}</p>
         </div>
         <div className="hero-card__actions">
@@ -32,7 +35,7 @@ export function ShopPage() {
             📍 {cityName}
           </button>
           <Link className="primary-button" to="/cart">
-            Корзина ({cartCount})
+            {t('shop.cartButton', { count: cartCount })}
           </Link>
         </div>
       </section>
@@ -44,17 +47,26 @@ export function ShopPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Поиск по каталогу"
+              placeholder={t('shop.searchPlaceholder')}
             />
           </label>
           <button className="secondary-button" type="button" onClick={() => refreshCatalog(search, activeCategoryId)}>
-            Найти
+            {t('shop.searchButton')}
           </button>
         </div>
         <div className="category-row">
+          <button
+            type="button"
+            className={`category-pill ${activeCategoryId === 'all' ? 'category-pill--active' : ''}`}
+            onClick={() => {
+              setActiveCategoryId('all')
+              void refreshCatalog(search, 'all')
+            }}
+          >
+            {t('shop.allCategories')}
+          </button>
           {categories.map((category) => {
-            const categoryValue = category.id === 0 ? 'all' : category.id
-            const isActive = activeCategoryId === categoryValue
+            const isActive = activeCategoryId === category.id
 
             return (
               <button
@@ -62,11 +74,11 @@ export function ShopPage() {
                 type="button"
                 className={`category-pill ${isActive ? 'category-pill--active' : ''}`}
                 onClick={() => {
-                  setActiveCategoryId(categoryValue)
-                  void refreshCatalog(search, categoryValue)
+                  setActiveCategoryId(category.id)
+                  void refreshCatalog(search, category.id)
                 }}
               >
-                {category.name}
+                {getLocalizedCategoryName(category, language)}
               </button>
             )
           })}
@@ -75,8 +87,8 @@ export function ShopPage() {
 
       <section className="section-heading">
         <div>
-          <span className="eyebrow">Каталог</span>
-          <h2>🟢 Товары в наличии</h2>
+          <span className="eyebrow">{t('shop.catalogBadge')}</span>
+          <h2>{t('shop.catalogTitle')}</h2>
         </div>
       </section>
 
@@ -88,8 +100,8 @@ export function ShopPage() {
 
       {products.length === 0 ? (
         <section className="empty-state">
-          <h3>Товаров пока нет</h3>
-          <p>Попробуйте изменить город, категорию или поисковый запрос.</p>
+          <h3>{t('shop.emptyTitle')}</h3>
+          <p>{t('shop.emptyDescription')}</p>
         </section>
       ) : null}
     </div>

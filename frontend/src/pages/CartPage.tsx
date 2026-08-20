@@ -2,18 +2,21 @@ import { Link } from 'react-router-dom'
 import { ProductCard } from '../components/ProductCard'
 import { QuantitySelector } from '../components/QuantitySelector'
 import { useApp } from '../context/AppContext'
+import { useI18n } from '../i18n'
 import { formatCurrency } from '../lib/format'
+import { getLocalizedProductDescription, getLocalizedProductName } from '../lib/localized'
 
 export function CartPage() {
   const { cart, recommended, updateCartItem, removeCartItem } = useApp()
+  const { language, t } = useI18n()
 
   if (!cart || cart.items.length === 0) {
     return (
       <section className="placeholder-card">
-        <span className="eyebrow">Корзина</span>
-        <h1>Корзина пока пустая</h1>
-        <p>Добавьте товар из каталога, чтобы увидеть стоимость и рекомендации.</p>
-        <Link className="primary-button" to="/">Перейти в магазин</Link>
+        <span className="eyebrow">{t('cart.badge')}</span>
+        <h1>{t('cart.emptyTitle')}</h1>
+        <p>{t('cart.emptyDescription')}</p>
+        <Link className="primary-button" to="/">{t('cart.goToShop')}</Link>
       </section>
     )
   }
@@ -22,23 +25,23 @@ export function CartPage() {
     <div className="page-stack">
       <section className="section-heading">
         <div>
-          <span className="eyebrow">Корзина</span>
-          <h1>Ваш заказ</h1>
+          <span className="eyebrow">{t('cart.badge')}</span>
+          <h1>{t('cart.title')}</h1>
         </div>
       </section>
 
       <section className="cart-list">
         {cart.items.map((item) => (
           <article key={item.id} className="cart-card">
-            <img className="cart-card__image" src={item.productCity.image} alt={item.productCity.name} />
+            <img className="cart-card__image" src={item.productCity.image} alt={getLocalizedProductName(item.productCity, language)} />
             <div className="cart-card__content">
               <div className="cart-card__header">
                 <div>
-                  <h2>{item.productCity.name}</h2>
-                  <p>{item.productCity.description}</p>
+                  <h2>{getLocalizedProductName(item.productCity, language)}</h2>
+                  <p>{getLocalizedProductDescription(item.productCity, language)}</p>
                 </div>
                 <button className="ghost-button" type="button" onClick={() => void removeCartItem(item.id)}>
-                  Удалить
+                  {t('cart.remove')}
                 </button>
               </div>
               <QuantitySelector
@@ -46,14 +49,15 @@ export function CartPage() {
                 step={item.productCity.quantityStep}
                 maximum={item.productCity.maximumQuantity}
                 unit={item.productCity.unit}
+                unitTranslations={item.productCity.unitTranslations}
                 value={item.quantity}
                 onChange={(value) => {
                   void updateCartItem(item.id, value)
                 }}
               />
               <div className="cart-card__footer">
-                <span>{formatCurrency(item.productCity.price)} за единицу</span>
-                <strong>{formatCurrency(item.lineTotal)}</strong>
+                <span>{t('cart.perUnit', { price: formatCurrency(item.productCity.price, language) })}</span>
+                <strong>{formatCurrency(item.lineTotal, language)}</strong>
               </div>
             </div>
           </article>
@@ -62,20 +66,20 @@ export function CartPage() {
 
       <section className="summary-card">
         <div className="summary-row">
-          <span>Стоимость товаров</span>
-          <strong>{formatCurrency(cart.subtotal)}</strong>
+          <span>{t('cart.goodsTotal')}</span>
+          <strong>{formatCurrency(cart.subtotal, language)}</strong>
         </div>
         <div className="summary-row muted">
-          <span>Скидки</span>
-          <span>{formatCurrency(cart.discount)}</span>
+          <span>{t('cart.discounts')}</span>
+          <span>{formatCurrency(cart.discount, language)}</span>
         </div>
         <div className="summary-row muted">
-          <span>Доставка</span>
-          <span>{formatCurrency(cart.deliveryFee)}</span>
+          <span>{t('cart.delivery')}</span>
+          <span>{formatCurrency(cart.deliveryFee, language)}</span>
         </div>
         <div className="summary-row summary-row--total">
-          <span>Итого</span>
-          <strong>{formatCurrency(cart.total)}</strong>
+          <span>{t('cart.total')}</span>
+          <strong>{formatCurrency(cart.total, language)}</strong>
         </div>
       </section>
 
@@ -83,8 +87,8 @@ export function CartPage() {
         <section className="page-stack">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">Рекомендуем</span>
-              <h2>🔥 Вам может понравиться</h2>
+              <span className="eyebrow">{t('cart.recommendedBadge')}</span>
+              <h2>{t('cart.recommendedTitle')}</h2>
             </div>
           </div>
           <div className="product-grid">

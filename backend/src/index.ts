@@ -31,12 +31,20 @@ function parsePositiveInt(value: unknown) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+function isLanguage(value: unknown): value is 'ru' | 'en' {
+  return value === 'ru' || value === 'en'
+}
+
+function sendError(response: express.Response, status: number, code: string, message: string) {
+  response.status(status).json({ code, message })
+}
+
 const authRateLimiter = rateLimit({
   windowMs: 60_000,
   limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: 'Too many requests, please try again later' },
+  message: { code: 'too_many_requests', message: 'Too many requests, please try again later' },
 })
 
 async function getAuthorizedUser(request: express.Request, response: express.Response) {
@@ -45,14 +53,14 @@ async function getAuthorizedUser(request: express.Request, response: express.Res
   const telegramId = verifySessionToken(token)
 
   if (!telegramId) {
-    response.status(401).json({ message: 'Invalid session token' })
+    sendError(response, 401, 'invalid_session_token', 'Invalid session token')
     return null
   }
 
   const user = await prisma.user.findUnique({ where: { telegramId } })
 
   if (!user) {
-    response.status(404).json({ message: 'User not found' })
+    sendError(response, 404, 'user_not_found', 'User not found')
     return null
   }
 
@@ -67,20 +75,20 @@ app.post('/api/session/bootstrap', authRateLimiter, async (request, response) =>
     const botToken = process.env.TELEGRAM_BOT_TOKEN
 
     if (!botToken) {
-      response.status(503).json({ message: 'Telegram bot token is required for Web App verification' })
+      sendError(response, 503, 'telegram_bot_token_required', 'Telegram bot token is required for Web App verification')
       return
     }
 
     telegramUser = verifyTelegramInitData(initData, botToken)
 
     if (!telegramUser) {
-      response.status(401).json({ message: 'Telegram init data verification failed' })
+      sendError(response, 401, 'telegram_verification_failed', 'Telegram init data verification failed')
       return
     }
   } else if (allowDemoMode) {
     telegramUser = DEMO_TELEGRAM_USER
   } else {
-    response.status(401).json({ message: 'Telegram init data is required' })
+    sendError(response, 401, 'telegram_init_data_required', 'Telegram init data is required')
     return
   }
 
@@ -90,6 +98,7 @@ app.post('/api/session/bootstrap', authRateLimiter, async (request, response) =>
       telegramId: String(telegramUser.id),
       username: telegramUser.username ?? null,
       firstName: telegramUser.first_name,
+      language: 'ru',
     },
     update: {
       username: telegramUser.username ?? null,
@@ -110,9 +119,32 @@ app.post('/api/session/bootstrap', authRateLimiter, async (request, response) =>
   response.json({
     telegramEnvironment: Boolean(initData),
     sessionToken: createSessionToken(user.telegramId),
-    user,
-    cities,
-    categories,
+    user: {
+      ...user,
+      selectedCity: user.selectedCity
+        ? {
+            ...user.selectedCity,
+            nameTranslations: {
+              ru: user.selectedCity.name,
+              en: user.selectedCity.nameEn ?? user.selectedCity.name,
+            },
+          }
+        : null,
+    },
+    cities: cities.map((city) => ({
+      ...city,
+      nameTranslations: {
+        ru: city.name,
+        en: city.nameEn ?? city.name,
+      },
+    })),
+    categories: categories.map((category) => ({
+      ...category,
+      nameTranslations: {
+        ru: category.name,
+        en: category.nameEn ?? category.name,
+      },
+    })),
   })
 })
 
@@ -122,7 +154,7 @@ app.get('/api/catalog', async (request, response) => {
   const categoryId = request.query.categoryId ? parsePositiveInt(request.query.categoryId) ?? undefined : undefined
 
   if (!cityId) {
-    response.status(400).json({ message: 'cityId must be a positive integer' })
+    sendError(response, 400, 'city_required', 'cityId must be a positive integer')
     return
   }
 
@@ -133,7 +165,16 @@ app.get('/api/catalog', async (request, response) => {
       stock: { gt: 0 },
       product: {
         isActive: true,
-        ...(search ? { name: { contains: search } } : {}),
+        ...(search
+          ? {
+              OR: [
+                { name: { contains: search } },
+                { nameEn: { contains: search } },
+                { description: { contains: search } },
+                { descriptionEn: { contains: search } },
+              ],
+            }
+          : {}),
         ...(categoryId ? { categoryId } : {}),
       },
     },
@@ -155,7 +196,7 @@ app.get('/api/products/:productId', async (request, response) => {
   const cityId = parsePositiveInt(request.query.cityId)
 
   if (!productId || !cityId) {
-    response.status(400).json({ message: 'productId and cityId must be positive integers' })
+    sendError(response, 400, 'product_city_required', 'productId and cityId must be positive integers')
     return
   }
 
@@ -176,7 +217,7 @@ app.get('/api/products/:productId', async (request, response) => {
   })
 
   if (!productCity) {
-    response.status(404).json({ message: 'Product not found for selected city' })
+    sendError(response, 404, 'product_not_found', 'Product not found for selected city')
     return
   }
 
@@ -204,14 +245,14 @@ app.patch('/api/users/city', authRateLimiter, async (request, response) => {
   const cityId = parsePositiveInt(request.body.cityId)
 
   if (!cityId) {
-    response.status(400).json({ message: 'cityId must be a positive integer' })
+    sendError(response, 400, 'city_required', 'cityId must be a positive integer')
     return
   }
 
   const city = await prisma.city.findFirst({ where: { id: cityId, isActive: true } })
 
   if (!city) {
-    response.status(404).json({ message: 'City not found' })
+    sendError(response, 404, 'city_not_found', 'City not found')
     return
   }
 
@@ -224,7 +265,56 @@ app.patch('/api/users/city', authRateLimiter, async (request, response) => {
     include: { selectedCity: true },
   })
 
-  response.json({ user: updatedUser })
+  response.json({
+    user: {
+      ...updatedUser,
+      selectedCity: updatedUser.selectedCity
+        ? {
+            ...updatedUser.selectedCity,
+            nameTranslations: {
+              ru: updatedUser.selectedCity.name,
+              en: updatedUser.selectedCity.nameEn ?? updatedUser.selectedCity.name,
+            },
+          }
+        : null,
+    },
+  })
+})
+
+app.patch('/api/users/language', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
+
+  if (!user) {
+    return
+  }
+
+  const language = request.body.language
+
+  if (!isLanguage(language)) {
+    sendError(response, 400, 'request_failed', 'language must be ru or en')
+    return
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { telegramId: user.telegramId },
+    data: { language },
+    include: { selectedCity: true },
+  })
+
+  response.json({
+    user: {
+      ...updatedUser,
+      selectedCity: updatedUser.selectedCity
+        ? {
+            ...updatedUser.selectedCity,
+            nameTranslations: {
+              ru: updatedUser.selectedCity.name,
+              en: updatedUser.selectedCity.nameEn ?? updatedUser.selectedCity.name,
+            },
+          }
+        : null,
+    },
+  })
 })
 
 app.post('/api/cart/items', authRateLimiter, async (request, response) => {
@@ -238,7 +328,7 @@ app.post('/api/cart/items', authRateLimiter, async (request, response) => {
   const quantity = Number(request.body.quantity)
 
   if (!productCityId) {
-    response.status(400).json({ message: 'productCityId must be a positive integer' })
+    sendError(response, 400, 'product_city_required', 'productCityId must be a positive integer')
     return
   }
 
@@ -250,22 +340,22 @@ app.post('/api/cart/items', authRateLimiter, async (request, response) => {
   })
 
   if (!productCity || !productCity.isAvailable) {
-    response.status(404).json({ message: 'Product is unavailable' })
+    sendError(response, 404, 'product_unavailable', 'Product is unavailable')
     return
   }
 
   if (user.selectedCityId !== productCity.cityId) {
-    response.status(400).json({ message: 'Choose the same city before adding products' })
+    sendError(response, 400, 'city_mismatch', 'Choose the same city before adding products')
     return
   }
 
   if (!isAllowedQuantity(quantity, productCity.minimumQuantity, productCity.quantityStep, productCity.maximumQuantity)) {
-    response.status(400).json({ message: 'Quantity does not match product rules' })
+    sendError(response, 400, 'quantity_invalid', 'Quantity does not match product rules')
     return
   }
 
   if (quantity > productCity.stock) {
-    response.status(400).json({ message: 'Requested quantity exceeds stock' })
+    sendError(response, 400, 'stock_exceeded', 'Requested quantity exceeds stock')
     return
   }
 
@@ -302,7 +392,7 @@ app.patch('/api/cart/items/:itemId', authRateLimiter, async (request, response) 
   const quantity = Number(request.body.quantity)
 
   if (!itemId) {
-    response.status(400).json({ message: 'itemId must be a positive integer' })
+    sendError(response, 400, 'cart_item_required', 'itemId must be a positive integer')
     return
   }
 
@@ -315,17 +405,17 @@ app.patch('/api/cart/items/:itemId', authRateLimiter, async (request, response) 
   })
 
   if (!item || item.cart.userId !== user.id) {
-    response.status(404).json({ message: 'Cart item not found' })
+    sendError(response, 404, 'cart_item_not_found', 'Cart item not found')
     return
   }
 
   if (!isAllowedQuantity(quantity, item.productCity.minimumQuantity, item.productCity.quantityStep, item.productCity.maximumQuantity)) {
-    response.status(400).json({ message: 'Quantity does not match product rules' })
+    sendError(response, 400, 'quantity_invalid', 'Quantity does not match product rules')
     return
   }
 
   if (quantity > item.productCity.stock) {
-    response.status(400).json({ message: 'Requested quantity exceeds stock' })
+    sendError(response, 400, 'stock_exceeded', 'Requested quantity exceeds stock')
     return
   }
 
@@ -347,7 +437,7 @@ app.delete('/api/cart/items/:itemId', authRateLimiter, async (request, response)
   const itemId = parsePositiveInt(request.params.itemId)
 
   if (!itemId) {
-    response.status(400).json({ message: 'itemId must be a positive integer' })
+    sendError(response, 400, 'cart_item_required', 'itemId must be a positive integer')
     return
   }
 
@@ -357,7 +447,7 @@ app.delete('/api/cart/items/:itemId', authRateLimiter, async (request, response)
   })
 
   if (!item || item.cart.userId !== user.id) {
-    response.status(404).json({ message: 'Cart item not found' })
+    sendError(response, 404, 'cart_item_not_found', 'Cart item not found')
     return
   }
 

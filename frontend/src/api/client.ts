@@ -1,21 +1,37 @@
-import type { BootstrapResponse, Cart, ProductDetail, ProductSummary, TelegramIdentity, UserProfile } from '../types'
+import type { BootstrapResponse, Cart, Language, ProductDetail, ProductSummary, TelegramIdentity, UserProfile } from '../types'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api'
 let sessionToken: string | null = null
 
+export class ApiError extends Error {
+  code?: string
+
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
-      ...(init?.headers ?? {}),
-    },
-  })
+  let response: Response
+
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
+        ...(init?.headers ?? {}),
+      },
+    })
+  } catch {
+    throw new ApiError('Network error', 'network_error')
+  }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }))
-    throw new Error(error.message ?? 'Request failed')
+    const error = await response.json().catch(() => ({ message: 'Request failed', code: 'request_failed' })) as { message?: string; code?: string }
+    throw new ApiError(error.message ?? 'Request failed', error.code ?? 'request_failed')
   }
 
   return (await response.json()) as T
@@ -54,6 +70,12 @@ export const api = {
     return request<{ user: UserProfile }>('/users/city', {
       method: 'PATCH',
       body: JSON.stringify({ cityId }),
+    })
+  },
+  updateLanguage(language: Language) {
+    return request<{ user: UserProfile }>('/users/language', {
+      method: 'PATCH',
+      body: JSON.stringify({ language }),
     })
   },
   addCartItem(payload: { productCityId: number; quantity: number }) {
