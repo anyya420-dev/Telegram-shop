@@ -16,8 +16,8 @@ function translateError(error: unknown, t: (key: string) => string, fallbackKey:
   return t(`errors.${fallbackKey}`)
 }
 
-export function ProductPage() {
-  const { productId } = useParams()
+export default function ProductPage() {
+  const { id } = useParams<{ id: string }>()
   const { user, products, addToCart } = useApp()
   const { language, t } = useI18n()
   const [product, setProduct] = useState<ProductDetail | null>(null)
@@ -26,11 +26,11 @@ export function ProductPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const cachedProduct = useMemo(() => products.find((item) => item.id === Number(productId)) ?? null, [productId, products])
+  const cachedProduct = useMemo(() => products.find((item) => item.id === Number(id)) ?? null, [id, products])
 
   useEffect(() => {
     async function loadProduct() {
-      if (!productId || !user?.selectedCityId) {
+      if (!id || !user?.selectedCityId) {
         setLoading(false)
         return
       }
@@ -43,7 +43,7 @@ export function ProductPage() {
           return
         }
 
-        const response = await api.getProduct(Number(productId), user.selectedCityId)
+        const response = await api.getProduct(Number(id), user.selectedCityId)
         setProduct(response.product)
         setQuantity(response.product.minimumQuantity)
       } catch (productError) {
@@ -54,7 +54,7 @@ export function ProductPage() {
     }
 
     void loadProduct()
-  }, [cachedProduct, productId, t, user?.selectedCityId])
+  }, [cachedProduct, id, t, user?.selectedCityId])
 
   if (loading) {
     return (
@@ -69,7 +69,7 @@ export function ProductPage() {
       <section className="placeholder-card">
         <h1>{t('product.notFoundTitle')}</h1>
         <p>{t('product.notFoundDescription')}</p>
-        <Link className="primary-button" to="/">
+        <Link className="primary-button" to="/shop">
           {t('product.backToCatalog')}
         </Link>
       </section>
@@ -77,12 +77,13 @@ export function ProductPage() {
   }
 
   const unit = getLocalizedUnit(product.unit, language, product.unitTranslations)
+  const imageSrc = product.image || '/favicon.svg'
 
   return (
     <div className="page-stack">
-      <Link className="back-link" to="/">{t('product.backToCatalog')}</Link>
+      <Link className="back-link" to="/shop">{t('product.backToCatalog')}</Link>
       <section className="product-hero">
-        <img className="product-hero__image" src={product.image} alt={getLocalizedProductName(product, language)} />
+        <img className="product-hero__image" src={imageSrc} alt={getLocalizedProductName(product, language)} />
         <div className="panel-card panel-card--dense">
           <span className="eyebrow">{getLocalizedProductCategoryName(product, language)}</span>
           <h1>{getLocalizedProductName(product, language)}</h1>

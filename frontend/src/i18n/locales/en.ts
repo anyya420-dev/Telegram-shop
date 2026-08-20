@@ -59,6 +59,7 @@ export const en = {
     minimum: 'Minimum',
     step: 'Step',
     addToCart: 'Add to cart',
+    outOfStock: 'Out of stock',
   },
   quantity: {
     label: 'Quantity',

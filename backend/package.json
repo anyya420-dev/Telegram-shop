@@ -8,9 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "db:generate": "DATABASE_URL=${DATABASE_URL:-file:./dev.db} prisma generate --schema ../database/prisma/schema.prisma",
-    "db:push": "DATABASE_URL=${DATABASE_URL:-file:./dev.db} prisma db push --schema ../database/prisma/schema.prisma",
-    "db:seed": "DATABASE_URL=${DATABASE_URL:-file:./dev.db} tsx ../database/src/seed.ts"
+    "db:generate": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} prisma generate --schema ./prisma/schema.prisma",
+    "db:push": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} prisma db push --schema ./prisma/schema.prisma",
+    "db:seed": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} tsx ./prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "6.12.0",

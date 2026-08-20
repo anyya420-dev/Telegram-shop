@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import { useI18n } from '../i18n'
 import { getTelegramContext } from '../lib/telegram'
@@ -39,11 +40,7 @@ function emptyCart(): Cart {
   }
 }
 
-function translateError(
-  error: unknown,
-  t: (key: string) => string,
-  fallbackKey: string,
-) {
+function translateError(error: unknown, t: (key: string) => string, fallbackKey: string) {
   if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
     return t(`errors.${error.code}`)
   }
@@ -51,7 +48,7 @@ function translateError(
   return t(`errors.${fallbackKey}`)
 }
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
+export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
@@ -99,7 +96,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCategories(response.categories)
 
         if (!response.user.selectedCityId) {
-          setCityPickerOpen(true)
+          setProducts([])
+          setCart(emptyCart())
+          setRecommended([])
         } else {
           const [catalogResponse, cartResponse] = await Promise.all([
             api.getCatalog({ cityId: response.user.selectedCityId }),
@@ -136,8 +135,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCart(cartResponse.cart)
       setRecommended(cartResponse.recommended)
     } catch (cityError) {
-      const translatedError = translateError(cityError, t, 'city_not_found')
-      setError(translatedError)
+      setError(translateError(cityError, t, 'city_not_found'))
       throw cityError
     }
   }

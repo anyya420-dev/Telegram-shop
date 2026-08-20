@@ -1,57 +1,34 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { BottomNav } from './components/BottomNav'
-import { CityPicker } from './components/CityPicker'
-import { PagePlaceholder } from './components/PagePlaceholder'
-import { AppProvider, useApp } from './context/AppContext'
-import { useI18n } from './i18n'
-import { CartPage } from './pages/CartPage'
-import { ProductPage } from './pages/ProductPage'
-import { ProfilePage } from './pages/ProfilePage'
-import { ShopPage } from './pages/ShopPage'
-import './index.css'
+import { Layout } from './components/Layout/Layout'
+import { AppProvider } from './context/AppContext'
+import BalancePage from './pages/BalancePage'
+import CartPage from './pages/CartPage'
+import CasinoPage from './pages/CasinoPage'
+import CitySelectPage from './pages/CitySelectPage'
+import ProductPage from './pages/ProductPage'
+import ProfilePage from './pages/ProfilePage'
+import ShopPage from './pages/ShopPage'
+import SupportPage from './pages/SupportPage'
 
-function AppShell() {
-  const { loading, error, setError } = useApp()
-  const { t } = useI18n()
-
-  if (loading) {
-    return <div className="app-shell"><section className="placeholder-card"><h1>{t('common.loadingShop')}</h1></section></div>
-  }
-
+export default function App() {
   return (
-    <div className="app-shell">
-      {error ? (
-        <div className="error-banner" role="alert">
-          <span>{error}</span>
-          <button type="button" aria-label={t('common.close')} onClick={() => setError(null)}>×</button>
-        </div>
-      ) : null}
-      <main className="content-shell">
+    <HashRouter>
+      <AppProvider>
         <Routes>
-          <Route path="/" element={<ShopPage />} />
-          <Route path="/product/:productId" element={<ProductPage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/casino" element={<PagePlaceholder title={t('placeholders.casinoTitle')} description={t('placeholders.casinoDescription')} />} />
-          <Route path="/balance" element={<PagePlaceholder title={t('placeholders.balanceTitle')} description={t('placeholders.balanceDescription')} />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/support" element={<PagePlaceholder title={t('placeholders.supportTitle')} description={t('placeholders.supportDescription')} />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/select-city" element={<CitySelectPage />} />
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Navigate to="/shop" replace />} />
+            <Route path="shop" element={<ShopPage />} />
+            <Route path="shop/product/:id" element={<ProductPage />} />
+            <Route path="shop/cart" element={<CartPage />} />
+            <Route path="casino" element={<CasinoPage />} />
+            <Route path="balance" element={<BalancePage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="support" element={<SupportPage />} />
+            <Route path="*" element={<Navigate to="/shop" replace />} />
+          </Route>
         </Routes>
-      </main>
-      <BottomNav />
-      <CityPicker />
-    </div>
+      </AppProvider>
+    </HashRouter>
   )
 }
-
-function App() {
-  return (
-    <AppProvider>
-      <HashRouter>
-        <AppShell />
-      </HashRouter>
-    </AppProvider>
-  )
-}
-
-export default App

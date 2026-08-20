@@ -6,7 +6,7 @@ import type { Language } from '../types'
 
 const languageOptions: Language[] = ['ru', 'en']
 
-export function ProfilePage() {
+export default function ProfilePage() {
   const { user, telegramEnvironment, openCityPicker, updateLanguagePreference } = useApp()
   const { language, t } = useI18n()
   const [savingLanguage, setSavingLanguage] = useState<Language | null>(null)

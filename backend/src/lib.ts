@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client'
+import type { Request, Response } from 'express'
+import rateLimit from 'express-rate-limit'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-process.env.DATABASE_URL ??= 'file:./dev.db'
+process.env.DATABASE_URL ??= 'file:./prisma/dev.db'
 
 export const prisma = new PrismaClient()
 export const DEMO_TELEGRAM_USER = {
@@ -20,9 +22,35 @@ type TelegramUserPayload = {
   first_name: string
 }
 
+type TranslationShape = {
+  name: string
+  nameEn: string | null
+}
+
 export function normalizeQuantity(value: number) {
   return Number(value.toFixed(2))
 }
+
+export function parsePositiveInt(value: unknown) {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+export function isLanguage(value: unknown): value is AppLanguage {
+  return value === 'ru' || value === 'en'
+}
+
+export function sendError(response: Response, status: number, code: string, message: string) {
+  response.status(status).json({ code, message })
+}
+
+export const authRateLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { code: 'too_many_requests', message: 'Too many requests, please try again later' },
+})
 
 export function createSessionToken(telegramId: string) {
   const signature = createHmac('sha256', SESSION_SECRET).update(telegramId).digest('hex')
@@ -119,6 +147,27 @@ function createTranslations(ru: string, en?: string | null) {
   }
 }
 
+export function mapCity<T extends TranslationShape>(city: T) {
+  return {
+    ...city,
+    nameTranslations: createTranslations(city.name, city.nameEn),
+  }
+}
+
+export function mapCategory<T extends TranslationShape>(category: T) {
+  return {
+    ...category,
+    nameTranslations: createTranslations(category.name, category.nameEn),
+  }
+}
+
+export function mapUser<T extends { selectedCity: TranslationShape | null }>(user: T) {
+  return {
+    ...user,
+    selectedCity: user.selectedCity ? mapCity(user.selectedCity) : null,
+  }
+}
+
 export function mapProduct(productCity: {
   id: number
   cityId: number
@@ -135,7 +184,7 @@ export function mapProduct(productCity: {
     description: string
     descriptionEn: string | null
     price: number
-    image: string
+    image: string | null
     categoryId: number
     isRecommended: boolean
     category: {
@@ -165,6 +214,26 @@ export function mapProduct(productCity: {
     maximumQuantity: productCity.maximumQuantity,
     unit: productCity.unit,
   }
+}
+
+export async function getAuthorizedUser(request: Request, response: Response) {
+  const authorization = request.header('authorization') ?? request.header('x-session-token') ?? ''
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : authorization
+  const telegramId = verifySessionToken(token)
+
+  if (!telegramId) {
+    sendError(response, 401, 'invalid_session_token', 'Invalid session token')
+    return null
+  }
+
+  const user = await prisma.user.findUnique({ where: { telegramId } })
+
+  if (!user) {
+    sendError(response, 404, 'user_not_found', 'User not found')
+    return null
+  }
+
+  return user
 }
 
 export async function getOrCreateCart(userId: number) {

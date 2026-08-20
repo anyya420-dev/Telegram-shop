@@ -42,7 +42,7 @@ export type ProductSummary = {
   description: string
   descriptionTranslations?: LocalizedText | null
   price: number
-  image: string
+  image: string | null
   categoryId: number
   categoryName: string
   categoryNameTranslations?: LocalizedText | null

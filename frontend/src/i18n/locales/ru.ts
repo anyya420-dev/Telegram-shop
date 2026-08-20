@@ -59,6 +59,7 @@ export const ru = {
     minimum: 'Минимум',
     step: 'Шаг',
     addToCart: 'Добавить в корзину',
+    outOfStock: 'Нет в наличии',
   },
   quantity: {
     label: 'Количество',

@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext'
 import { useI18n } from '../i18n'
 import { getLocalizedCategoryName, getLocalizedCityName } from '../lib/localized'
 
-export function ShopPage() {
+export default function ShopPage() {
   const { user, categories, products, cart, refreshCatalog, openCityPicker } = useApp()
   const [search, setSearch] = useState('')
   const [activeCategoryId, setActiveCategoryId] = useState<number | 'all'>('all')
@@ -34,7 +34,7 @@ export function ShopPage() {
           <button className="secondary-button" type="button" onClick={openCityPicker}>
             📍 {cityName}
           </button>
-          <Link className="primary-button" to="/cart">
+          <Link className="primary-button" to="/shop/cart">
             {t('shop.cartButton', { count: cartCount })}
           </Link>
         </div>

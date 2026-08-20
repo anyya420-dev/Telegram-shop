@@ -6,7 +6,7 @@ import { useI18n } from '../i18n'
 import { formatCurrency } from '../lib/format'
 import { getLocalizedProductDescription, getLocalizedProductName } from '../lib/localized'
 
-export function CartPage() {
+export default function CartPage() {
   const { cart, recommended, updateCartItem, removeCartItem } = useApp()
   const { language, t } = useI18n()
 
@@ -16,7 +16,7 @@ export function CartPage() {
         <span className="eyebrow">{t('cart.badge')}</span>
         <h1>{t('cart.emptyTitle')}</h1>
         <p>{t('cart.emptyDescription')}</p>
-        <Link className="primary-button" to="/">{t('cart.goToShop')}</Link>
+        <Link className="primary-button" to="/shop">{t('cart.goToShop')}</Link>
       </section>
     )
   }
@@ -33,7 +33,7 @@ export function CartPage() {
       <section className="cart-list">
         {cart.items.map((item) => (
           <article key={item.id} className="cart-card">
-            <img className="cart-card__image" src={item.productCity.image} alt={getLocalizedProductName(item.productCity, language)} />
+            <img className="cart-card__image" src={item.productCity.image || '/favicon.svg'} alt={getLocalizedProductName(item.productCity, language)} />
             <div className="cart-card__content">
               <div className="cart-card__header">
                 <div>
