@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { getTelegramContext } from '../lib/telegram'
 import type { Cart, Category, City, ProductSummary, UserProfile } from '../types'
@@ -49,12 +49,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [recommended, setRecommended] = useState<ProductSummary[]>([])
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
 
-  async function refreshCart(telegramId: string) {
-    const response = await api.getCart(telegramId)
-    setCart(response.cart)
-    setRecommended(response.recommended)
-  }
-
   async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
     if (!user?.selectedCityId) {
       setProducts([])
@@ -85,7 +79,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!response.user.selectedCityId) {
           setCityPickerOpen(true)
         } else {
-          await Promise.all([refreshCart(response.user.telegramId), refreshCatalog()])
+          const [catalogResponse, cartResponse] = await Promise.all([
+            api.getCatalog({ cityId: response.user.selectedCityId }),
+            api.getCart(response.user.telegramId),
+          ])
+          setProducts(catalogResponse.products)
+          setCart(cartResponse.cart)
+          setRecommended(cartResponse.recommended)
         }
       } catch (bootstrapError) {
         setError(bootstrapError instanceof Error ? bootstrapError.message : 'Не удалось загрузить магазин')
@@ -143,29 +143,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setRecommended(response.recommended)
   }
 
-  const value = useMemo(
-    () => ({
-      loading,
-      error,
-      telegramEnvironment,
-      user,
-      cities,
-      categories,
-      products,
-      cart,
-      recommended,
-      cityPickerOpen,
-      openCityPicker: () => setCityPickerOpen(true),
-      closeCityPicker: () => setCityPickerOpen(false),
-      refreshCatalog,
-      selectCity,
-      addToCart,
-      updateCartItem,
-      removeCartItem,
-      setError,
-    }),
-    [loading, error, telegramEnvironment, user, cities, categories, products, cart, recommended, cityPickerOpen],
-  )
+  const value = {
+    loading,
+    error,
+    telegramEnvironment,
+    user,
+    cities,
+    categories,
+    products,
+    cart,
+    recommended,
+    cityPickerOpen,
+    openCityPicker: () => setCityPickerOpen(true),
+    closeCityPicker: () => setCityPickerOpen(false),
+    refreshCatalog,
+    selectCity,
+    addToCart,
+    updateCartItem,
+    removeCartItem,
+    setError,
+  } satisfies AppState
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

@@ -4,11 +4,11 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api'
 
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${API_URL}${path}`, {
+    ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
     },
-    ...init,
   })
 
   if (!response.ok) {

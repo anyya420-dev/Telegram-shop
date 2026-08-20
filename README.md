@@ -46,7 +46,7 @@ Telegram Web App магазин с минималистичным интерфе
 ```env
 VITE_API_URL=http://localhost:3001/api
 PORT=3001
-DATABASE_URL=file:./database/prisma/dev.db
+DATABASE_URL=file:./dev.db
 FRONTEND_URL=http://localhost:5173
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 WEB_APP_URL=http://localhost:5173

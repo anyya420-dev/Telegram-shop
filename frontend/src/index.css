@@ -369,6 +369,10 @@ button {
   padding: 20px;
 }
 
+.city-list--stacked {
+  flex-direction: column;
+}
+
 .city-button {
   width: 100%;
   justify-content: space-between;
