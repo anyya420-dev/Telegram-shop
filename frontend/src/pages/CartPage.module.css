@@ -285,3 +285,10 @@
   font-size: 15px;
   font-weight: 600;
 }
+
+.checkoutError {
+  font-size: 13px;
+  color: var(--error, #e53935);
+  text-align: center;
+  margin-top: 8px;
+}

@@ -1,4 +1,4 @@
-import type { BootstrapResponse, Cart, Language, ProductDetail, ProductSummary, TelegramIdentity, UserProfile } from '../types'
+import type { BootstrapResponse, Cart, Language, Order, ProductDetail, ProductSummary, TelegramIdentity, UserProfile } from '../types'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api'
 let sessionToken: string | null = null
@@ -94,5 +94,14 @@ export const api = {
     return request<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, {
       method: 'DELETE',
     })
+  },
+  checkout(payload?: { comment?: string }) {
+    return request<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    })
+  },
+  getOrders() {
+    return request<{ orders: Order[] }>('/orders')
   },
 }

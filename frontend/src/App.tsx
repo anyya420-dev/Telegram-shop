@@ -11,6 +11,8 @@ import BalancePage from './pages/BalancePage';
 import ProfilePage from './pages/ProfilePage';
 import SupportPage from './pages/SupportPage';
 import CitySelectPage from './pages/CitySelectPage';
+import OrdersPage from './pages/OrdersPage';
+import OrderDetailPage from './pages/OrderDetailPage';
 
 export default function App() {
   return (
@@ -29,6 +31,8 @@ export default function App() {
             <Route path="balance" element={<BalancePage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="support" element={<SupportPage />} />
+            <Route path="orders" element={<OrdersPage />} />
+            <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>

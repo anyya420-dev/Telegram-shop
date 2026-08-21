@@ -68,7 +68,9 @@
     "delivery": "Доставка",
     "orderTotal": "Итого",
     "soon": "— (скоро)",
-    "checkout": "💳 Оформить заказ (скоро)",
+    "checkout": "💳 Оформить заказ",
+    "checkingOut": "Оформляем...",
+    "checkoutFailed": "Не удалось оформить заказ. Попробуйте ещё раз.",
     "checkoutNote": "Оплата будет доступна в следующей версии",
     "recommended": "🔥 Вам может понравиться"
   },
@@ -82,6 +84,11 @@
     "balanceSoon": "Баланс будет доступен позже",
     "orders": "Мои заказы",
     "ordersSoon": "История заказов будет доступна позже",
+    "ordersEmpty": "Заказов пока нет",
+    "ordersCount_one": "{{count}} заказ",
+    "ordersCount_few": "{{count}} заказа",
+    "ordersCount_many": "{{count}} заказов",
+    "ordersCount_other": "{{count}} заказов",
     "language": "Язык",
     "selectCity": "📍 Выберите город",
     "cancel": "Отмена",
@@ -115,5 +122,25 @@
     "addToCart": "В корзину",
     "outOfStock": "Нет в наличии",
     "close": "Закрыть"
+  },
+  "orders": {
+    "title": "Мои заказы",
+    "back": "← Назад",
+    "empty": "Заказов пока нет",
+    "goToShop": "Перейти в магазин",
+    "orderTitle": "Заказ #{{id}}",
+    "items": "Состав заказа",
+    "comment": "Комментарий",
+    "notFound": "Заказ не найден",
+    "moreItems_one": "+{{count}} товар",
+    "moreItems_few": "+{{count}} товара",
+    "moreItems_many": "+{{count}} товаров",
+    "moreItems_other": "+{{count}} товаров",
+    "statusPending": "Ожидает подтверждения",
+    "statusConfirmed": "Подтверждён",
+    "statusProcessing": "В обработке",
+    "statusReady": "Готов",
+    "statusDelivered": "Доставлен",
+    "statusCancelled": "Отменён"
   }
 }

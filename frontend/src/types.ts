@@ -81,3 +81,28 @@ export type BootstrapResponse = {
   cities: City[]
   categories: Category[]
 }
+
+export type OrderItem = {
+  id: number
+  orderId: number
+  productCityId: number
+  productName: string
+  productImage: string | null
+  unit: string
+  quantity: number
+  price: number
+  lineTotal: number
+}
+
+export type Order = {
+  id: number
+  userId: number
+  cityId: number
+  status: string
+  subtotal: number
+  total: number
+  comment: string | null
+  createdAt: string
+  items: OrderItem[]
+  city: { id: number; name: string; nameEn: string | null }
+}

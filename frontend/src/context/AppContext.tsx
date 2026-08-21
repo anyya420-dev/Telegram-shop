@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import { useI18n } from '../i18n'
 import { getTelegramContext } from '../lib/telegram'
-import type { Cart, Category, City, Language, ProductSummary, UserProfile } from '../types'
+import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
 
 type AppState = {
   loading: boolean
@@ -15,6 +15,8 @@ type AppState = {
   products: ProductSummary[]
   cart: Cart | null
   recommended: ProductSummary[]
+  orders: Order[]
+  ordersLoading: boolean
   cityPickerOpen: boolean
   openCityPicker: () => void
   closeCityPicker: () => void
@@ -24,6 +26,8 @@ type AppState = {
   addToCart: (productCityId: number, quantity: number) => Promise<void>
   updateCartItem: (itemId: number, quantity: number) => Promise<void>
   removeCartItem: (itemId: number) => Promise<void>
+  checkout: (comment?: string) => Promise<Order>
+  fetchOrders: () => Promise<void>
   setError: (value: string | null) => void
 }
 
@@ -58,6 +62,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<ProductSummary[]>([])
   const [cart, setCart] = useState<Cart>(emptyCart())
   const [recommended, setRecommended] = useState<ProductSummary[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   const { setLanguage, t } = useI18n()
 
@@ -204,6 +210,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function checkout(comment?: string) {
+    if (!user) {
+      throw new Error('User not loaded')
+    }
+
+    try {
+      setError(null)
+      const response = await api.checkout({ comment })
+      setCart(response.cart)
+      setRecommended(response.recommended)
+      setOrders((prev) => [response.order, ...prev])
+      return response.order
+    } catch (checkoutError) {
+      setError(translateError(checkoutError, t, 'checkout_failed'))
+      throw checkoutError
+    }
+  }
+
+  async function fetchOrders() {
+    if (!user) {
+      return
+    }
+
+    try {
+      setOrdersLoading(true)
+      setError(null)
+      const response = await api.getOrders()
+      setOrders(response.orders)
+    } catch (ordersError) {
+      setError(translateError(ordersError, t, 'orders_fetch_failed'))
+    } finally {
+      setOrdersLoading(false)
+    }
+  }
+
   const value = {
     loading,
     error,
@@ -214,6 +255,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     products,
     cart,
     recommended,
+    orders,
+    ordersLoading,
     cityPickerOpen,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
@@ -223,6 +266,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addToCart,
     updateCartItem,
     removeCartItem,
+    checkout,
+    fetchOrders,
     setError,
   } satisfies AppState
 

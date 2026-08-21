@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import styles from './CartPage.module.css';
@@ -7,10 +8,25 @@ import i18n from '../lib/i18n';
 import type { Language } from '../types';
 
 export default function CartPage() {
-  const { cart, recommended, updateCartItem, removeCartItem } = useApp();
+  const { cart, recommended, updateCartItem, removeCartItem, checkout } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const language = i18n.language as Language;
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  async function handleCheckout() {
+    setCheckingOut(true);
+    setCheckoutError(null);
+    try {
+      const order = await checkout();
+      navigate(`/orders/${order.id}`);
+    } catch {
+      setCheckoutError(t('cart.checkoutFailed'));
+    } finally {
+      setCheckingOut(false);
+    }
+  }
 
   if (!cart || cart.items.length === 0) {
     return (
@@ -110,12 +126,16 @@ export default function CartPage() {
           <span>{formatCurrency(cart.total, language)}</span>
         </div>
 
-        <button className={styles.checkoutBtn} disabled>
-          {t('cart.checkout')}
+        <button
+          className={styles.checkoutBtn}
+          onClick={() => void handleCheckout()}
+          disabled={checkingOut}
+        >
+          {checkingOut ? t('cart.checkingOut') : t('cart.checkout')}
         </button>
-        <p className={styles.checkoutNote}>
-          {t('cart.checkoutNote')}
-        </p>
+        {checkoutError && (
+          <p className={styles.checkoutError}>{checkoutError}</p>
+        )}
       </div>
 
       {recommended && recommended.length > 0 && (

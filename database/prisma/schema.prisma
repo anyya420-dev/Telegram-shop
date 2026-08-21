@@ -16,6 +16,7 @@ model User {
   language       String   @default("ru")
   selectedCity   City?    @relation("SelectedCity", fields: [selectedCityId], references: [id])
   cart           Cart?
+  orders         Order[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -27,6 +28,7 @@ model City {
   isActive      Boolean       @default(true)
   users         User[]        @relation("SelectedCity")
   productCities ProductCity[]
+  orders        Order[]
 }
 
 model Category {
@@ -66,6 +68,7 @@ model ProductCity {
   product         Product    @relation(fields: [productId], references: [id])
   city            City       @relation(fields: [cityId], references: [id])
   cartItems       CartItem[]
+  orderItems      OrderItem[]
 
   @@unique([productId, cityId])
 }
@@ -77,6 +80,37 @@ model Cart {
   items     CartItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  cityId    Int
+  status    String      @default("pending")
+  subtotal  Float
+  total     Float
+  comment   String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user   User        @relation(fields: [userId], references: [id])
+  city   City        @relation(fields: [cityId], references: [id])
+  items  OrderItem[]
+}
+
+model OrderItem {
+  id            Int     @id @default(autoincrement())
+  orderId       Int
+  productCityId Int
+  productName   String
+  productImage  String?
+  unit          String
+  quantity      Float
+  price         Float
+  lineTotal     Float
+
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productCity ProductCity @relation(fields: [productCityId], references: [id])
 }
 
 model CartItem {

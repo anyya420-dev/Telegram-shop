@@ -66,7 +66,9 @@
     "delivery": "Delivery",
     "orderTotal": "Total",
     "soon": "— (soon)",
-    "checkout": "💳 Checkout (soon)",
+    "checkout": "💳 Checkout",
+    "checkingOut": "Placing order...",
+    "checkoutFailed": "Could not place order. Please try again.",
     "checkoutNote": "Payment will be available in the next version",
     "recommended": "🔥 You might also like"
   },
@@ -80,6 +82,9 @@
     "balanceSoon": "Balance will be available later",
     "orders": "My orders",
     "ordersSoon": "Order history will be available later",
+    "ordersEmpty": "No orders yet",
+    "ordersCount_one": "{{count}} order",
+    "ordersCount_other": "{{count}} orders",
     "language": "Language",
     "selectCity": "📍 Select city",
     "cancel": "Cancel",
@@ -113,5 +118,23 @@
     "addToCart": "Add to cart",
     "outOfStock": "Out of stock",
     "close": "Close"
+  },
+  "orders": {
+    "title": "My orders",
+    "back": "← Back",
+    "empty": "No orders yet",
+    "goToShop": "Go to shop",
+    "orderTitle": "Order #{{id}}",
+    "items": "Order items",
+    "comment": "Comment",
+    "notFound": "Order not found",
+    "moreItems_one": "+{{count}} item",
+    "moreItems_other": "+{{count}} items",
+    "statusPending": "Pending",
+    "statusConfirmed": "Confirmed",
+    "statusProcessing": "Processing",
+    "statusReady": "Ready",
+    "statusDelivered": "Delivered",
+    "statusCancelled": "Cancelled"
   }
 }

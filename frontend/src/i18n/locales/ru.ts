@@ -120,5 +120,8 @@ export const ru = {
     product_load_failed: 'Не удалось загрузить товар.',
     cart_update_failed: 'Не удалось обновить корзину.',
     language_update_failed: 'Не удалось сохранить язык.',
+    checkout_failed: 'Не удалось оформить заказ.',
+    orders_fetch_failed: 'Не удалось загрузить заказы.',
+    cart_empty: 'Корзина пуста.',
   },
 } as const

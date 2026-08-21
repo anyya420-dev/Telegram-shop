@@ -5,6 +5,7 @@ import cartRouter from './routes/cart.js'
 import catalogRouter from './routes/catalog.js'
 import categoriesRouter from './routes/categories.js'
 import citiesRouter from './routes/cities.js'
+import ordersRouter from './routes/orders.js'
 import productsRouter from './routes/products.js'
 import sessionRouter from './routes/session.js'
 import usersRouter from './routes/users.js'
@@ -22,6 +23,7 @@ app.use('/api/categories', categoriesRouter)
 app.use('/api/catalog', catalogRouter)
 app.use('/api/products', productsRouter)
 app.use('/api/cart', cartRouter)
+app.use('/api/orders', ordersRouter)
 app.use('/api/users', usersRouter)
 
 app.get('/api/health', (_request, response) => {

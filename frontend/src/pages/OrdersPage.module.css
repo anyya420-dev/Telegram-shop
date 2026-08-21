@@ -1,0 +1,159 @@
+.page {
+  padding: 16px;
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.back {
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  gap: 12px;
+}
+
+.emptyIcon {
+  font-size: 56px;
+}
+
+.emptyText {
+  font-size: 15px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.shopBtn {
+  margin-top: 8px;
+  padding: 12px 28px;
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-lg);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: opacity 0.15s;
+}
+
+.card:active {
+  opacity: 0.7;
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.orderId {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--border);
+  color: var(--text-secondary);
+}
+
+.status_pending { background: #fff3e0; color: #e65100; }
+.status_confirmed { background: #e3f2fd; color: #1565c0; }
+.status_processing { background: #f3e5f5; color: #6a1b9a; }
+.status_ready { background: #e8f5e9; color: #2e7d32; }
+.status_delivered { background: #e8f5e9; color: #1b5e20; }
+.status_cancelled { background: #fce4ec; color: #b71c1c; }
+
+.cardItems {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.itemName {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.more {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cardBottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.total {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}

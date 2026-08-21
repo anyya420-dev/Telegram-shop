@@ -20,6 +20,7 @@ model User {
 
   selectedCity City? @relation("SelectedCity", fields: [selectedCityId], references: [id])
   cart         Cart?
+  orders       Order[]
 
   @@map("users")
 }
@@ -34,6 +35,7 @@ model City {
 
   users         User[]        @relation("SelectedCity")
   productCities ProductCity[]
+  orders        Order[]
 
   @@map("cities")
 }
@@ -84,7 +86,8 @@ model ProductCity {
 
   product   Product    @relation(fields: [productId], references: [id])
   city      City       @relation(fields: [cityId], references: [id])
-  cartItems CartItem[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
 
   @@unique([productId, cityId])
   @@map("product_cities")
@@ -100,6 +103,41 @@ model Cart {
   items CartItem[]
 
   @@map("carts")
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  userId    Int         @map("user_id")
+  cityId    Int         @map("city_id")
+  status    String      @default("pending")
+  subtotal  Float
+  total     Float
+  comment   String?
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  user   User        @relation(fields: [userId], references: [id])
+  city   City        @relation(fields: [cityId], references: [id])
+  items  OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id            Int     @id @default(autoincrement())
+  orderId       Int     @map("order_id")
+  productCityId Int     @map("product_city_id")
+  productName   String  @map("product_name")
+  productImage  String? @map("product_image")
+  unit          String
+  quantity      Float
+  price         Float
+  lineTotal     Float   @map("line_total")
+
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productCity ProductCity @relation(fields: [productCityId], references: [id])
+
+  @@map("order_items")
 }
 
 model CartItem {
