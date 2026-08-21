@@ -4,7 +4,7 @@ services:
     name: telegram-shop-backend
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build --workspace backend
+    buildCommand: npm install --include=dev && npm run build --workspace backend
     startCommand: npm run start --workspace backend
     envVars:
       - key: NODE_ENV
@@ -46,7 +46,7 @@ services:
     name: telegram-shop-bot
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build --workspace bot
+    buildCommand: npm install --include=dev && npm run build --workspace bot
     startCommand: npm run start --workspace bot
     envVars:
       - key: TELEGRAM_BOT_TOKEN
