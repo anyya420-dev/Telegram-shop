@@ -1,54 +1,40 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { api } from '../lib/api';
 import ProductCard from '../components/ProductCard/ProductCard';
-import { Product, ProductCategory } from '../types/product';
 import styles from './ShopPage.module.css';
 import { useTranslation } from 'react-i18next';
+import { getLocalizedCategoryName } from '../lib/localized';
+import i18n from '../lib/i18n';
+import type { Language } from '../types';
 
 export default function ShopPage() {
-  const { selectedCity, cart } = useApp();
+  const { user, categories, products, cart, refreshCatalog, openCityPicker } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null);
+  const language = i18n.language as Language;
+  const [activeCategoryId, setActiveCategoryId] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  const cartCount = cart.items.length;
 
   useEffect(() => {
-    api.get<ProductCategory[]>('/categories').then(setCategories);
+    void refreshCatalog(search, activeCategoryId);
   }, []);
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (selectedCity) params.set('cityId', String(selectedCity.id));
-      if (activeCategoryId) params.set('categoryId', String(activeCategoryId));
-      if (search) params.set('search', search);
-      const suffix = params.toString();
-      const data = await api.get<Product[]>(`/products${suffix ? `?${suffix}` : ''}`);
-      setProducts(data);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedCity, activeCategoryId, search]);
+  const handleSearch = useCallback(() => {
+    void refreshCatalog(search, activeCategoryId);
+  }, [search, activeCategoryId, refreshCatalog]);
 
-  useEffect(() => {
-    void fetchProducts();
-  }, [fetchProducts]);
+  const cartCount = cart?.items.length ?? 0;
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <h1 className={styles.title}>{t('shop.title')}</h1>
-          {selectedCity && (
-            <span className={styles.city}>📍 {selectedCity.name}</span>
+          {user?.selectedCity && (
+            <button className={styles.city} onClick={() => openCityPicker()}>
+              📍 {user.selectedCity.name}
+            </button>
           )}
         </div>
         <button
@@ -69,13 +55,17 @@ export default function ShopPage() {
           placeholder={t('shop.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
         />
       </div>
 
       <div className={styles.categories}>
         <button
-          className={`${styles.catBtn} ${activeCategoryId === null ? styles.catActive : ''}`}
-          onClick={() => setActiveCategoryId(null)}
+          className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
+          onClick={() => {
+            setActiveCategoryId('all');
+            void refreshCatalog(search, 'all');
+          }}
         >
           {t('shop.allCategories')}
         </button>
@@ -83,18 +73,17 @@ export default function ShopPage() {
           <button
             key={cat.id}
             className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
-            onClick={() => setActiveCategoryId(cat.id)}
+            onClick={() => {
+              setActiveCategoryId(cat.id);
+              void refreshCatalog(search, cat.id);
+            }}
           >
-            {cat.name}
+            {getLocalizedCategoryName(cat, language)}
           </button>
         ))}
       </div>
 
-      {loading ? (
-        <div className={styles.loadingState}>
-          <div className={styles.spinner} />
-        </div>
-      ) : products.length === 0 ? (
+      {products.length === 0 ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>📦</div>
           <p>{t('shop.empty')}</p>
@@ -103,8 +92,8 @@ export default function ShopPage() {
         <div className={styles.grid}>
           {products.map((product) => (
             <ProductCard
-              key={product.id}
-              product={product}
+              key={product.productCityId}
+              product={product as any}
               onClick={() => navigate(`/shop/product/${product.id}`)}
             />
           ))}

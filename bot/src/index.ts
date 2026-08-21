@@ -1,38 +1,34 @@
-import TelegramBot from 'node-telegram-bot-api';
-import dotenv from 'dotenv';
+import 'dotenv/config'
+import { Markup, Telegraf } from 'telegraf'
 
-dotenv.config();
+const token = process.env.TELEGRAM_BOT_TOKEN
+const webAppUrl = process.env.WEB_APP_URL ?? 'http://localhost:5173'
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) {
-  throw new Error('TELEGRAM_BOT_TOKEN is required');
+  console.warn('TELEGRAM_BOT_TOKEN is not set. Bot is disabled until the token is provided.')
+  process.exit(0)
 }
 
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-app-url.com';
+const bot = new Telegraf(token)
 
-const bot = new TelegramBot(token, { polling: true });
+bot.start(async (context) => {
+  await context.reply(
+    'Добро пожаловать в Telegram Shop. Откройте Web App, чтобы выбрать город и начать покупки.',
+    Markup.keyboard([[Markup.button.webApp('Открыть магазин', webAppUrl)]]).resize(),
+  )
+})
 
-bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  void bot.sendMessage(chatId, '🛍 Добро пожаловать в магазин!', {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: '🛍 Открыть магазин',
-            web_app: { url: WEBAPP_URL },
-          },
-        ],
-      ],
-    },
-  });
-});
+bot.command('shop', async (context) => {
+  await context.reply('Откройте магазин через кнопку ниже.', {
+    reply_markup: Markup.inlineKeyboard([
+      Markup.button.webApp('🛍 Магазин', webAppUrl),
+    ]).reply_markup,
+  })
+})
 
-bot.onText(/\/help/, (msg) => {
-  void bot.sendMessage(
-    msg.chat.id,
-    '📋 Доступные команды:\n/start — открыть магазин\n/help — помощь'
-  );
-});
+bot.launch().then(() => {
+  console.log('Telegram bot started')
+})
 
-console.log('Bot started');
+process.once('SIGINT', () => bot.stop('SIGINT'))
+process.once('SIGTERM', () => bot.stop('SIGTERM'))

@@ -10,5 +10,5 @@ export default function SupportPage() {
       <p className={styles.text}>{t('support.text')}</p>
       <div className={styles.badge}>{t('support.soon')}</div>
     </div>
-  );
+  )
 }

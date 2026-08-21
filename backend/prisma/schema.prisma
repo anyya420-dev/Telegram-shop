@@ -8,29 +8,31 @@ datasource db {
 }
 
 model User {
-  id             Int       @id @default(autoincrement())
-  telegramId     String    @unique @map("telegram_id")
+  id             Int      @id @default(autoincrement())
+  telegramId     String   @unique @map("telegram_id")
   username       String?
-  firstName      String?   @map("first_name")
-  lastName       String?   @map("last_name")
-  selectedCityId Int?      @map("selected_city_id")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  firstName      String   @map("first_name")
+  lastName       String?  @map("last_name")
+  selectedCityId Int?     @map("selected_city_id")
+  language       String   @default("ru")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  selectedCity   City?     @relation(fields: [selectedCityId], references: [id])
-  cart           Cart?
+  selectedCity City? @relation("SelectedCity", fields: [selectedCityId], references: [id])
+  cart         Cart?
 
   @@map("users")
 }
 
 model City {
-  id           Int           @id @default(autoincrement())
-  name         String        @unique
-  isActive     Boolean       @default(true) @map("is_active")
-  sortOrder    Int           @default(0) @map("sort_order")
-  createdAt    DateTime      @default(now()) @map("created_at")
+  id         Int           @id @default(autoincrement())
+  name       String        @unique
+  nameEn     String?       @map("name_en")
+  isActive   Boolean       @default(true) @map("is_active")
+  sortOrder  Int           @default(0) @map("sort_order")
+  createdAt  DateTime      @default(now()) @map("created_at")
 
-  users        User[]
+  users         User[]        @relation("SelectedCity")
   productCities ProductCity[]
 
   @@map("cities")
@@ -39,11 +41,12 @@ model City {
 model Category {
   id        Int       @id @default(autoincrement())
   name      String    @unique
+  nameEn    String?   @map("name_en")
   isActive  Boolean   @default(true) @map("is_active")
   sortOrder Int       @default(0) @map("sort_order")
   createdAt DateTime  @default(now()) @map("created_at")
 
-  products  Product[]
+  products Product[]
 
   @@map("categories")
 }
@@ -51,7 +54,9 @@ model Category {
 model Product {
   id            Int           @id @default(autoincrement())
   name          String
-  description   String?
+  nameEn        String?       @map("name_en")
+  description   String
+  descriptionEn String?       @map("description_en")
   price         Float
   image         String?
   categoryId    Int           @map("category_id")
@@ -62,24 +67,24 @@ model Product {
 
   category      Category      @relation(fields: [categoryId], references: [id])
   productCities ProductCity[]
-  cartItems     CartItem[]
 
   @@map("products")
 }
 
 model ProductCity {
-  id              Int      @id @default(autoincrement())
-  productId       Int      @map("product_id")
-  cityId          Int      @map("city_id")
-  stock           Int      @default(0)
-  minimumQuantity Float    @default(1) @map("minimum_quantity")
-  quantityStep    Float    @default(1) @map("quantity_step")
-  maximumQuantity Float    @default(100) @map("maximum_quantity")
-  unit            String   @default("шт.")
-  isAvailable     Boolean  @default(true) @map("is_available")
+  id              Int        @id @default(autoincrement())
+  productId       Int        @map("product_id")
+  cityId          Int        @map("city_id")
+  stock           Float      @default(0)
+  minimumQuantity Float      @default(1) @map("minimum_quantity")
+  quantityStep    Float      @default(1) @map("quantity_step")
+  maximumQuantity Float      @default(100) @map("maximum_quantity")
+  unit            String     @default("шт.")
+  isAvailable     Boolean    @default(true) @map("is_available")
 
-  product         Product  @relation(fields: [productId], references: [id])
-  city            City     @relation(fields: [cityId], references: [id])
+  product   Product    @relation(fields: [productId], references: [id])
+  city      City       @relation(fields: [cityId], references: [id])
+  cartItems CartItem[]
 
   @@unique([productId, cityId])
   @@map("product_cities")
@@ -91,21 +96,21 @@ model Cart {
   createdAt DateTime   @default(now()) @map("created_at")
   updatedAt DateTime   @updatedAt @map("updated_at")
 
-  user      User       @relation(fields: [userId], references: [id])
-  items     CartItem[]
+  user  User       @relation(fields: [userId], references: [id])
+  items CartItem[]
 
   @@map("carts")
 }
 
 model CartItem {
-  id        Int      @id @default(autoincrement())
-  cartId    Int      @map("cart_id")
-  productId Int      @map("product_id")
-  quantity  Float
+  id            Int         @id @default(autoincrement())
+  cartId        Int         @map("cart_id")
+  productCityId Int         @map("product_city_id")
+  quantity      Float
 
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
+  cart        Cart        @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productCity ProductCity @relation(fields: [productCityId], references: [id])
 
-  @@unique([cartId, productId])
+  @@unique([cartId, productCityId])
   @@map("cart_items")
 }

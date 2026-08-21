@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { api } from '../lib/api';
-import { roundToStep } from '../lib/utils';
-import { Product } from '../types/product';
+import { api } from '../api/client';
 import styles from './ProductPage.module.css';
 import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/format';
+import i18n from '../lib/i18n';
+import type { Language, ProductDetail } from '../types';
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { selectedCity, addToCart, cart } = useApp();
+  const { user, addToCart, cart } = useApp();
   const { t } = useTranslation();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [related, setRelated] = useState<Product[]>([]);
+  const language = i18n.language as Language;
+  const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -21,42 +22,39 @@ export default function ProductPage() {
 
   useEffect(() => {
     async function load() {
+      if (!id || !user?.selectedCityId) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
-        const params = selectedCity ? `?cityId=${selectedCity.id}` : '';
-        const data = await api.get<Product>(`/products/${id}${params}`);
+        const { product: data } = await api.getProduct(Number(id), user.selectedCityId);
         setProduct(data);
-        const pc = data.productCities[0];
-        if (pc) setQuantity(pc.minimumQuantity);
-        // load related
-        const rel = await api.get<Product[]>(`/products/${id}/related${params}`).catch(() => []);
-        setRelated(rel);
+        setQuantity(data.minimumQuantity || 1);
       } finally {
         setLoading(false);
       }
     }
     void load();
-  }, [id, selectedCity]);
-
-  const pc = product?.productCities[0];
+  }, [id, user?.selectedCityId]);
 
   function increment() {
-    if (!pc) return;
-    const next = roundToStep(quantity + pc.quantityStep, pc.quantityStep);
-    if (next <= pc.maximumQuantity) setQuantity(next);
+    if (!product) return;
+    const next = quantity + product.quantityStep;
+    if (next <= product.maximumQuantity) setQuantity(next);
   }
 
   function decrement() {
-    if (!pc) return;
-    const next = roundToStep(quantity - pc.quantityStep, pc.quantityStep);
-    if (next >= pc.minimumQuantity) setQuantity(next);
+    if (!product) return;
+    const next = quantity - product.quantityStep;
+    if (next >= product.minimumQuantity) setQuantity(next);
   }
 
   async function handleAddToCart() {
-    if (!product || !pc) return;
+    if (!product) return;
     setAdding(true);
     try {
-      await addToCart(product.id, quantity);
+      await addToCart(product.productCityId, quantity);
       setAdded(true);
       window.setTimeout(() => setAdded(false), 2000);
     } finally {
@@ -81,7 +79,7 @@ export default function ProductPage() {
     );
   }
 
-  const itemInCart = cart.items.find((i) => i.productId === product.id);
+  const itemInCart = cart?.items.find((i) => i.productCity.productCityId === product.productCityId);
 
   return (
     <div className={styles.page}>
@@ -98,120 +96,86 @@ export default function ProductPage() {
       </div>
 
       <div className={styles.content}>
-        <div className={styles.categoryTag}>{product.category.name}</div>
+        <div className={styles.categoryTag}>{product.categoryName}</div>
         <h1 className={styles.name}>{product.name}</h1>
 
         <div className={styles.priceRow}>
-          <span className={styles.price}>${product.price}</span>
-          {pc && <span className={styles.unit}>/ {pc.unit}</span>}
+          <span className={styles.price}>{formatCurrency(product.price, language)}</span>
+          {product.unit && <span className={styles.unit}>/ {product.unit}</span>}
         </div>
 
         {product.description && (
           <p className={styles.description}>{product.description}</p>
         )}
 
-        {pc ? (
+        <div className={styles.stockRow}>
+          <span
+            className={`${styles.stockDot} ${product.isAvailable ? styles.inStock : styles.outOfStock}`}
+          />
+          <span className={styles.stockText}>
+            {product.isAvailable
+              ? t('product.inStock', { count: product.stock, unit: product.unit })
+              : t('product.outOfStock')}
+          </span>
+        </div>
+
+        {product.isAvailable && (
           <>
-            <div className={styles.stockRow}>
-              <span
-                className={`${styles.stockDot} ${pc.isAvailable ? styles.inStock : styles.outOfStock}`}
-              />
-              <span className={styles.stockText}>
-                {pc.isAvailable
-                  ? t('product.inStock', { count: pc.stock, unit: pc.unit })
-                  : t('product.outOfStock')}
+            <div className={styles.qtySection}>
+              <span className={styles.qtyLabel}>{t('product.quantity')}</span>
+              <div className={styles.qtyControl}>
+                <button
+                  className={styles.qtyBtn}
+                  onClick={decrement}
+                  disabled={quantity <= product.minimumQuantity}
+                >
+                  −
+                </button>
+                <span className={styles.qtyValue}>
+                  {quantity} {product.unit}
+                </span>
+                <button
+                  className={styles.qtyBtn}
+                  onClick={increment}
+                  disabled={quantity >= product.maximumQuantity}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.totalRow}>
+              <span className={styles.totalLabel}>{t('product.total')}</span>
+              <span className={styles.totalPrice}>
+                {formatCurrency(product.price * quantity, language)}
               </span>
             </div>
 
-            {pc.isAvailable && (
-              <>
-                <div className={styles.qtySection}>
-                  <span className={styles.qtyLabel}>{t('product.quantity')}</span>
-                  <div className={styles.qtyControl}>
-                    <button
-                      className={styles.qtyBtn}
-                      onClick={decrement}
-                      disabled={quantity <= pc.minimumQuantity}
-                    >
-                      −
-                    </button>
-                    <span className={styles.qtyValue}>
-                      {quantity} {pc.unit}
-                    </span>
-                    <button
-                      className={styles.qtyBtn}
-                      onClick={increment}
-                      disabled={quantity >= pc.maximumQuantity}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
+            <button
+              className={`${styles.addBtn} ${added ? styles.addedBtn : ''}`}
+              onClick={handleAddToCart}
+              disabled={adding || added}
+            >
+              {added
+                ? t('product.added')
+                : adding
+                ? t('product.adding')
+                : itemInCart
+                ? t('product.updateCart')
+                : t('product.addToCart')}
+            </button>
 
-                <div className={styles.totalRow}>
-                  <span className={styles.totalLabel}>{t('product.total')}</span>
-                  <span className={styles.totalPrice}>
-                    ${(product.price * quantity).toFixed(2)}
-                  </span>
-                </div>
-
-                <button
-                  className={`${styles.addBtn} ${added ? styles.addedBtn : ''}`}
-                  onClick={handleAddToCart}
-                  disabled={adding || added}
-                >
-                  {added
-                    ? t('product.added')
-                    : adding
-                    ? t('product.adding')
-                    : itemInCart
-                    ? t('product.updateCart')
-                    : t('product.addToCart')}
-                </button>
-
-                {itemInCart && (
-                  <button
-                    className={styles.viewCartBtn}
-                    onClick={() => navigate('/shop/cart')}
-                  >
-                    {t('product.goToCart')}
-                  </button>
-                )}
-              </>
+            {itemInCart && (
+              <button
+                className={styles.viewCartBtn}
+                onClick={() => navigate('/shop/cart')}
+              >
+                {t('product.goToCart')}
+              </button>
             )}
           </>
-        ) : (
-          <div className={styles.notInCity}>
-            {t('product.notInCity')}
-          </div>
         )}
       </div>
-
-      {related.length > 0 && (
-        <div className={styles.related}>
-          <h3 className={styles.relatedTitle}>{t('product.related')}</h3>
-          <div className={styles.relatedList}>
-            {related.map((p) => (
-              <div
-                key={p.id}
-                className={styles.relatedCard}
-                onClick={() => navigate(`/shop/product/${p.id}`)}
-              >
-                <div className={styles.relatedImg}>
-                  {p.image ? (
-                    <img src={p.image} alt={p.name} />
-                  ) : (
-                    <span>📦</span>
-                  )}
-                </div>
-                <p className={styles.relatedName}>{p.name}</p>
-                <p className={styles.relatedPrice}>${p.price}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-

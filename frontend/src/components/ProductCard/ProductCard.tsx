@@ -2,16 +2,20 @@ import { Product } from '../../types/product';
 import styles from './ProductCard.module.css';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
+import { formatCurrency } from '../../lib/format';
+import i18n from '../../lib/i18n';
 
 interface Props {
-  product: Product;
-  onClick: () => void;
+  product: Product
+  onClick: () => void
 }
 
 export default function ProductCard({ product, onClick }: Props) {
-  const pc = product.productCities[0];
   const { t } = useTranslation();
-  const { addToCart } = useApp();
+  const { user, addToCart } = useApp();
+  const pc = user?.selectedCityId
+    ? product.productCities.find((entry) => entry.cityId === user.selectedCityId)
+    : product.productCities[0];
 
   async function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
@@ -47,7 +51,7 @@ export default function ProductCard({ product, onClick }: Props) {
         )}
         <div className={styles.bottom}>
           <div className={styles.priceWrap}>
-            <span className={styles.price}>${product.price}</span>
+            <span className={styles.price}>{formatCurrency(product.price, i18n.language as 'ru' | 'en')}</span>
             {pc && <span className={styles.unit}>{pc.unit}</span>}
           </div>
           {pc && pc.isAvailable && (
@@ -64,4 +68,3 @@ export default function ProductCard({ product, onClick }: Props) {
     </div>
   );
 }
-

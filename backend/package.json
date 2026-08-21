@@ -1,26 +1,30 @@
 {
-  "name": "telegram-shop-backend",
+  "name": "backend",
   "version": "1.0.0",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "ts-node-dev --respawn src/index.ts",
-    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "ts-node prisma/seed.ts"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "db:generate": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} prisma generate --schema ./prisma/schema.prisma",
+    "db:push": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} prisma db push --schema ./prisma/schema.prisma",
+    "db:seed": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} tsx ./prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.10.2",
-    "cors": "^2.8.5",
-    "express": "^4.18.3",
-    "dotenv": "^16.4.5"
+    "@prisma/client": "6.12.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.11.25",
-    "prisma": "^5.10.2",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.4.2"
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "prisma": "6.12.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
   }
 }

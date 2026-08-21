@@ -10,5 +10,5 @@ export default function CasinoPage() {
       <p className={styles.text}>{t('casino.text')}</p>
       <div className={styles.badge}>{t('casino.soon')}</div>
     </div>
-  );
+  )
 }

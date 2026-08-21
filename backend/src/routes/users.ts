@@ -1,66 +1,71 @@
-import { Router } from 'express';
-import prisma from '../lib/prisma';
+import { Router } from 'express'
+import {
+  authRateLimiter,
+  getAuthorizedUser,
+  getOrCreateCart,
+  isLanguage,
+  mapUser,
+  parsePositiveInt,
+  prisma,
+  sendError,
+} from '../lib.js'
 
-const router = Router();
+const router = Router()
 
-// POST /api/users/auth - create or update user from Telegram data
-router.post('/auth', async (req, res) => {
-  try {
-    const { telegramId, username, firstName, lastName } = req.body;
+router.patch('/city', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
 
-    if (!telegramId) {
-      return res.status(400).json({ error: 'telegramId is required' });
-    }
-
-    const user = await prisma.user.upsert({
-      where: { telegramId: String(telegramId) },
-      update: {
-        username: username || null,
-        firstName: firstName || null,
-        lastName: lastName || null,
-      },
-      create: {
-        telegramId: String(telegramId),
-        username: username || null,
-        firstName: firstName || null,
-        lastName: lastName || null,
-      },
-      include: { selectedCity: true },
-    });
-
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to authenticate user' });
+  if (!user) {
+    return
   }
-});
 
-// PATCH /api/users/:telegramId/city
-router.patch('/:telegramId/city', async (req, res) => {
-  try {
-    const { cityId } = req.body;
-    const user = await prisma.user.update({
-      where: { telegramId: req.params.telegramId },
-      data: { selectedCityId: Number(cityId) },
-      include: { selectedCity: true },
-    });
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update city' });
+  const cityId = parsePositiveInt(request.body.cityId)
+
+  if (!cityId) {
+    sendError(response, 400, 'city_required', 'cityId must be a positive integer')
+    return
   }
-});
 
-// GET /api/users/:telegramId
-router.get('/:telegramId', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { telegramId: req.params.telegramId },
-      include: { selectedCity: true },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch user' });
+  const city = await prisma.city.findFirst({ where: { id: cityId, isActive: true } })
+
+  if (!city) {
+    sendError(response, 404, 'city_not_found', 'City not found')
+    return
   }
-});
 
-export default router;
+  const cart = await getOrCreateCart(user.id)
+  await prisma.cartItem.deleteMany({ where: { cartId: cart.id } })
+
+  const updatedUser = await prisma.user.update({
+    where: { telegramId: user.telegramId },
+    data: { selectedCityId: cityId },
+    include: { selectedCity: true },
+  })
+
+  response.json({ user: mapUser(updatedUser) })
+})
+
+router.patch('/language', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
+
+  if (!user) {
+    return
+  }
+
+  const language = request.body.language
+
+  if (!isLanguage(language)) {
+    sendError(response, 400, 'request_failed', 'language must be ru or en')
+    return
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { telegramId: user.telegramId },
+    data: { language },
+    include: { selectedCity: true },
+  })
+
+  response.json({ user: mapUser(updatedUser) })
+})
+
+export default router

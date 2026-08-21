@@ -1,35 +1,32 @@
-import { useState } from 'react';
-import { useApp, City } from '../context/AppContext';
-import { api } from '../lib/api';
+import { useApp } from '../context/AppContext';
 import styles from './ProfilePage.module.css';
 import { useTranslation } from 'react-i18next';
 import { saveLanguage } from '../lib/i18n';
+import i18n from '../lib/i18n';
+import { getLocalizedCityName } from '../lib/localized';
+import type { Language } from '../types';
 
 export default function ProfilePage() {
-  const { user, selectedCity, setCity } = useApp();
-  const { t, i18n } = useTranslation();
-  const [showCityPicker, setShowCityPicker] = useState(false);
-  const [cities, setCities] = useState<City[]>([]);
+  const { user, openCityPicker, updateLanguagePreference } = useApp();
+  const { t } = useTranslation();
 
-  async function openCityPicker() {
-    const data = await api.get<City[]>('/cities');
-    setCities(data);
-    setShowCityPicker(true);
+  if (!user) {
+    return null;
   }
 
-  async function handleCityChange(city: City) {
-    await setCity(city);
-    setShowCityPicker(false);
-  }
-
-  function handleLanguageChange(lang: string) {
+  function handleLanguageChange(lang: Language) {
     void i18n.changeLanguage(lang);
     saveLanguage(lang);
+    void updateLanguagePreference(lang);
   }
 
-  const displayName = user?.firstName
-    ? [user.firstName, user.lastName].filter(Boolean).join(' ')
-    : user?.username || t('profile.defaultName');
+  const displayName = user.firstName
+    ? [user.firstName].filter(Boolean).join(' ')
+    : user.username || t('profile.defaultName');
+
+  const cityName = user.selectedCity
+    ? getLocalizedCityName(user.selectedCity, i18n.language as Language)
+    : t('profile.cityNotSelected');
 
   return (
     <div className={styles.page}>
@@ -41,7 +38,7 @@ export default function ProfilePage() {
         </div>
         <div className={styles.userInfo}>
           <p className={styles.displayName}>{displayName}</p>
-          {user?.username && (
+          {user.username && (
             <p className={styles.username}>@{user.username}</p>
           )}
         </div>
@@ -50,15 +47,13 @@ export default function ProfilePage() {
       <div className={styles.cards}>
         <div className={styles.card}>
           <span className={styles.cardLabel}>{t('profile.telegramId')}</span>
-          <span className={styles.cardValue}>{user?.telegramId}</span>
+          <span className={styles.cardValue}>{user.telegramId}</span>
         </div>
 
-        <div className={styles.card} onClick={() => void openCityPicker()}>
+        <div className={styles.card} onClick={() => openCityPicker()}>
           <span className={styles.cardLabel}>{t('profile.city')}</span>
           <div className={styles.cardRight}>
-            <span className={styles.cardValue}>
-              {selectedCity?.name || t('profile.cityNotSelected')}
-            </span>
+            <span className={styles.cardValue}>{cityName}</span>
             <span className={styles.cardArrow}>›</span>
           </div>
         </div>
@@ -101,27 +96,6 @@ export default function ProfilePage() {
           <p>{t('profile.ordersSoon')}</p>
         </div>
       </div>
-
-      {showCityPicker && (
-        <div className={styles.modal} onClick={() => setShowCityPicker(false)}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>{t('profile.selectCity')}</h3>
-            {cities.map((city) => (
-              <button
-                key={city.id}
-                className={`${styles.cityBtn} ${selectedCity?.id === city.id ? styles.cityActive : ''}`}
-                onClick={() => void handleCityChange(city)}
-              >
-                {city.name}
-                {selectedCity?.id === city.id && <span className={styles.check}>✓</span>}
-              </button>
-            ))}
-            <button className={styles.cancelBtn} onClick={() => setShowCityPicker(false)}>
-              {t('profile.cancel')}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

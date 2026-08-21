@@ -8,7 +8,8 @@ import { useTranslation } from 'react-i18next';
 import styles from './HomePage.module.css';
 
 export default function HomePage() {
-  const { selectedCity, cart } = useApp();
+  const { user, cart } = useApp();
+  const selectedCity = user?.selectedCity ?? null;
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -18,7 +19,7 @@ export default function HomePage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const cartCount = cart.items.length;
+  const cartCount = cart?.items.length ?? 0;
   const cityParam = selectedCity ? `cityId=${selectedCity.id}` : '';
 
   const fetchData = useCallback(async () => {

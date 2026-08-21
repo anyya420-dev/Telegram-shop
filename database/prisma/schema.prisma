@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  telegramId     String   @unique
+  username       String?
+  firstName      String
+  selectedCityId Int?
+  language       String   @default("ru")
+  selectedCity   City?    @relation("SelectedCity", fields: [selectedCityId], references: [id])
+  cart           Cart?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model City {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  nameEn        String?
+  isActive      Boolean       @default(true)
+  users         User[]        @relation("SelectedCity")
+  productCities ProductCity[]
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  nameEn    String?
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  products  Product[]
+}
+
+model Product {
+  id            Int           @id @default(autoincrement())
+  name          String
+  nameEn        String?
+  description   String
+  descriptionEn String?
+  price         Float
+  image         String
+  isActive      Boolean       @default(true)
+  isRecommended Boolean       @default(false)
+  categoryId    Int
+  category      Category      @relation(fields: [categoryId], references: [id])
+  productCities ProductCity[]
+}
+
+model ProductCity {
+  id              Int        @id @default(autoincrement())
+  productId       Int
+  cityId          Int
+  stock           Float
+  minimumQuantity Float
+  quantityStep    Float
+  maximumQuantity Float
+  unit            String
+  isAvailable     Boolean    @default(true)
+  product         Product    @relation(fields: [productId], references: [id])
+  city            City       @relation(fields: [cityId], references: [id])
+  cartItems       CartItem[]
+
+  @@unique([productId, cityId])
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id            Int         @id @default(autoincrement())
+  cartId        Int
+  productCityId Int
+  quantity      Float
+  cart          Cart        @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productCity   ProductCity @relation(fields: [productCityId], references: [id])
+
+  @@unique([cartId, productCityId])
+}

@@ -1,154 +1,161 @@
-import { Router } from 'express';
-import prisma from '../lib/prisma';
+import { Router } from 'express'
+import {
+  authRateLimiter,
+  buildCartResponse,
+  getAuthorizedUser,
+  getOrCreateCart,
+  isAllowedQuantity,
+  parsePositiveInt,
+  prisma,
+  sendError,
+} from '../lib.js'
 
-const router = Router();
+const router = Router()
 
-// GET /api/cart/:telegramId
-router.get('/:telegramId', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { telegramId: req.params.telegramId },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+router.get('/', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
 
-    const cart = await prisma.cart.findUnique({
-      where: { userId: user.id },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: {
-                category: true,
-                productCities: {
-                  where: user.selectedCityId
-                    ? { cityId: user.selectedCityId }
-                    : undefined,
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!cart) {
-      return res.json({ items: [], total: 0 });
-    }
-
-    const total = cart.items.reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
-      0
-    );
-
-    res.json({ ...cart, total });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch cart' });
+  if (!user) {
+    return
   }
-});
 
-// POST /api/cart/:telegramId/items - add or update item
-router.post('/:telegramId/items', async (req, res) => {
-  try {
-    const { productId, quantity } = req.body;
+  await getOrCreateCart(user.id)
+  response.json(await buildCartResponse(user.id))
+})
 
-    const user = await prisma.user.findUnique({
-      where: { telegramId: req.params.telegramId },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+router.post('/items', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
 
-    let cart = await prisma.cart.findUnique({ where: { userId: user.id } });
-    if (!cart) {
-      cart = await prisma.cart.create({ data: { userId: user.id } });
-    }
+  if (!user) {
+    return
+  }
 
-    const item = await prisma.cartItem.upsert({
-      where: { cartId_productId: { cartId: cart.id, productId: Number(productId) } },
-      update: { quantity: Number(quantity) },
-      create: {
+  const productCityId = parsePositiveInt(request.body.productCityId)
+  const quantity = Number(request.body.quantity)
+
+  if (!productCityId) {
+    sendError(response, 400, 'product_city_required', 'productCityId must be a positive integer')
+    return
+  }
+
+  const productCity = await prisma.productCity.findUnique({
+    where: { id: productCityId },
+  })
+
+  if (!productCity || !productCity.isAvailable) {
+    sendError(response, 404, 'product_unavailable', 'Product is unavailable')
+    return
+  }
+
+  if (user.selectedCityId !== productCity.cityId) {
+    sendError(response, 400, 'city_mismatch', 'Choose the same city before adding products')
+    return
+  }
+
+  if (!isAllowedQuantity(quantity, productCity.minimumQuantity, productCity.quantityStep, productCity.maximumQuantity)) {
+    sendError(response, 400, 'quantity_invalid', 'Quantity does not match product rules')
+    return
+  }
+
+  if (quantity > productCity.stock) {
+    sendError(response, 400, 'stock_exceeded', 'Requested quantity exceeds stock')
+    return
+  }
+
+  const cart = await getOrCreateCart(user.id)
+
+  await prisma.cartItem.upsert({
+    where: {
+      cartId_productCityId: {
         cartId: cart.id,
-        productId: Number(productId),
-        quantity: Number(quantity),
+        productCityId,
       },
-    });
+    },
+    create: {
+      cartId: cart.id,
+      productCityId,
+      quantity,
+    },
+    update: {
+      quantity,
+    },
+  })
 
-    res.json(item);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update cart' });
+  response.json(await buildCartResponse(user.id))
+})
+
+router.patch('/items/:itemId', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
+
+  if (!user) {
+    return
   }
-});
 
-// PATCH /api/cart/:telegramId/items - update existing item quantity
-router.patch('/:telegramId/items', async (req, res) => {
-  try {
-    const { productId, quantity } = req.body;
+  const itemId = parsePositiveInt(request.params.itemId)
+  const quantity = Number(request.body.quantity)
 
-    const user = await prisma.user.findUnique({
-      where: { telegramId: req.params.telegramId },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const cart = await prisma.cart.findUnique({ where: { userId: user.id } });
-    if (!cart) return res.status(404).json({ error: 'Cart not found' });
-
-    const existingItem = await prisma.cartItem.findUnique({
-      where: { cartId_productId: { cartId: cart.id, productId: Number(productId) } },
-    });
-    if (!existingItem) {
-      return res.status(404).json({ error: 'Cart item not found' });
-    }
-
-    const item = await prisma.cartItem.update({
-      where: { cartId_productId: { cartId: cart.id, productId: Number(productId) } },
-      data: { quantity: Number(quantity) },
-    });
-
-    res.json(item);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update cart item' });
+  if (!itemId) {
+    sendError(response, 400, 'cart_item_required', 'itemId must be a positive integer')
+    return
   }
-});
 
-// DELETE /api/cart/:telegramId/items/:productId
-router.delete('/:telegramId/items/:productId', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { telegramId: req.params.telegramId },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+  const item = await prisma.cartItem.findUnique({
+    where: { id: itemId },
+    include: {
+      cart: true,
+      productCity: true,
+    },
+  })
 
-    const cart = await prisma.cart.findUnique({ where: { userId: user.id } });
-    if (!cart) return res.status(404).json({ error: 'Cart not found' });
-
-    await prisma.cartItem.deleteMany({
-      where: {
-        cartId: cart.id,
-        productId: Number(req.params.productId),
-      },
-    });
-
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete cart item' });
+  if (!item || item.cart.userId !== user.id) {
+    sendError(response, 404, 'cart_item_not_found', 'Cart item not found')
+    return
   }
-});
 
-// DELETE /api/cart/:telegramId - clear cart
-router.delete('/:telegramId', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { telegramId: req.params.telegramId },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const cart = await prisma.cart.findUnique({ where: { userId: user.id } });
-    if (cart) {
-      await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
-    }
-
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to clear cart' });
+  if (!isAllowedQuantity(quantity, item.productCity.minimumQuantity, item.productCity.quantityStep, item.productCity.maximumQuantity)) {
+    sendError(response, 400, 'quantity_invalid', 'Quantity does not match product rules')
+    return
   }
-});
 
-export default router;
+  if (quantity > item.productCity.stock) {
+    sendError(response, 400, 'stock_exceeded', 'Requested quantity exceeds stock')
+    return
+  }
+
+  await prisma.cartItem.update({
+    where: { id: itemId },
+    data: { quantity },
+  })
+
+  response.json(await buildCartResponse(user.id))
+})
+
+router.delete('/items/:itemId', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
+
+  if (!user) {
+    return
+  }
+
+  const itemId = parsePositiveInt(request.params.itemId)
+
+  if (!itemId) {
+    sendError(response, 400, 'cart_item_required', 'itemId must be a positive integer')
+    return
+  }
+
+  const item = await prisma.cartItem.findUnique({
+    where: { id: itemId },
+    include: { cart: true },
+  })
+
+  if (!item || item.cart.userId !== user.id) {
+    sendError(response, 404, 'cart_item_not_found', 'Cart item not found')
+    return
+  }
+
+  await prisma.cartItem.delete({ where: { id: itemId } })
+  response.json(await buildCartResponse(user.id))
+})
+
+export default router

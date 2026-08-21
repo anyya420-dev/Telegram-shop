@@ -10,5 +10,5 @@ export default function BalancePage() {
       <p className={styles.text}>{t('balance.text')}</p>
       <div className={styles.badge}>{t('balance.soon')}</div>
     </div>
-  );
+  )
 }

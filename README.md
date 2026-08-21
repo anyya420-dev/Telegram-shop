@@ -1,116 +1,65 @@
 # Telegram Shop 🛍
 
-Telegram Web App магазин с минималистичным дизайном в чёрном и холодном синем цветах.
+Telegram Web App магазин с каталогом по городам, гибкими правилами количества, рабочей корзиной и русско-английской локализацией интерфейса.
 
 ## Стек
 
 | Часть | Технология |
 |-------|-----------|
-| Frontend | React 18 + Vite + TypeScript |
+| Frontend | React + Vite + TypeScript |
 | Backend | Node.js + Express + TypeScript |
 | ORM | Prisma |
-| Database | SQLite (dev) |
-| Bot | node-telegram-bot-api |
+| Database | SQLite |
+| Bot | Telegraf |
 
 ## Структура проекта
 
-```
-/frontend    — React Web App (Telegram WebApp SDK)
-/backend     — REST API (Express + Prisma)
+```text
+/frontend    — React Web App
+/backend     — REST API + Prisma schema/seed
 /bot         — Telegram Bot
-/admin       — Административная панель (будет в следующих частях)
+/admin       — административная часть (будет позже)
 ```
 
 ## Установка
 
-### Backend
 ```bash
-cd backend
-npm install
-npx prisma generate
-npx prisma migrate dev --name init
-npx ts-node prisma/seed.ts
-```
-
-### Frontend
-```bash
-cd frontend
 npm install
 ```
 
-### Bot
+## Подготовка базы данных
+
 ```bash
-cd bot
-npm install
+npm run db:generate
+npm run db:push
+npm run db:seed
 ```
 
 ## Запуск
 
-### Backend
 ```bash
-cd backend
-npm run dev
-# Запустится на http://localhost:3001
+npm run dev:backend
+npm run dev:frontend
+npm run dev:bot
 ```
 
-### Frontend
+## Проверка
+
 ```bash
-cd frontend
-npm run dev
-# Запустится на http://localhost:5173
+npm run typecheck
+npm run build
 ```
 
-### Bot
-```bash
-cd bot
-npm run dev
-```
+## Environment variables
 
-## Environment Variables
+Скопируйте `.env.example` в `.env` и заполните значения локально.
 
-Скопируй `.env.example` в `.env` для каждого модуля и заполни значения.
+- `DATABASE_URL` — путь к SQLite базе данных
+- `PORT` — порт backend сервера
+- `FRONTEND_URL` — origin frontend для CORS
+- `ALLOW_DEMO_MODE` — локальный demo-режим вне Telegram
+- `SESSION_SECRET` — секрет подписи пользовательской сессии
+- `TELEGRAM_BOT_TOKEN` — токен Telegram бота
+- `WEB_APP_URL` — публичный URL Web App
 
-| Переменная | Описание |
-|-----------|---------|
-| `DATABASE_URL` | URL базы данных (SQLite: `file:./prisma/dev.db`) |
-| `PORT` | Порт backend сервера (по умолчанию 3001) |
-| `FRONTEND_URL` | URL frontend для CORS |
-| `TELEGRAM_BOT_TOKEN` | Токен Telegram бота (получить у @BotFather) |
-| `WEBAPP_URL` | Публичный URL Web App |
-
-⚠️ **Никогда не коммить реальные секреты в репозиторий!**
-
-## API Endpoints
-
-| Метод | Endpoint | Описание |
-|-------|---------|---------|
-| GET | `/api/cities` | Список городов |
-| GET | `/api/categories` | Список категорий |
-| GET | `/api/products` | Список товаров (фильтры: cityId, categoryId, search) |
-| GET | `/api/products/:id` | Конкретный товар |
-| GET | `/api/products/recommended/list` | Рекомендуемые товары |
-| POST | `/api/users/auth` | Авторизация пользователя |
-| PATCH | `/api/users/:telegramId/city` | Обновить город пользователя |
-| GET | `/api/cart/:telegramId` | Получить корзину |
-| POST | `/api/cart/:telegramId/items` | Добавить/обновить товар в корзине |
-| DELETE | `/api/cart/:telegramId/items/:productId` | Удалить товар из корзины |
-
-## Функционал (Часть 1)
-
-- [x] Telegram WebApp SDK интеграция
-- [x] Выбор города при первом входе
-- [x] Каталог товаров с фильтрацией по городу и категории
-- [x] Поиск товаров
-- [x] Страница товара с гибким выбором количества
-- [x] Рабочая корзина
-- [x] Профиль пользователя с возможностью смены города
-- [x] Рекомендуемые товары в корзине
-
-## Планы (следующие части)
-
-- [ ] Платежи (Telegram Payments, Stripe, TON)
-- [ ] Внутренний баланс
-- [ ] Казино
-- [ ] Поддержка / операторы
-- [ ] Доставка и самовывоз
-- [ ] Полноценная админка
+⚠️ Никогда не коммитьте реальные секреты в репозиторий.

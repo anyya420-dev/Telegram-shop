@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout/Layout';
 import HomePage from './pages/HomePage';
@@ -14,7 +14,7 @@ import CitySelectPage from './pages/CitySelectPage';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AppProvider>
         <Routes>
           <Route path="/select-city" element={<CitySelectPage />} />
@@ -33,7 +33,6 @@ export default function App() {
           </Route>
         </Routes>
       </AppProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
-

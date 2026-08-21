@@ -1,7 +1,8 @@
+import { useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { CityPicker } from '../CityPicker';
 import styles from './Layout.module.css';
-import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const NAV_ITEMS = [
@@ -12,26 +13,26 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
-  const { loading, user, cart } = useApp();
+  const { error, loading, setError, user, cart } = useApp();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     if (!loading && user && !user.selectedCityId) {
-      navigate('/select-city');
+      navigate('/select-city', { replace: true });
     }
-  }, [loading, user, navigate]);
+  }, [loading, navigate, user]);
 
   if (loading) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner} />
+        <div className={styles.spinner} aria-hidden="true" />
       </div>
     );
   }
 
-  const cartCount = cart.items.length;
+  const cartCount = cart?.items.length ?? 0;
 
   const activeTab = NAV_ITEMS.find((item) =>
     item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)
@@ -40,7 +41,17 @@ export default function Layout() {
   return (
     <div className={styles.root}>
       <main className={styles.main}>
-        <Outlet />
+        <div className="app-shell">
+          {error ? (
+            <div className="error-banner" role="alert">
+              <span>{error}</span>
+              <button type="button" aria-label={t('common.close')} onClick={() => setError(null)}>
+                ×
+              </button>
+            </div>
+          ) : null}
+          <Outlet />
+        </div>
       </main>
       <nav className={styles.nav}>
         {NAV_ITEMS.map((item) => (
@@ -48,6 +59,7 @@ export default function Layout() {
             key={item.path}
             className={`${styles.navItem} ${activeTab === item.path ? styles.active : ''}`}
             onClick={() => navigate(item.path)}
+            type="button"
           >
             <span className={styles.navIconWrap}>
               <span className={styles.navIcon}>{item.icon}</span>
@@ -59,6 +71,7 @@ export default function Layout() {
           </button>
         ))}
       </nav>
+      <CityPicker />
     </div>
   );
 }

@@ -10,7 +10,8 @@ import styles from './CatalogPage.module.css';
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'popular';
 
 export default function CatalogPage() {
-  const { selectedCity } = useApp();
+  const { user } = useApp();
+  const selectedCity = user?.selectedCity ?? null;
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
