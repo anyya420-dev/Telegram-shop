@@ -1,4 +1,4 @@
-import { Product } from '../../types/product';
+import type { ProductSummary } from '../../types';
 import styles from './ProductCard.module.css';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../../context/AppContext';
@@ -6,21 +6,18 @@ import { formatCurrency } from '../../lib/format';
 import i18n from '../../lib/i18n';
 
 interface Props {
-  product: Product
+  product: ProductSummary
   onClick: () => void
 }
 
 export default function ProductCard({ product, onClick }: Props) {
   const { t } = useTranslation();
-  const { user, addToCart } = useApp();
-  const pc = user?.selectedCityId
-    ? product.productCities.find((entry) => entry.cityId === user.selectedCityId)
-    : product.productCities[0];
+  const { addToCart } = useApp();
 
   async function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!pc || !pc.isAvailable) return;
-    await addToCart(product.id, pc.minimumQuantity);
+    if (!product.isAvailable) return;
+    await addToCart(product.productCityId, product.minimumQuantity);
   }
 
   return (
@@ -37,7 +34,7 @@ export default function ProductCard({ product, onClick }: Props) {
         ) : (
           <div className={styles.noImage}>📦</div>
         )}
-        {pc && !pc.isAvailable && (
+        {!product.isAvailable && (
           <div className={styles.outOfStock}>{t('product.outOfStock')}</div>
         )}
         {product.isRecommended && (
@@ -52,9 +49,9 @@ export default function ProductCard({ product, onClick }: Props) {
         <div className={styles.bottom}>
           <div className={styles.priceWrap}>
             <span className={styles.price}>{formatCurrency(product.price, i18n.language as 'ru' | 'en')}</span>
-            {pc && <span className={styles.unit}>{pc.unit}</span>}
+            {product.unit && <span className={styles.unit}>{product.unit}</span>}
           </div>
-          {pc && pc.isAvailable && (
+          {product.isAvailable && (
             <button
               className={styles.addBtn}
               onClick={handleAdd}

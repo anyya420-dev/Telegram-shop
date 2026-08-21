@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
-import { useI18n } from '../i18n'
+import i18n from '../lib/i18n'
 import { getTelegramContext } from '../lib/telegram'
 import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
 
@@ -65,7 +65,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
-  const { setLanguage, t } = useI18n()
+
+  function t(key: string): string {
+    return i18n.t(key)
+  }
+
+  function setLanguage(lang: Language) {
+    void i18n.changeLanguage(lang)
+  }
 
   async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
     if (!user?.selectedCityId) {
@@ -97,7 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
         setUser(response.user)
-        setLanguage(response.user.language)
+        void i18n.changeLanguage(response.user.language)
         setCities(response.cities)
         setCategories(response.categories)
 
@@ -122,7 +129,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     void bootstrap()
-  }, [setLanguage])
+  }, [])  // no dependency on setLanguage needed
 
   async function selectCity(cityId: number) {
     if (!user) {
@@ -155,7 +162,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError(null)
       const response = await api.updateLanguage(language)
       setUser(response.user)
-      setLanguage(response.user.language)
+      void i18n.changeLanguage(response.user.language)
     } catch (languageError) {
       setError(translateError(languageError, t, 'language_update_failed'))
       throw languageError

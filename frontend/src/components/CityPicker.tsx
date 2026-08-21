@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useApp } from '../context/AppContext'
-import { useI18n } from '../i18n'
 import { getLocalizedCityName } from '../lib/localized'
+import type { Language } from '../types'
 
 export function CityPicker() {
   const { cities, cityPickerOpen, closeCityPicker, selectCity, user } = useApp()
   const [pendingCityId, setPendingCityId] = useState<number | null>(null)
-  const { language, t } = useI18n()
+  const { t, i18n } = useTranslation()
+  const language = i18n.language as Language
 
   if (!cityPickerOpen) {
     return null
