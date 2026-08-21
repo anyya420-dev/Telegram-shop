@@ -72,6 +72,7 @@ export type Cart = {
   deliveryFee: number
   discount: number
   total: number
+  discountCode?: string | null
 }
 
 export type BootstrapResponse = {
@@ -94,15 +95,102 @@ export type OrderItem = {
   lineTotal: number
 }
 
+export type OrderStatusEntry = {
+  id: number
+  orderId: number
+  status: string
+  comment: string | null
+  createdAt: string
+}
+
+export type DeliveryOption = {
+  id: number
+  name: string
+  nameEn: string | null
+  type: string
+  price: number
+}
+
 export type Order = {
   id: number
   userId: number
   cityId: number
   status: string
   subtotal: number
+  discountAmount: number
+  deliveryFee: number
   total: number
   comment: string | null
+  cancelledAt: string | null
+  refundStatus: string | null
   createdAt: string
   items: OrderItem[]
   city: { id: number; name: string; nameEn: string | null }
+  statusHistory: OrderStatusEntry[]
+  deliveryOption: DeliveryOption | null
+  discount: { id: number; code: string } | null
 }
+
+export type BalanceTransaction = {
+  id: number
+  type: string
+  amount: number
+  comment: string | null
+  createdAt: string
+}
+
+export type Balance = {
+  id: number
+  userId: number
+  amount: number
+  transactions: BalanceTransaction[]
+}
+
+export type Review = {
+  id: number
+  userId: number
+  productId: number
+  rating: number
+  comment: string | null
+  createdAt: string
+  user: { firstName: string; username: string | null }
+}
+
+export type SupportTicketReply = {
+  id: number
+  ticketId: number
+  isAdmin: boolean
+  message: string
+  createdAt: string
+}
+
+export type SupportTicket = {
+  id: number
+  userId: number
+  subject: string
+  message: string
+  status: string
+  createdAt: string
+  replies: SupportTicketReply[]
+}
+
+export type WishlistItem = {
+  id: number
+  product: ProductSummary
+}
+
+export type Discount = {
+  id: number
+  code: string
+  type: string
+  value: number
+  minOrderAmount: number
+}
+
+export type AdminStats = {
+  totalOrders: number
+  pendingOrders: number
+  totalUsers: number
+  totalRevenue: number
+}
+

@@ -49,7 +49,16 @@
     "goToCart": "Перейти в корзину →",
     "notInCity": "Товар недоступен в выбранном городе",
     "notFound": "Товар не найден",
-    "related": "Похожие товары"
+    "related": "Похожие товары",
+    "reviews": "Отзывы",
+    "noReviews": "Пока нет отзывов",
+    "writeReview": "Написать отзыв",
+    "cancelReview": "Отмена",
+    "reviewComment": "Ваш комментарий (необязательно)",
+    "submitReview": "Отправить",
+    "submitting": "Отправляем...",
+    "addToWishlist": "В избранное",
+    "inWishlist": "В избранном"
   },
   "cart": {
     "title": "Корзина",
@@ -72,7 +81,12 @@
     "checkingOut": "Оформляем...",
     "checkoutFailed": "Не удалось оформить заказ. Попробуйте ещё раз.",
     "checkoutNote": "Оплата будет доступна в следующей версии",
-    "recommended": "🔥 Вам может понравиться"
+    "recommended": "🔥 Вам может понравиться",
+    "discountCode": "Промокод",
+    "applyCode": "Применить",
+    "invalidDiscount": "Неверный или просроченный код",
+    "deliveryOption": "Способ доставки",
+    "free": "Бесплатно"
   },
   "profile": {
     "title": "Профиль",
@@ -103,17 +117,55 @@
   "balance": {
     "title": "Баланс",
     "text": "Баланс будет доступен позже",
-    "soon": "Скоро"
+    "soon": "Скоро",
+    "current": "Текущий баланс",
+    "topup": "Пополнить баланс",
+    "topupBtn": "Пополнить",
+    "customAmount": "Произвольная сумма",
+    "topupSuccess": "Баланс пополнен на {{amount}}",
+    "topupError": "Не удалось пополнить",
+    "history": "История операций",
+    "txType": {
+      "topup": "Пополнение",
+      "spend": "Покупка",
+      "refund": "Возврат",
+      "casino_win": "Выигрыш в казино",
+      "casino_loss": "Проигрыш в казино"
+    }
   },
   "casino": {
     "title": "Казино",
     "text": "Казино будет доступно позже",
-    "soon": "Скоро"
+    "soon": "Скоро",
+    "balance": "Баланс",
+    "bet": "Ставка",
+    "target": "Выберите число",
+    "hint": "Если кубик совпадёт с вашим числом — вы выиграете 5× ставку",
+    "spin": "🎲 Бросить кубик",
+    "rolling": "Бросаем...",
+    "won": "🎉 Вы выиграли {{payout}}!",
+    "lost": "😢 Вы проиграли {{bet}}",
+    "history": "Последние игры",
+    "error": "Ошибка"
   },
   "support": {
     "title": "Поддержка",
     "text": "Поддержка будет доступна позже",
-    "soon": "Скоро"
+    "soon": "Скоро",
+    "newTicket": "Новое обращение",
+    "subjectPlaceholder": "Тема",
+    "messagePlaceholder": "Опишите вашу проблему...",
+    "send": "Отправить",
+    "sending": "Отправляем...",
+    "sent": "Обращение успешно отправлено!",
+    "myTickets": "Мои обращения",
+    "status_open": "Открыто",
+    "status_replied": "Ответили",
+    "status_closed": "Закрыто",
+    "admin": "Поддержка",
+    "you": "Вы",
+    "replyPlaceholder": "Ваш ответ...",
+    "error": "Ошибка отправки"
   },
   "common": {
     "loading": "Загрузка...",
@@ -149,6 +201,36 @@
     "statusProcessing": "В обработке",
     "statusReady": "Готов",
     "statusDelivered": "Доставлен",
-    "statusCancelled": "Отменён"
+    "statusCancelled": "Отменён",
+    "statusHistory": "История статусов",
+    "cancelOrder": "Отменить заказ",
+    "cancelling": "Отменяем...",
+    "cancelFailed": "Не удалось отменить",
+    "requestRefund": "Запросить возврат",
+    "requesting": "Отправляем запрос...",
+    "refundFailed": "Не удалось запросить возврат",
+    "refund_requested": "Возврат запрошен",
+    "refund_approved": "Возврат одобрен",
+    "refund_rejected": "Возврат отклонён"
+  },
+  "wishlist": {
+    "title": "Избранное",
+    "empty": "В избранном пусто",
+    "goToShop": "Перейти в магазин"
+  },
+  "admin": {
+    "tab_stats": "Статистика",
+    "tab_orders": "Заказы",
+    "tab_discounts": "Скидки",
+    "tab_support": "Поддержка",
+    "tab_audit": "Аудит",
+    "totalOrders": "Всего заказов",
+    "pendingOrders": "Ожидают",
+    "totalUsers": "Пользователей",
+    "revenue": "Выручка",
+    "allStatuses": "Все статусы",
+    "filter": "Фильтр",
+    "createDiscount": "Создать промокод",
+    "minOrder": "Мин. заказ"
   }
 }

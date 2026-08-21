@@ -6,7 +6,9 @@ import styles from './ProductPage.module.css';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { Language, ProductDetail } from '../types';
+import type { Language, ProductDetail, Review } from '../types';
+
+const STARS = [1, 2, 3, 4, 5];
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +22,18 @@ export default function ProductPage() {
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
 
+  // Wishlist
+  const [inWishlist, setInWishlist] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+
+  // Reviews
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [avgRating, setAvgRating] = useState<number | null>(null);
+  const [myRating, setMyRating] = useState(0);
+  const [myComment, setMyComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+
   useEffect(() => {
     async function load() {
       if (!id || !user?.selectedCityId) {
@@ -31,12 +45,53 @@ export default function ProductPage() {
         const { product: data } = await api.getProduct(Number(id), user.selectedCityId);
         setProduct(data);
         setQuantity(data.minimumQuantity || 1);
+
+        // Load reviews and wishlist in parallel
+        const [reviewsRes, wishlistRes] = await Promise.all([
+          api.getReviews(Number(id)),
+          api.getWishlist(),
+        ]);
+        setReviews(reviewsRes.reviews);
+        setAvgRating(reviewsRes.avgRating);
+        const myRev = reviewsRes.reviews.find((r) => r.userId === user.id);
+        if (myRev) { setMyRating(myRev.rating); setMyComment(myRev.comment ?? ''); }
+        setInWishlist(wishlistRes.items.some((item) => item.product.id === Number(id)));
       } finally {
         setLoading(false);
       }
     }
     void load();
   }, [id, user?.selectedCityId]);
+
+  async function toggleWishlist() {
+    if (!product || wishlistLoading) return;
+    setWishlistLoading(true);
+    try {
+      if (inWishlist) {
+        await api.removeFromWishlist(product.productCityId);
+        setInWishlist(false);
+      } else {
+        await api.addToWishlist(product.productCityId);
+        setInWishlist(true);
+      }
+    } finally {
+      setWishlistLoading(false);
+    }
+  }
+
+  async function handleSubmitReview() {
+    if (!product || submittingReview || !myRating) return;
+    setSubmittingReview(true);
+    try {
+      await api.submitReview(product.id, myRating, myComment || undefined);
+      const r = await api.getReviews(product.id);
+      setReviews(r.reviews);
+      setAvgRating(r.avgRating);
+      setShowReviewForm(false);
+    } finally {
+      setSubmittingReview(false);
+    }
+  }
 
   function increment() {
     if (!product) return;
@@ -173,8 +228,72 @@ export default function ProductPage() {
                 {t('product.goToCart')}
               </button>
             )}
+
+            {/* Wishlist button */}
+            <button
+              className={`${styles.wishlistBtn} ${inWishlist ? styles.wishlistActive : ''}`}
+              onClick={() => void toggleWishlist()}
+              disabled={wishlistLoading}
+            >
+              {inWishlist ? '❤️ ' + t('product.inWishlist') : '🤍 ' + t('product.addToWishlist')}
+            </button>
           </>
         )}
+      </div>
+
+      {/* Reviews section */}
+      <div className={styles.reviewsSection}>
+        <div className={styles.reviewsHeader}>
+          <h3 className={styles.reviewsTitle}>{t('product.reviews')}</h3>
+          {avgRating !== null && (
+            <span className={styles.avgRating}>{'⭐'.repeat(Math.round(avgRating))} {avgRating}/5 ({reviews.length})</span>
+          )}
+        </div>
+
+        {user && (
+          <>
+            <button className={styles.writeReviewBtn} onClick={() => setShowReviewForm(!showReviewForm)}>
+              {showReviewForm ? t('product.cancelReview') : t('product.writeReview')}
+            </button>
+            {showReviewForm && (
+              <div className={styles.reviewForm}>
+                <div className={styles.starRow}>
+                  {STARS.map((s) => (
+                    <button key={s} className={`${styles.star} ${myRating >= s ? styles.starActive : ''}`} onClick={() => setMyRating(s)}>
+                      ⭐
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  className={styles.reviewTextarea}
+                  placeholder={t('product.reviewComment')}
+                  value={myComment}
+                  onChange={(e) => setMyComment(e.target.value)}
+                  rows={3}
+                />
+                <button
+                  className={styles.submitReviewBtn}
+                  onClick={() => void handleSubmitReview()}
+                  disabled={submittingReview || !myRating}
+                >
+                  {submittingReview ? t('product.submitting') : t('product.submitReview')}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {reviews.length === 0 && <p className={styles.noReviews}>{t('product.noReviews')}</p>}
+        {reviews.map((review) => (
+          <div key={review.id} className={styles.reviewCard}>
+            <div className={styles.reviewTop}>
+              <span className={styles.reviewAuthor}>{review.user.firstName}</span>
+              <span className={styles.reviewRating}>{'⭐'.repeat(review.rating)}</span>
+            </div>
+            {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
+            <span className={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US')}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

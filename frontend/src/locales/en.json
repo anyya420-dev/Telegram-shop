@@ -49,7 +49,16 @@
     "goToCart": "Go to cart →",
     "notInCity": "Product is not available in the selected city",
     "notFound": "Product not found",
-    "related": "Related products"
+    "related": "Related products",
+    "reviews": "Reviews",
+    "noReviews": "No reviews yet",
+    "writeReview": "Write a review",
+    "cancelReview": "Cancel",
+    "reviewComment": "Share your thoughts (optional)",
+    "submitReview": "Submit",
+    "submitting": "Submitting...",
+    "addToWishlist": "Add to wishlist",
+    "inWishlist": "In wishlist"
   },
   "cart": {
     "title": "Cart",
@@ -70,7 +79,12 @@
     "checkingOut": "Placing order...",
     "checkoutFailed": "Could not place order. Please try again.",
     "checkoutNote": "Payment will be available in the next version",
-    "recommended": "🔥 You might also like"
+    "recommended": "🔥 You might also like",
+    "discountCode": "Promo code",
+    "applyCode": "Apply",
+    "invalidDiscount": "Invalid or expired code",
+    "deliveryOption": "Delivery method",
+    "free": "Free"
   },
   "profile": {
     "title": "Profile",
@@ -99,17 +113,55 @@
   "balance": {
     "title": "Balance",
     "text": "Balance will be available later",
-    "soon": "Soon"
+    "soon": "Soon",
+    "current": "Current balance",
+    "topup": "Top up balance",
+    "topupBtn": "Top up",
+    "customAmount": "Custom amount",
+    "topupSuccess": "Added {{amount}} to your balance",
+    "topupError": "Failed to top up",
+    "history": "Transaction history",
+    "txType": {
+      "topup": "Top up",
+      "spend": "Purchase",
+      "refund": "Refund",
+      "casino_win": "Casino win",
+      "casino_loss": "Casino loss"
+    }
   },
   "casino": {
     "title": "Casino",
     "text": "Casino will be available later",
-    "soon": "Soon"
+    "soon": "Soon",
+    "balance": "Balance",
+    "bet": "Bet amount",
+    "target": "Pick a number",
+    "hint": "If the dice matches your number, you win 5× your bet",
+    "spin": "🎲 Roll dice",
+    "rolling": "Rolling...",
+    "won": "🎉 You won {{payout}}!",
+    "lost": "😢 You lost {{bet}}",
+    "history": "Recent games",
+    "error": "Spin failed"
   },
   "support": {
     "title": "Support",
     "text": "Support will be available later",
-    "soon": "Soon"
+    "soon": "Soon",
+    "newTicket": "New ticket",
+    "subjectPlaceholder": "Subject",
+    "messagePlaceholder": "Describe your issue...",
+    "send": "Send",
+    "sending": "Sending...",
+    "sent": "Ticket submitted successfully!",
+    "myTickets": "My tickets",
+    "status_open": "Open",
+    "status_replied": "Replied",
+    "status_closed": "Closed",
+    "admin": "Support",
+    "you": "You",
+    "replyPlaceholder": "Your reply...",
+    "error": "Failed to submit"
   },
   "common": {
     "loading": "Loading...",
@@ -143,6 +195,36 @@
     "statusProcessing": "Processing",
     "statusReady": "Ready",
     "statusDelivered": "Delivered",
-    "statusCancelled": "Cancelled"
+    "statusCancelled": "Cancelled",
+    "statusHistory": "Status history",
+    "cancelOrder": "Cancel order",
+    "cancelling": "Cancelling...",
+    "cancelFailed": "Could not cancel order",
+    "requestRefund": "Request refund",
+    "requesting": "Requesting...",
+    "refundFailed": "Could not request refund",
+    "refund_requested": "Refund requested",
+    "refund_approved": "Refund approved",
+    "refund_rejected": "Refund rejected"
+  },
+  "wishlist": {
+    "title": "Wishlist",
+    "empty": "Your wishlist is empty",
+    "goToShop": "Go to shop"
+  },
+  "admin": {
+    "tab_stats": "Stats",
+    "tab_orders": "Orders",
+    "tab_discounts": "Discounts",
+    "tab_support": "Support",
+    "tab_audit": "Audit",
+    "totalOrders": "Total orders",
+    "pendingOrders": "Pending",
+    "totalUsers": "Users",
+    "revenue": "Revenue",
+    "allStatuses": "All statuses",
+    "filter": "Filter",
+    "createDiscount": "Create discount code",
+    "minOrder": "Min order"
   }
 }

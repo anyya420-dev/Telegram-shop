@@ -196,3 +196,17 @@
   font-size: 14px;
   color: var(--text-primary);
 }
+
+.historyList { display: flex; flex-direction: column; gap: 8px; }
+.historyEntry { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; background: var(--tg-theme-secondary-bg-color, #f0f0f0); border-radius: 8px; }
+.historyStatus { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--tg-theme-button-color, #3e86f5); color: var(--tg-theme-button-text-color, #fff); }
+.historyDate { font-size: 12px; color: var(--tg-theme-hint-color, #888); }
+.historyComment { font-size: 12px; color: var(--tg-theme-hint-color, #888); width: 100%; }
+.discountValue { color: #38a169; font-weight: 600; }
+.refundBadge { background: #fefcbf; color: #744210; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; margin-top: 12px; text-align: center; }
+.actionError { color: #e53e3e; font-size: 13px; margin-top: 8px; }
+.cancelBtn { width: 100%; margin-top: 16px; padding: 12px; border: none; border-radius: 12px; background: #e53e3e; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
+.cancelBtn:disabled { opacity: 0.5; }
+.refundBtn { width: 100%; margin-top: 8px; padding: 12px; border: none; border-radius: 12px; background: var(--tg-theme-button-color, #3e86f5); color: var(--tg-theme-button-text-color, #fff); font-size: 15px; font-weight: 600; cursor: pointer; }
+.refundBtn:disabled { opacity: 0.5; }
+

@@ -26,7 +26,7 @@ type AppState = {
   addToCart: (productCityId: number, quantity: number) => Promise<void>
   updateCartItem: (itemId: number, quantity: number) => Promise<void>
   removeCartItem: (itemId: number) => Promise<void>
-  checkout: (comment?: string) => Promise<Order>
+  checkout: (options?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) => Promise<Order>
   fetchOrders: () => Promise<void>
   setError: (value: string | null) => void
 }
@@ -217,14 +217,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function checkout(comment?: string) {
+  async function checkout(options?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) {
     if (!user) {
       throw new Error('User not loaded')
     }
 
     try {
       setError(null)
-      const response = await api.checkout({ comment })
+      const response = await api.checkout(options)
       setCart(response.cart)
       setRecommended(response.recommended)
       setOrders((prev) => [response.order, ...prev])

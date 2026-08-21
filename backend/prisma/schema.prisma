@@ -18,9 +18,14 @@ model User {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  selectedCity City? @relation("SelectedCity", fields: [selectedCityId], references: [id])
-  cart         Cart?
-  orders       Order[]
+  selectedCity     City? @relation("SelectedCity", fields: [selectedCityId], references: [id])
+  cart             Cart?
+  orders           Order[]
+  balance          Balance?
+  reviews          Review[]
+  wishlists        Wishlist[]
+  supportTickets   SupportTicket[]
+  activityLogs     UserActivityLog[]
 
   @@map("users")
 }
@@ -69,6 +74,7 @@ model Product {
 
   category      Category      @relation(fields: [categoryId], references: [id])
   productCities ProductCity[]
+  reviews       Review[]
 
   @@map("products")
 }
@@ -88,6 +94,7 @@ model ProductCity {
   city      City       @relation(fields: [cityId], references: [id])
   cartItems  CartItem[]
   orderItems OrderItem[]
+  wishlists  Wishlist[]
 
   @@unique([productId, cityId])
   @@map("product_cities")
@@ -106,19 +113,29 @@ model Cart {
 }
 
 model Order {
-  id        Int         @id @default(autoincrement())
-  userId    Int         @map("user_id")
-  cityId    Int         @map("city_id")
-  status    String      @default("pending")
-  subtotal  Float
-  total     Float
-  comment   String?
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
+  id               Int         @id @default(autoincrement())
+  userId           Int         @map("user_id")
+  cityId           Int         @map("city_id")
+  status           String      @default("pending")
+  subtotal         Float
+  discountAmount   Float       @default(0) @map("discount_amount")
+  deliveryFee      Float       @default(0) @map("delivery_fee")
+  total            Float
+  comment          String?
+  deliveryOptionId Int?        @map("delivery_option_id")
+  discountId       Int?        @map("discount_id")
+  cancelledAt      DateTime?   @map("cancelled_at")
+  refundStatus     String?     @map("refund_status") // none | requested | approved | rejected
+  refundAt         DateTime?   @map("refund_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
-  user   User        @relation(fields: [userId], references: [id])
-  city   City        @relation(fields: [cityId], references: [id])
-  items  OrderItem[]
+  user           User                 @relation(fields: [userId], references: [id])
+  city           City                 @relation(fields: [cityId], references: [id])
+  items          OrderItem[]
+  deliveryOption DeliveryOption?      @relation(fields: [deliveryOptionId], references: [id])
+  discount       Discount?            @relation(fields: [discountId], references: [id])
+  statusHistory  OrderStatusHistory[]
 
   @@map("orders")
 }
@@ -151,4 +168,153 @@ model CartItem {
 
   @@unique([cartId, productCityId])
   @@map("cart_items")
+}
+
+model Balance {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  amount    Float    @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user         User               @relation(fields: [userId], references: [id])
+  transactions BalanceTransaction[]
+
+  @@map("balances")
+}
+
+model BalanceTransaction {
+  id        Int      @id @default(autoincrement())
+  balanceId Int      @map("balance_id")
+  type      String   // topup | spend | refund | casino_win | casino_loss
+  amount    Float
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  balance Balance @relation(fields: [balanceId], references: [id], onDelete: Cascade)
+
+  @@map("balance_transactions")
+}
+
+model Discount {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  type        String   @default("percent") // percent | fixed
+  value       Float
+  minOrderAmount Float @default(0) @map("min_order_amount")
+  usageLimit  Int?     @map("usage_limit")
+  usedCount   Int      @default(0) @map("used_count")
+  isActive    Boolean  @default(true) @map("is_active")
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  orders Order[]
+
+  @@map("discounts")
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  productId Int      @map("product_id")
+  rating    Int      // 1-5
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+
+model Wishlist {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  productCityId Int      @map("product_city_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user        User        @relation(fields: [userId], references: [id])
+  productCity ProductCity @relation(fields: [productCityId], references: [id])
+
+  @@unique([userId, productCityId])
+  @@map("wishlists")
+}
+
+model OrderStatusHistory {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @map("order_id")
+  status    String
+  comment   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_status_history")
+}
+
+model SupportTicket {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  subject   String
+  message   String
+  status    String   @default("open") // open | replied | closed
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user    User                   @relation(fields: [userId], references: [id])
+  replies SupportTicketReply[]
+
+  @@map("support_tickets")
+}
+
+model SupportTicketReply {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int      @map("ticket_id")
+  isAdmin   Boolean  @default(false) @map("is_admin")
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("support_ticket_replies")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  entity    String?
+  entityId  Int?     @map("entity_id")
+  meta      String?  // JSON string
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
+
+model UserActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  action    String
+  meta      String?  // JSON string
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_activity_logs")
+}
+
+model DeliveryOption {
+  id          Int      @id @default(autoincrement())
+  name        String
+  nameEn      String?  @map("name_en")
+  type        String   @default("delivery") // delivery | pickup
+  price       Float    @default(0)
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  orders Order[]
+
+  @@map("delivery_options")
 }
