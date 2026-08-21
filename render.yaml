@@ -18,7 +18,7 @@ services:
         # file:/data/app.db
         sync: false
       - key: SESSION_SECRET
-        generateValue: true
+        sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: FRONTEND_URL
