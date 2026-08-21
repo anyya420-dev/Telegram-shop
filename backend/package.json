@@ -7,10 +7,11 @@
     "dev": "tsx watch src/index.ts",
     "prebuild": "npm run db:generate",
     "build": "tsc -p tsconfig.json",
-    "prestart": "npm run db:generate",
+    "prestart": "npm run db:generate && npm run db:migrate:deploy",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:generate": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} npm exec -- prisma generate --schema ./prisma/schema.prisma",
+    "db:migrate:deploy": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} npm exec -- prisma migrate deploy --schema ./prisma/schema.prisma",
     "db:push": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} npm exec -- prisma db push --schema ./prisma/schema.prisma",
     "db:seed": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} tsx ./prisma/seed.ts"
   },
