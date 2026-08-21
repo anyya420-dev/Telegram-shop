@@ -20,7 +20,13 @@ export default function ProductCard({ product, onClick }: Props) {
   }
 
   return (
-    <div className={styles.card} onClick={onClick}>
+    <div
+      className={styles.card}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
+    >
       <div className={styles.imageWrap}>
         {product.image ? (
           <img src={product.image} alt={product.name} className={styles.image} />

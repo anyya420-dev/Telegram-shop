@@ -29,6 +29,7 @@ export default function App() {
             <Route path="balance" element={<BalancePage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="support" element={<SupportPage />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>
       </AppProvider>
