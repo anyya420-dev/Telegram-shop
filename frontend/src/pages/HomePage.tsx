@@ -1,46 +1,23 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { api } from '../lib/api';
 import ProductCard from '../components/ProductCard/ProductCard';
-import { Product, ProductCategory } from '../types/product';
 import { useTranslation } from 'react-i18next';
 import styles from './HomePage.module.css';
+import { getLocalizedCategoryName } from '../lib/localized';
+import i18n from '../lib/i18n';
+import type { Language } from '../types';
 
 export default function HomePage() {
-  const { user, cart } = useApp();
-  const selectedCity = user?.selectedCity ?? null;
+  const { user, cart, categories, products, recommended, openCityPicker } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
-  const [featured, setFeatured] = useState<Product[]>([]);
-  const [newest, setNewest] = useState<Product[]>([]);
+  const language = i18n.language as Language;
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
 
   const cartCount = cart?.items.length ?? 0;
-  const cityParam = selectedCity ? `cityId=${selectedCity.id}` : '';
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [cats, feat, newArr] = await Promise.all([
-        api.get<ProductCategory[]>('/categories'),
-        api.get<Product[]>(`/products?featured=1${cityParam ? `&${cityParam}` : ''}`),
-        api.get<Product[]>(`/products?newest=1&sort=newest${cityParam ? `&${cityParam}` : ''}`),
-      ]);
-      setCategories(cats);
-      setFeatured(feat);
-      setNewest(newArr);
-    } finally {
-      setLoading(false);
-    }
-  }, [cityParam]);
-
-  useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+  const featuredProducts = products.filter((p) => p.isRecommended).slice(0, 6);
+  const allProducts = products.slice(0, 6);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -51,12 +28,17 @@ export default function HomePage() {
 
   return (
     <div className={styles.page}>
-      {/* Top bar */}
       <div className={styles.topBar}>
         <div className={styles.topLeft}>
           <h1 className={styles.logo}>{t('home.title')}</h1>
-          {selectedCity && (
-            <span className={styles.cityBadge}>📍 {selectedCity.name}</span>
+          {user?.selectedCity ? (
+            <button className={styles.cityBadge} onClick={openCityPicker}>
+              📍 {user.selectedCity.name}
+            </button>
+          ) : (
+            <button className={styles.cityBadge} onClick={openCityPicker}>
+              📍 {t('profile.cityNotSelected')}
+            </button>
           )}
         </div>
         <button className={styles.cartBtn} onClick={() => navigate('/shop/cart')}>
@@ -65,7 +47,6 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Search */}
       <form onSubmit={handleSearch} className={styles.searchForm}>
         <input
           className={styles.searchInput}
@@ -76,13 +57,16 @@ export default function HomePage() {
         />
       </form>
 
-      {loading ? (
-        <div className={styles.loadingWrap}>
-          <div className={styles.spinner} />
+      {!user?.selectedCityId ? (
+        <div className={styles.noCityWrap}>
+          <div className={styles.noCityIcon}>📍</div>
+          <p className={styles.noCityText}>{t('city.subtitle')}</p>
+          <button className={styles.noCityBtn} onClick={openCityPicker}>
+            {t('profile.selectCity')}
+          </button>
         </div>
       ) : (
         <>
-          {/* Categories */}
           {categories.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
@@ -98,25 +82,24 @@ export default function HomePage() {
                     className={styles.catChip}
                     onClick={() => navigate(`/catalog?categoryId=${cat.id}`)}
                   >
-                    {cat.name}
+                    {getLocalizedCategoryName(cat, language)}
                   </button>
                 ))}
               </div>
             </section>
           )}
 
-          {/* Featured */}
-          {featured.length > 0 && (
+          {featuredProducts.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
                 <span className={styles.sectionTitle}>{t('home.featured')}</span>
-                <button className={styles.viewAll} onClick={() => navigate('/catalog?featured=1')}>
+                <button className={styles.viewAll} onClick={() => navigate('/shop')}>
                   {t('home.viewAll')}
                 </button>
               </div>
               <div className={styles.hScroll}>
-                {featured.map((p) => (
-                  <div key={p.id} className={styles.hCard}>
+                {featuredProducts.map((p) => (
+                  <div key={p.productCityId} className={styles.hCard}>
                     <ProductCard product={p} onClick={() => navigate(`/shop/product/${p.id}`)} />
                   </div>
                 ))}
@@ -124,19 +107,38 @@ export default function HomePage() {
             </section>
           )}
 
-          {/* Newest */}
-          {newest.length > 0 && (
+          {recommended.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
-                <span className={styles.sectionTitle}>{t('home.newest')}</span>
-                <button className={styles.viewAll} onClick={() => navigate('/catalog?sort=newest')}>
+                <span className={styles.sectionTitle}>{t('home.popular')}</span>
+                <button className={styles.viewAll} onClick={() => navigate('/shop')}>
                   {t('home.viewAll')}
                 </button>
               </div>
               <div className={styles.grid}>
-                {newest.slice(0, 6).map((p) => (
+                {recommended.slice(0, 6).map((p) => (
                   <ProductCard
-                    key={p.id}
+                    key={p.productCityId}
+                    product={p}
+                    onClick={() => navigate(`/shop/product/${p.id}`)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {allProducts.length > 0 && featuredProducts.length === 0 && recommended.length === 0 && (
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionTitle}>{t('home.newest')}</span>
+                <button className={styles.viewAll} onClick={() => navigate('/shop')}>
+                  {t('home.viewAll')}
+                </button>
+              </div>
+              <div className={styles.grid}>
+                {allProducts.map((p) => (
+                  <ProductCard
+                    key={p.productCityId}
                     product={p}
                     onClick={() => navigate(`/shop/product/${p.id}`)}
                   />

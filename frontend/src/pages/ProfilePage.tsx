@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import styles from './ProfilePage.module.css';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +8,8 @@ import { getLocalizedCityName } from '../lib/localized';
 import type { Language } from '../types';
 
 export default function ProfilePage() {
-  const { user, openCityPicker, updateLanguagePreference } = useApp();
+  const { user, openCityPicker, updateLanguagePreference, orders } = useApp();
+  const navigate = useNavigate();
   const { t } = useTranslation();
 
   if (!user) {
@@ -83,18 +85,42 @@ export default function ProfilePage() {
 
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>{t('profile.balance')}</h3>
-        <div className={styles.placeholder}>
-          <span className={styles.placeholderIcon}>💰</span>
-          <p>{t('profile.balanceSoon')}</p>
+        <div
+          className={styles.ordersLink}
+          onClick={() => navigate('/balance')}
+        >
+          <span>💰 {t('profile.balance')}</span>
+          <span className={styles.cardArrow}>›</span>
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t('wishlist.title')}</h3>
+        <div
+          className={styles.ordersLink}
+          onClick={() => navigate('/wishlist')}
+        >
+          <span>🤍 {t('wishlist.title')}</span>
+          <span className={styles.cardArrow}>›</span>
         </div>
       </div>
 
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>{t('profile.orders')}</h3>
-        <div className={styles.placeholder}>
-          <span className={styles.placeholderIcon}>📦</span>
-          <p>{t('profile.ordersSoon')}</p>
-        </div>
+        {orders.length === 0 ? (
+          <div className={styles.placeholder}>
+            <span className={styles.placeholderIcon}>📦</span>
+            <p>{t('profile.ordersEmpty')}</p>
+          </div>
+        ) : (
+          <div
+            className={styles.ordersLink}
+            onClick={() => navigate('/orders')}
+          >
+            <span>{t('profile.ordersCount', { count: orders.length })}</span>
+            <span className={styles.cardArrow}>›</span>
+          </div>
+        )}
       </div>
     </div>
   );

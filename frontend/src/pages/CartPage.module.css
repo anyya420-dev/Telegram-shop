@@ -285,3 +285,79 @@
   font-size: 15px;
   font-weight: 600;
 }
+
+.checkoutError {
+  font-size: 13px;
+  color: var(--error, #e53935);
+  text-align: center;
+  margin-top: 8px;
+}
+
+.discountRow {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.discountInput {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--tg-theme-hint-color, #ccc);
+  border-radius: 8px;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #000);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.discountBtn {
+  background: var(--tg-theme-button-color, #3e86f5);
+  color: var(--tg-theme-button-text-color, #fff);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.discountBtn:disabled { opacity: 0.5; }
+
+.discountError {
+  color: #e53e3e;
+  font-size: 12px;
+  margin: 0 0 4px;
+}
+
+.discountValue {
+  color: #38a169;
+  font-weight: 600;
+}
+
+.deliverySection {
+  margin: 8px 0;
+}
+
+.deliveryLabel {
+  font-size: 13px;
+  color: var(--tg-theme-hint-color, #888);
+  margin-bottom: 6px;
+}
+
+.deliveryOpt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--tg-theme-text-color, #000);
+}
+
+.deliveryPrice {
+  margin-left: auto;
+  font-weight: 600;
+  font-size: 13px;
+}
+

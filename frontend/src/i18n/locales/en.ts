@@ -120,5 +120,8 @@ export const en = {
     product_load_failed: 'Failed to load the product.',
     cart_update_failed: 'Failed to update the cart.',
     language_update_failed: 'Failed to save the language.',
+    checkout_failed: 'Failed to place the order.',
+    orders_fetch_failed: 'Failed to load orders.',
+    cart_empty: 'Cart is empty.',
   },
 } as const

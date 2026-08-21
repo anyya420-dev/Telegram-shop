@@ -243,7 +243,28 @@ async function main() {
   console.log('Seed completed successfully')
 }
 
+// Upsert delivery options and sample discount (run separately, not resetting existing data)
+async function seedExtras() {
+  await prisma.deliveryOption.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1, name: 'Самовывоз', nameEn: 'Pickup', type: 'pickup', price: 0, isActive: true, sortOrder: 1 },
+  })
+  await prisma.deliveryOption.upsert({
+    where: { id: 2 },
+    update: {},
+    create: { id: 2, name: 'Доставка курьером', nameEn: 'Courier delivery', type: 'delivery', price: 250, isActive: true, sortOrder: 2 },
+  })
+  await prisma.discount.upsert({
+    where: { code: 'WELCOME10' },
+    update: {},
+    create: { code: 'WELCOME10', type: 'percent', value: 10, minOrderAmount: 0, isActive: true },
+  })
+  console.log('Extras seeded')
+}
+
 main()
+  .then(() => seedExtras())
   .catch(async (error) => {
     console.error(error)
     process.exitCode = 1

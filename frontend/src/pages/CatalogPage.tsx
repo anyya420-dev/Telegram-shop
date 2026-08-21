@@ -1,68 +1,65 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { api } from '../lib/api';
 import ProductCard from '../components/ProductCard/ProductCard';
-import { Product, ProductCategory } from '../types/product';
 import { useTranslation } from 'react-i18next';
 import styles from './CatalogPage.module.css';
+import { getLocalizedCategoryName } from '../lib/localized';
+import i18n from '../lib/i18n';
+import type { Language } from '../types';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'popular';
 
+function sortProducts(products: ReturnType<typeof useApp>['products'], sort: SortOption) {
+  const copy = [...products];
+  switch (sort) {
+    case 'price_asc': return copy.sort((a, b) => a.price - b.price);
+    case 'price_desc': return copy.sort((a, b) => b.price - a.price);
+    case 'popular': return copy.sort((a, b) => (b.isRecommended ? 1 : 0) - (a.isRecommended ? 1 : 0));
+    default: return copy;
+  }
+}
+
 export default function CatalogPage() {
-  const { user } = useApp();
-  const selectedCity = user?.selectedCity ?? null;
+  const { user, categories, products, refreshCatalog } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const language = i18n.language as Language;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const initCategory = searchParams.get('categoryId') ? Number(searchParams.get('categoryId')) : null;
   const initSearch = searchParams.get('search') || '';
-  const initFeatured = searchParams.get('featured') === '1';
   const initSort = (searchParams.get('sort') as SortOption) || 'newest';
 
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [activeCategoryId, setActiveCategoryId] = useState<number | null>(initCategory);
+  const [activeCategoryId, setActiveCategoryId] = useState<number | 'all'>(initCategory ?? 'all');
   const [search, setSearch] = useState(initSearch);
   const [sort, setSort] = useState<SortOption>(initSort);
-  const [featured, setFeatured] = useState(initFeatured);
-  const [loading, setLoading] = useState(true);
   const [showSort, setShowSort] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    api.get<ProductCategory[]>('/categories').then(setCategories);
-  }, []);
-
-  const fetchProducts = useCallback(async () => {
+  const doRefresh = useCallback(async (s: string, cat: number | 'all') => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (selectedCity) params.set('cityId', String(selectedCity.id));
-      if (activeCategoryId) params.set('categoryId', String(activeCategoryId));
-      if (search) params.set('search', search);
-      if (sort) params.set('sort', sort);
-      if (featured) params.set('featured', '1');
-      const data = await api.get<Product[]>(`/products?${params.toString()}`);
-      setProducts(data);
+      await refreshCatalog(s, cat);
     } finally {
       setLoading(false);
     }
-  }, [selectedCity, activeCategoryId, search, sort, featured]);
+  }, [refreshCatalog]);
 
   useEffect(() => {
-    void fetchProducts();
-  }, [fetchProducts]);
+    void doRefresh(initSearch, initCategory ?? 'all');
+  }, []);
 
   // Sync URL params
   useEffect(() => {
     const p: Record<string, string> = {};
-    if (activeCategoryId) p.categoryId = String(activeCategoryId);
+    if (activeCategoryId !== 'all') p.categoryId = String(activeCategoryId);
     if (search) p.search = search;
     if (sort !== 'newest') p.sort = sort;
-    if (featured) p.featured = '1';
     setSearchParams(p, { replace: true });
-  }, [activeCategoryId, search, sort, featured, setSearchParams]);
+  }, [activeCategoryId, search, sort, setSearchParams]);
+
+  const sortedProducts = sortProducts(products, sort);
 
   const sortLabels: Record<SortOption, string> = {
     newest: t('catalog.sortNewest'),
@@ -71,9 +68,17 @@ export default function CatalogPage() {
     popular: t('catalog.sortPopular'),
   };
 
+  if (!user?.selectedCityId) {
+    return (
+      <div className={styles.empty}>
+        <div className={styles.emptyIcon}>📍</div>
+        <p>{t('city.subtitle')}</p>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
-      {/* Header */}
       <div className={styles.header}>
         <h1 className={styles.title}>{t('catalog.title')}</h1>
         <button className={styles.sortBtn} onClick={() => setShowSort(true)}>
@@ -81,25 +86,23 @@ export default function CatalogPage() {
         </button>
       </div>
 
-      {/* Search */}
       <div className={styles.searchWrap}>
         <input
           className={styles.searchInput}
           type="text"
           placeholder={t('catalog.searchPlaceholder')}
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setFeatured(false);
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void doRefresh(search, activeCategoryId);
           }}
         />
       </div>
 
-      {/* Categories */}
       <div className={styles.catScroll}>
         <button
-          className={`${styles.catBtn} ${activeCategoryId === null && !featured ? styles.catActive : ''}`}
-          onClick={() => { setActiveCategoryId(null); setFeatured(false); }}
+          className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
+          onClick={() => { setActiveCategoryId('all'); void doRefresh(search, 'all'); }}
         >
           {t('catalog.allCategories')}
         </button>
@@ -107,32 +110,30 @@ export default function CatalogPage() {
           <button
             key={cat.id}
             className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
-            onClick={() => { setActiveCategoryId(cat.id); setFeatured(false); }}
+            onClick={() => { setActiveCategoryId(cat.id); void doRefresh(search, cat.id); }}
           >
-            {cat.name}
+            {getLocalizedCategoryName(cat, language)}
           </button>
         ))}
       </div>
 
-      {/* Products */}
       {loading ? (
         <div className={styles.loadingWrap}>
           <div className={styles.spinner} />
         </div>
-      ) : products.length === 0 ? (
+      ) : sortedProducts.length === 0 ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>🔍</div>
           <p>{t('catalog.empty')}</p>
         </div>
       ) : (
         <div className={styles.grid}>
-          {products.map((p) => (
-            <ProductCard key={p.id} product={p} onClick={() => navigate(`/shop/product/${p.id}`)} />
+          {sortedProducts.map((p) => (
+            <ProductCard key={p.productCityId} product={p} onClick={() => navigate(`/shop/product/${p.id}`)} />
           ))}
         </div>
       )}
 
-      {/* Sort sheet */}
       {showSort && (
         <div className={styles.overlay} onClick={() => setShowSort(false)}>
           <div className={styles.sheet} onClick={(e) => e.stopPropagation()}>
@@ -153,3 +154,5 @@ export default function CatalogPage() {
     </div>
   );
 }
+
+

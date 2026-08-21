@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
-import { useI18n } from '../i18n'
+import i18n from '../lib/i18n'
 import { getTelegramContext } from '../lib/telegram'
-import type { Cart, Category, City, Language, ProductSummary, UserProfile } from '../types'
+import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
 
 type AppState = {
   loading: boolean
@@ -15,6 +15,8 @@ type AppState = {
   products: ProductSummary[]
   cart: Cart | null
   recommended: ProductSummary[]
+  orders: Order[]
+  ordersLoading: boolean
   cityPickerOpen: boolean
   openCityPicker: () => void
   closeCityPicker: () => void
@@ -24,6 +26,8 @@ type AppState = {
   addToCart: (productCityId: number, quantity: number) => Promise<void>
   updateCartItem: (itemId: number, quantity: number) => Promise<void>
   removeCartItem: (itemId: number) => Promise<void>
+  checkout: (options?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) => Promise<Order>
+  fetchOrders: () => Promise<void>
   setError: (value: string | null) => void
 }
 
@@ -58,8 +62,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<ProductSummary[]>([])
   const [cart, setCart] = useState<Cart>(emptyCart())
   const [recommended, setRecommended] = useState<ProductSummary[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
-  const { setLanguage, t } = useI18n()
+
+  function t(key: string): string {
+    return i18n.t(key)
+  }
+
+  function setLanguage(lang: Language) {
+    void i18n.changeLanguage(lang)
+  }
 
   async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
     if (!user?.selectedCityId) {
@@ -91,7 +104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
         setUser(response.user)
-        setLanguage(response.user.language)
+        void i18n.changeLanguage(response.user.language)
         setCities(response.cities)
         setCategories(response.categories)
 
@@ -116,7 +129,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     void bootstrap()
-  }, [setLanguage])
+  }, [])  // no dependency on setLanguage needed
 
   async function selectCity(cityId: number) {
     if (!user) {
@@ -149,7 +162,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError(null)
       const response = await api.updateLanguage(language)
       setUser(response.user)
-      setLanguage(response.user.language)
+      void i18n.changeLanguage(response.user.language)
     } catch (languageError) {
       setError(translateError(languageError, t, 'language_update_failed'))
       throw languageError
@@ -204,6 +217,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function checkout(options?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) {
+    if (!user) {
+      throw new Error('User not loaded')
+    }
+
+    try {
+      setError(null)
+      const response = await api.checkout(options)
+      setCart(response.cart)
+      setRecommended(response.recommended)
+      setOrders((prev) => [response.order, ...prev])
+      return response.order
+    } catch (checkoutError) {
+      setError(translateError(checkoutError, t, 'checkout_failed'))
+      throw checkoutError
+    }
+  }
+
+  async function fetchOrders() {
+    if (!user) {
+      return
+    }
+
+    try {
+      setOrdersLoading(true)
+      setError(null)
+      const response = await api.getOrders()
+      setOrders(response.orders)
+    } catch (ordersError) {
+      setError(translateError(ordersError, t, 'orders_fetch_failed'))
+    } finally {
+      setOrdersLoading(false)
+    }
+  }
+
   const value = {
     loading,
     error,
@@ -214,6 +262,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     products,
     cart,
     recommended,
+    orders,
+    ordersLoading,
     cityPickerOpen,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
@@ -223,6 +273,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     addToCart,
     updateCartItem,
     removeCartItem,
+    checkout,
+    fetchOrders,
     setError,
   } satisfies AppState
 
