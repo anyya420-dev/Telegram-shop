@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout/Layout';
+import HomePage from './pages/HomePage';
+import CatalogPage from './pages/CatalogPage';
 import ShopPage from './pages/ShopPage';
 import ProductPage from './pages/ProductPage';
 import CartPage from './pages/CartPage';
@@ -17,7 +19,9 @@ export default function App() {
         <Routes>
           <Route path="/select-city" element={<CitySelectPage />} />
           <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/shop" replace />} />
+            <Route index element={<Navigate to="/home" replace />} />
+            <Route path="home" element={<HomePage />} />
+            <Route path="catalog" element={<CatalogPage />} />
             <Route path="shop" element={<ShopPage />} />
             <Route path="shop/product/:id" element={<ProductPage />} />
             <Route path="shop/cart" element={<CartPage />} />
@@ -31,3 +35,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+

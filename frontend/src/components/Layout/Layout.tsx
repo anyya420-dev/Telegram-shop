@@ -5,15 +5,14 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const NAV_ITEMS = [
-  { path: '/shop', icon: '🛍', labelKey: 'nav.shop' },
-  { path: '/casino', icon: '🎰', labelKey: 'nav.casino' },
-  { path: '/balance', icon: '💰', labelKey: 'nav.balance' },
+  { path: '/home', icon: '🏠', labelKey: 'nav.home' },
+  { path: '/catalog', icon: '🗂', labelKey: 'nav.catalog' },
+  { path: '/shop/cart', icon: '🛒', labelKey: 'nav.cart', exact: true },
   { path: '/profile', icon: '👤', labelKey: 'nav.profile' },
-  { path: '/support', icon: '🎧', labelKey: 'nav.support' },
 ];
 
 export default function Layout() {
-  const { loading, user } = useApp();
+  const { loading, user, cart } = useApp();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,8 +31,10 @@ export default function Layout() {
     );
   }
 
+  const cartCount = cart.items.length;
+
   const activeTab = NAV_ITEMS.find((item) =>
-    location.pathname.startsWith(item.path)
+    item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)
   )?.path;
 
   return (
@@ -48,7 +49,12 @@ export default function Layout() {
             className={`${styles.navItem} ${activeTab === item.path ? styles.active : ''}`}
             onClick={() => navigate(item.path)}
           >
-            <span className={styles.navIcon}>{item.icon}</span>
+            <span className={styles.navIconWrap}>
+              <span className={styles.navIcon}>{item.icon}</span>
+              {item.labelKey === 'nav.cart' && cartCount > 0 && (
+                <span className={styles.navBadge}>{cartCount}</span>
+              )}
+            </span>
             <span className={styles.navLabel}>{t(item.labelKey)}</span>
           </button>
         ))}

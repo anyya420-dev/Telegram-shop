@@ -13,6 +13,7 @@ export default function ProductPage() {
   const { selectedCity, addToCart, cart } = useApp();
   const { t } = useTranslation();
   const [product, setProduct] = useState<Product | null>(null);
+  const [related, setRelated] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -20,12 +21,16 @@ export default function ProductPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
         const params = selectedCity ? `?cityId=${selectedCity.id}` : '';
         const data = await api.get<Product>(`/products/${id}${params}`);
         setProduct(data);
         const pc = data.productCities[0];
         if (pc) setQuantity(pc.minimumQuantity);
+        // load related
+        const rel = await api.get<Product[]>(`/products/${id}/related${params}`).catch(() => []);
+        setRelated(rel);
       } finally {
         setLoading(false);
       }
@@ -181,6 +186,31 @@ export default function ProductPage() {
           </div>
         )}
       </div>
+
+      {related.length > 0 && (
+        <div className={styles.related}>
+          <h3 className={styles.relatedTitle}>{t('product.related')}</h3>
+          <div className={styles.relatedList}>
+            {related.map((p) => (
+              <div
+                key={p.id}
+                className={styles.relatedCard}
+                onClick={() => navigate(`/shop/product/${p.id}`)}
+              >
+                <div className={styles.relatedImg}>
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} />
+                  ) : (
+                    <span>📦</span>
+                  )}
+                </div>
+                <p className={styles.relatedName}>{p.name}</p>
+                <p className={styles.relatedPrice}>${p.price}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

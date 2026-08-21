@@ -1,10 +1,33 @@
 {
   "nav": {
+    "home": "Home",
+    "catalog": "Catalog",
     "shop": "Shop",
     "casino": "Casino",
     "balance": "Balance",
+    "cart": "Cart",
     "profile": "Profile",
     "support": "Support"
+  },
+  "home": {
+    "title": "Shop",
+    "featured": "🔥 Featured",
+    "newest": "✨ New arrivals",
+    "popular": "⭐ Popular",
+    "viewAll": "All →",
+    "categories": "Categories",
+    "searchPlaceholder": "🔍 Search products..."
+  },
+  "catalog": {
+    "title": "Catalog",
+    "allCategories": "All",
+    "sort": "Sort",
+    "sortNewest": "Newest",
+    "sortPriceAsc": "Price ↑",
+    "sortPriceDesc": "Price ↓",
+    "sortPopular": "Popular",
+    "empty": "No products found",
+    "searchPlaceholder": "🔍 Search products..."
   },
   "shop": {
     "title": "Shop",
@@ -25,7 +48,8 @@
     "adding": "Adding...",
     "goToCart": "Go to cart →",
     "notInCity": "Product is not available in the selected city",
-    "notFound": "Product not found"
+    "notFound": "Product not found",
+    "related": "Related products"
   },
   "cart": {
     "title": "Cart",
@@ -85,6 +109,8 @@
   "common": {
     "loading": "Loading...",
     "soon": "Soon",
-    "back": "← Back"
+    "back": "← Back",
+    "addToCart": "Add to cart",
+    "outOfStock": "Out of stock"
   }
 }

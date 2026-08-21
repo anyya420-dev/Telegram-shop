@@ -1,10 +1,33 @@
 {
   "nav": {
+    "home": "Главная",
+    "catalog": "Каталог",
     "shop": "Магазин",
     "casino": "Казино",
     "balance": "Баланс",
+    "cart": "Корзина",
     "profile": "Профиль",
     "support": "Поддержка"
+  },
+  "home": {
+    "title": "Магазин",
+    "featured": "🔥 Рекомендуем",
+    "newest": "✨ Новинки",
+    "popular": "⭐ Популярное",
+    "viewAll": "Все →",
+    "categories": "Категории",
+    "searchPlaceholder": "🔍 Поиск товаров..."
+  },
+  "catalog": {
+    "title": "Каталог",
+    "allCategories": "Все",
+    "sort": "Сортировка",
+    "sortNewest": "Новинки",
+    "sortPriceAsc": "Цена ↑",
+    "sortPriceDesc": "Цена ↓",
+    "sortPopular": "Популярные",
+    "empty": "Товары не найдены",
+    "searchPlaceholder": "🔍 Поиск товаров..."
   },
   "shop": {
     "title": "Магазин",
@@ -25,7 +48,8 @@
     "adding": "Добавляем...",
     "goToCart": "Перейти в корзину →",
     "notInCity": "Товар недоступен в выбранном городе",
-    "notFound": "Товар не найден"
+    "notFound": "Товар не найден",
+    "related": "Похожие товары"
   },
   "cart": {
     "title": "Корзина",
@@ -87,6 +111,8 @@
   "common": {
     "loading": "Загрузка...",
     "soon": "Скоро",
-    "back": "← Назад"
+    "back": "← Назад",
+    "addToCart": "В корзину",
+    "outOfStock": "Нет в наличии"
   }
 }
