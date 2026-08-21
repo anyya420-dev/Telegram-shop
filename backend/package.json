@@ -10,8 +10,8 @@
     "prestart": "npm run db:generate",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "db:generate": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} npx prisma generate --schema ./prisma/schema.prisma",
-    "db:push": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} npx prisma db push --schema ./prisma/schema.prisma",
+    "db:generate": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} prisma generate --schema ./prisma/schema.prisma",
+    "db:push": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} prisma db push --schema ./prisma/schema.prisma",
     "db:seed": "DATABASE_URL=${DATABASE_URL:-file:./prisma/dev.db} tsx ./prisma/seed.ts"
   },
   "dependencies": {
