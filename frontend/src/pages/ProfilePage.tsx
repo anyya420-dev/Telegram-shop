@@ -1,74 +1,101 @@
-import { useState } from 'react'
-import { useApp } from '../context/AppContext'
-import { useI18n } from '../i18n'
-import { getLocalizedCityName } from '../lib/localized'
-import type { Language } from '../types'
-
-const languageOptions: Language[] = ['ru', 'en']
+import { useApp } from '../context/AppContext';
+import styles from './ProfilePage.module.css';
+import { useTranslation } from 'react-i18next';
+import { saveLanguage } from '../lib/i18n';
+import i18n from '../lib/i18n';
+import { getLocalizedCityName } from '../lib/localized';
+import type { Language } from '../types';
 
 export default function ProfilePage() {
-  const { user, telegramEnvironment, openCityPicker, updateLanguagePreference } = useApp()
-  const { language, t } = useI18n()
-  const [savingLanguage, setSavingLanguage] = useState<Language | null>(null)
+  const { user, openCityPicker, updateLanguagePreference } = useApp();
+  const { t } = useTranslation();
 
   if (!user) {
-    return null
+    return null;
   }
 
-  return (
-    <div className="page-stack">
-      <section className="panel-card profile-card">
-        <span className="eyebrow">{t('profile.badge')}</span>
-        <h1>{user.firstName}</h1>
-        <dl className="profile-grid">
-          <div>
-            <dt>{t('profile.firstName')}</dt>
-            <dd>{user.firstName}</dd>
-          </div>
-          <div>
-            <dt>{t('profile.telegramUsername')}</dt>
-            <dd>{user.username ? `@${user.username}` : t('common.notSpecified')}</dd>
-          </div>
-          <div>
-            <dt>{t('profile.selectedCity')}</dt>
-            <dd>{user.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('common.notSelected')}</dd>
-          </div>
-          <div>
-            <dt>{t('profile.mode')}</dt>
-            <dd>{telegramEnvironment ? t('profile.telegramMode') : t('profile.demoMode')}</dd>
-          </div>
-        </dl>
-        <button className="secondary-button" type="button" onClick={openCityPicker}>
-          {t('cityPicker.changeCity')}
-        </button>
-        <p className="subtle-text">{t('cityPicker.cityChangeNotice')}</p>
-      </section>
+  function handleLanguageChange(lang: Language) {
+    void i18n.changeLanguage(lang);
+    saveLanguage(lang);
+    void updateLanguagePreference(lang);
+  }
 
-      <section className="panel-card">
-        <span className="eyebrow">{t('profile.settingsBadge')}</span>
-        <h2>{t('profile.settingsTitle')}</h2>
-        <p className="subtle-text">{t('profile.settingsDescription')}</p>
-        <div className="category-row">
-          {languageOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={`category-pill ${user.language === option ? 'category-pill--active' : ''}`}
-              disabled={savingLanguage === option}
-              onClick={async () => {
-                setSavingLanguage(option)
-                try {
-                  await updateLanguagePreference(option)
-                } finally {
-                  setSavingLanguage(null)
-                }
-              }}
-            >
-              {t(`languages.${option}`)}
-            </button>
-          ))}
+  const displayName = user.firstName
+    ? [user.firstName].filter(Boolean).join(' ')
+    : user.username || t('profile.defaultName');
+
+  const cityName = user.selectedCity
+    ? getLocalizedCityName(user.selectedCity, i18n.language as Language)
+    : t('profile.cityNotSelected');
+
+  return (
+    <div className={styles.page}>
+      <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
+
+      <div className={styles.avatar}>
+        <div className={styles.avatarCircle}>
+          {displayName.charAt(0).toUpperCase()}
         </div>
-      </section>
+        <div className={styles.userInfo}>
+          <p className={styles.displayName}>{displayName}</p>
+          {user.username && (
+            <p className={styles.username}>@{user.username}</p>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.cards}>
+        <div className={styles.card}>
+          <span className={styles.cardLabel}>{t('profile.telegramId')}</span>
+          <span className={styles.cardValue}>{user.telegramId}</span>
+        </div>
+
+        <div className={styles.card} onClick={() => openCityPicker()}>
+          <span className={styles.cardLabel}>{t('profile.city')}</span>
+          <div className={styles.cardRight}>
+            <span className={styles.cardValue}>{cityName}</span>
+            <span className={styles.cardArrow}>›</span>
+          </div>
+        </div>
+
+        <div className={styles.card}>
+          <span className={styles.cardLabel}>{t('profile.language')}</span>
+          <div className={styles.cardRight}>
+            <button
+              className={`${styles.langBtn} ${i18n.language === 'ru' ? styles.langActive : ''}`}
+              onClick={() => handleLanguageChange('ru')}
+              aria-label={t('profile.languageRu')}
+              title={t('profile.languageRu')}
+            >
+              🇷🇺
+            </button>
+            <button
+              className={`${styles.langBtn} ${i18n.language === 'en' ? styles.langActive : ''}`}
+              onClick={() => handleLanguageChange('en')}
+              aria-label={t('profile.languageEn')}
+              title={t('profile.languageEn')}
+            >
+              🇬🇧
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t('profile.balance')}</h3>
+        <div className={styles.placeholder}>
+          <span className={styles.placeholderIcon}>💰</span>
+          <p>{t('profile.balanceSoon')}</p>
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <h3 className={styles.sectionTitle}>{t('profile.orders')}</h3>
+        <div className={styles.placeholder}>
+          <span className={styles.placeholderIcon}>📦</span>
+          <p>{t('profile.ordersSoon')}</p>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

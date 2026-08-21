@@ -1,141 +1,181 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { api } from '../api/client'
-import { QuantitySelector } from '../components/QuantitySelector'
-import { useApp } from '../context/AppContext'
-import { useI18n } from '../i18n'
-import { formatCurrency, formatQuantity } from '../lib/format'
-import { getLocalizedProductCategoryName, getLocalizedProductDescription, getLocalizedProductName, getLocalizedUnit } from '../lib/localized'
-import type { ProductDetail } from '../types'
-
-function translateError(error: unknown, t: (key: string) => string, fallbackKey: string) {
-  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
-    return t(`errors.${error.code}`)
-  }
-
-  return t(`errors.${fallbackKey}`)
-}
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
+import { api } from '../api/client';
+import styles from './ProductPage.module.css';
+import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/format';
+import i18n from '../lib/i18n';
+import type { Language, ProductDetail } from '../types';
 
 export default function ProductPage() {
-  const { id } = useParams<{ id: string }>()
-  const { user, products, addToCart } = useApp()
-  const { language, t } = useI18n()
-  const [product, setProduct] = useState<ProductDetail | null>(null)
-  const [quantity, setQuantity] = useState<number>(1)
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const cachedProduct = useMemo(() => products.find((item) => item.id === Number(id)) ?? null, [id, products])
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user, addToCart, cart } = useApp();
+  const { t } = useTranslation();
+  const language = i18n.language as Language;
+  const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [quantity, setQuantity] = useState(1);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
 
   useEffect(() => {
-    async function loadProduct() {
+    async function load() {
       if (!id || !user?.selectedCityId) {
-        setLoading(false)
-        return
+        setLoading(false);
+        return;
       }
-
-      setLoading(true)
+      setLoading(true);
       try {
-        if (cachedProduct) {
-          setProduct(cachedProduct)
-          setQuantity(cachedProduct.minimumQuantity)
-          return
-        }
-
-        const response = await api.getProduct(Number(id), user.selectedCityId)
-        setProduct(response.product)
-        setQuantity(response.product.minimumQuantity)
-      } catch (productError) {
-        setError(translateError(productError, t, 'product_load_failed'))
+        const { product: data } = await api.getProduct(Number(id), user.selectedCityId);
+        setProduct(data);
+        setQuantity(data.minimumQuantity || 1);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     }
+    void load();
+  }, [id, user?.selectedCityId]);
 
-    void loadProduct()
-  }, [cachedProduct, id, t, user?.selectedCityId])
+  function increment() {
+    if (!product) return;
+    const next = quantity + product.quantityStep;
+    if (next <= product.maximumQuantity) setQuantity(next);
+  }
+
+  function decrement() {
+    if (!product) return;
+    const next = quantity - product.quantityStep;
+    if (next >= product.minimumQuantity) setQuantity(next);
+  }
+
+  async function handleAddToCart() {
+    if (!product) return;
+    setAdding(true);
+    try {
+      await addToCart(product.productCityId, quantity);
+      setAdded(true);
+      window.setTimeout(() => setAdded(false), 2000);
+    } finally {
+      setAdding(false);
+    }
+  }
 
   if (loading) {
     return (
-      <section className="placeholder-card">
-        <h1>{t('common.loadingProduct')}</h1>
-      </section>
-    )
+      <div className={styles.loading}>
+        <div className={styles.spinner} />
+      </div>
+    );
   }
 
   if (!product) {
     return (
-      <section className="placeholder-card">
-        <h1>{t('product.notFoundTitle')}</h1>
-        <p>{t('product.notFoundDescription')}</p>
-        <Link className="primary-button" to="/shop">
-          {t('product.backToCatalog')}
-        </Link>
-      </section>
-    )
+      <div className={styles.error}>
+        <p>{t('product.notFound')}</p>
+        <button onClick={() => navigate(-1)}>{t('product.back')}</button>
+      </div>
+    );
   }
 
-  const unit = getLocalizedUnit(product.unit, language, product.unitTranslations)
-  const imageSrc = product.image || '/favicon.svg'
+  const itemInCart = cart?.items.find((i) => i.productCity.productCityId === product.productCityId);
 
   return (
-    <div className="page-stack">
-      <Link className="back-link" to="/shop">{t('product.backToCatalog')}</Link>
-      <section className="product-hero">
-        <img className="product-hero__image" src={imageSrc} alt={getLocalizedProductName(product, language)} />
-        <div className="panel-card panel-card--dense">
-          <span className="eyebrow">{getLocalizedProductCategoryName(product, language)}</span>
-          <h1>{getLocalizedProductName(product, language)}</h1>
-          <p>{getLocalizedProductDescription(product, language)}</p>
-          <div className="detail-grid">
-            <div>
-              <span className="field-label">{t('product.price')}</span>
-              <strong>{formatCurrency(product.price, language)}</strong>
-            </div>
-            <div>
-              <span className="field-label">{t('product.availability')}</span>
-              <strong>{formatQuantity(product.stock, language)} {unit}</strong>
-            </div>
-            <div>
-              <span className="field-label">{t('product.minimum')}</span>
-              <strong>{formatQuantity(product.minimumQuantity, language)} {unit}</strong>
-            </div>
-            <div>
-              <span className="field-label">{t('product.step')}</span>
-              <strong>{formatQuantity(product.quantityStep, language)} {unit}</strong>
-            </div>
-          </div>
-          <QuantitySelector
-            minimum={product.minimumQuantity}
-            step={product.quantityStep}
-            maximum={product.maximumQuantity}
-            unit={product.unit}
-            unitTranslations={product.unitTranslations}
-            value={quantity}
-            onChange={setQuantity}
-          />
-          {error ? <p className="error-text">{error}</p> : null}
-          <button
-            className="primary-button"
-            type="button"
-            disabled={submitting}
-            onClick={async () => {
-              setSubmitting(true)
-              setError(null)
-              try {
-                await addToCart(product.productCityId, quantity)
-              } catch (cartError) {
-                setError(translateError(cartError, t, 'cart_update_failed'))
-              } finally {
-                setSubmitting(false)
-              }
-            }}
-          >
-            {t('product.addToCart')}
-          </button>
+    <div className={styles.page}>
+      <button className={styles.back} onClick={() => navigate(-1)}>
+        {t('product.back')}
+      </button>
+
+      <div className={styles.imageWrap}>
+        {product.image ? (
+          <img src={product.image} alt={product.name} className={styles.image} />
+        ) : (
+          <div className={styles.noImage}>📦</div>
+        )}
+      </div>
+
+      <div className={styles.content}>
+        <div className={styles.categoryTag}>{product.categoryName}</div>
+        <h1 className={styles.name}>{product.name}</h1>
+
+        <div className={styles.priceRow}>
+          <span className={styles.price}>{formatCurrency(product.price, language)}</span>
+          {product.unit && <span className={styles.unit}>/ {product.unit}</span>}
         </div>
-      </section>
+
+        {product.description && (
+          <p className={styles.description}>{product.description}</p>
+        )}
+
+        <div className={styles.stockRow}>
+          <span
+            className={`${styles.stockDot} ${product.isAvailable ? styles.inStock : styles.outOfStock}`}
+          />
+          <span className={styles.stockText}>
+            {product.isAvailable
+              ? t('product.inStock', { count: product.stock, unit: product.unit })
+              : t('product.outOfStock')}
+          </span>
+        </div>
+
+        {product.isAvailable && (
+          <>
+            <div className={styles.qtySection}>
+              <span className={styles.qtyLabel}>{t('product.quantity')}</span>
+              <div className={styles.qtyControl}>
+                <button
+                  className={styles.qtyBtn}
+                  onClick={decrement}
+                  disabled={quantity <= product.minimumQuantity}
+                >
+                  −
+                </button>
+                <span className={styles.qtyValue}>
+                  {quantity} {product.unit}
+                </span>
+                <button
+                  className={styles.qtyBtn}
+                  onClick={increment}
+                  disabled={quantity >= product.maximumQuantity}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.totalRow}>
+              <span className={styles.totalLabel}>{t('product.total')}</span>
+              <span className={styles.totalPrice}>
+                {formatCurrency(product.price * quantity, language)}
+              </span>
+            </div>
+
+            <button
+              className={`${styles.addBtn} ${added ? styles.addedBtn : ''}`}
+              onClick={handleAddToCart}
+              disabled={adding || added}
+            >
+              {added
+                ? t('product.added')
+                : adding
+                ? t('product.adding')
+                : itemInCart
+                ? t('product.updateCart')
+                : t('product.addToCart')}
+            </button>
+
+            {itemInCart && (
+              <button
+                className={styles.viewCartBtn}
+                onClick={() => navigate('/shop/cart')}
+              >
+                {t('product.goToCart')}
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
-  )
+  );
 }

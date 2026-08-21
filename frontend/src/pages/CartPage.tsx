@@ -1,103 +1,147 @@
-import { Link } from 'react-router-dom'
-import { ProductCard } from '../components/ProductCard'
-import { QuantitySelector } from '../components/QuantitySelector'
-import { useApp } from '../context/AppContext'
-import { useI18n } from '../i18n'
-import { formatCurrency } from '../lib/format'
-import { getLocalizedProductDescription, getLocalizedProductName } from '../lib/localized'
+import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
+import styles from './CartPage.module.css';
+import { useTranslation } from 'react-i18next';
+import { formatCurrency } from '../lib/format';
+import i18n from '../lib/i18n';
+import type { Language } from '../types';
 
 export default function CartPage() {
-  const { cart, recommended, updateCartItem, removeCartItem } = useApp()
-  const { language, t } = useI18n()
+  const { cart, recommended, updateCartItem, removeCartItem } = useApp();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const language = i18n.language as Language;
 
   if (!cart || cart.items.length === 0) {
     return (
-      <section className="placeholder-card">
-        <span className="eyebrow">{t('cart.badge')}</span>
-        <h1>{t('cart.emptyTitle')}</h1>
-        <p>{t('cart.emptyDescription')}</p>
-        <Link className="primary-button" to="/shop">{t('cart.goToShop')}</Link>
-      </section>
-    )
+      <div className={styles.empty}>
+        <button className={styles.back} onClick={() => navigate('/shop')}>{t('common.back')}</button>
+        <div className={styles.emptyContent}>
+          <div className={styles.emptyIcon}>🛒</div>
+          <h2 className={styles.emptyTitle}>{t('cart.empty')}</h2>
+          <p className={styles.emptyText}>{t('cart.emptyHint')}</p>
+          <button className={styles.shopBtn} onClick={() => navigate('/shop')}>
+            {t('cart.goToShop')}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="page-stack">
-      <section className="section-heading">
-        <div>
-          <span className="eyebrow">{t('cart.badge')}</span>
-          <h1>{t('cart.title')}</h1>
-        </div>
-      </section>
+    <div className={styles.page}>
+      <div className={styles.header}>
+        <button className={styles.back} onClick={() => navigate(-1)}>{t('cart.back')}</button>
+        <h1 className={styles.title}>{t('cart.title')}</h1>
+        <span className={styles.count}>
+          {t('cart.itemCount', { count: cart.items.length })}
+        </span>
+      </div>
 
-      <section className="cart-list">
-        {cart.items.map((item) => (
-          <article key={item.id} className="cart-card">
-            <img className="cart-card__image" src={item.productCity.image || '/favicon.svg'} alt={getLocalizedProductName(item.productCity, language)} />
-            <div className="cart-card__content">
-              <div className="cart-card__header">
-                <div>
-                  <h2>{getLocalizedProductName(item.productCity, language)}</h2>
-                  <p>{getLocalizedProductDescription(item.productCity, language)}</p>
-                </div>
-                <button className="ghost-button" type="button" onClick={() => void removeCartItem(item.id)}>
-                  {t('cart.remove')}
+      <div className={styles.items}>
+        {cart.items.map((item) => {
+          const pc = item.productCity;
+          const step = pc.quantityStep || 1;
+          const minimum = pc.minimumQuantity || step;
+          const maximum = pc.maximumQuantity;
+          const nextDown = item.quantity - step;
+          const nextUp = item.quantity + step;
+
+          return (
+            <div key={item.id} className={styles.item}>
+              <div className={styles.itemImg}>
+                {pc.image ? (
+                  <img src={pc.image} alt={pc.name} />
+                ) : (
+                  <span>📦</span>
+                )}
+              </div>
+              <div className={styles.itemInfo}>
+                <p className={styles.itemName}>{pc.name}</p>
+                <p className={styles.itemPrice}>
+                  {pc.unit
+                    ? t('cart.pricePerUnit', { price: formatCurrency(pc.price, language), unit: pc.unit })
+                    : formatCurrency(pc.price, language)}
+                </p>
+                <p className={styles.itemTotal}>
+                  {t('cart.itemTotal', { total: formatCurrency(item.lineTotal, language) })}
+                </p>
+              </div>
+              <div className={styles.itemActions}>
+                <button
+                  className={styles.qtyBtn}
+                  onClick={() =>
+                    nextDown >= minimum
+                      ? void updateCartItem(item.id, nextDown)
+                      : void removeCartItem(item.id)
+                  }
+                >
+                  {nextDown < minimum ? '🗑' : '−'}
+                </button>
+                <span className={styles.qty}>{item.quantity}</span>
+                <button
+                  className={styles.qtyBtn}
+                  onClick={() => void updateCartItem(item.id, nextUp)}
+                  disabled={maximum !== undefined && nextUp > maximum}
+                >
+                  +
                 </button>
               </div>
-              <QuantitySelector
-                minimum={item.productCity.minimumQuantity}
-                step={item.productCity.quantityStep}
-                maximum={item.productCity.maximumQuantity}
-                unit={item.productCity.unit}
-                unitTranslations={item.productCity.unitTranslations}
-                value={item.quantity}
-                onChange={(value) => {
-                  void updateCartItem(item.id, value)
-                }}
-              />
-              <div className="cart-card__footer">
-                <span>{t('cart.perUnit', { price: formatCurrency(item.productCity.price, language) })}</span>
-                <strong>{formatCurrency(item.lineTotal, language)}</strong>
-              </div>
             </div>
-          </article>
-        ))}
-      </section>
+          );
+        })}
+      </div>
 
-      <section className="summary-card">
-        <div className="summary-row">
-          <span>{t('cart.goodsTotal')}</span>
-          <strong>{formatCurrency(cart.subtotal, language)}</strong>
+      <div className={styles.summary}>
+        <div className={styles.summaryRow}>
+          <span>{t('cart.items', { count: cart.items.length })}</span>
+          <span>{formatCurrency(cart.subtotal, language)}</span>
         </div>
-        <div className="summary-row muted">
-          <span>{t('cart.discounts')}</span>
-          <span>{formatCurrency(cart.discount, language)}</span>
+        <div className={`${styles.summaryRow} ${styles.placeholder}`}>
+          <span>{t('cart.discount')}</span>
+          <span className={styles.soon}>{formatCurrency(cart.discount, language)}</span>
         </div>
-        <div className="summary-row muted">
+        <div className={`${styles.summaryRow} ${styles.placeholder}`}>
           <span>{t('cart.delivery')}</span>
-          <span>{formatCurrency(cart.deliveryFee, language)}</span>
+          <span className={styles.soon}>{formatCurrency(cart.deliveryFee, language)}</span>
         </div>
-        <div className="summary-row summary-row--total">
-          <span>{t('cart.total')}</span>
-          <strong>{formatCurrency(cart.total, language)}</strong>
+        <div className={`${styles.summaryRow} ${styles.total}`}>
+          <span>{t('cart.orderTotal')}</span>
+          <span>{formatCurrency(cart.total, language)}</span>
         </div>
-      </section>
 
-      {recommended.length > 0 ? (
-        <section className="page-stack">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">{t('cart.recommendedBadge')}</span>
-              <h2>{t('cart.recommendedTitle')}</h2>
-            </div>
-          </div>
-          <div className="product-grid">
-            {recommended.map((product) => (
-              <ProductCard key={product.productCityId} product={product} />
+        <button className={styles.checkoutBtn} disabled>
+          {t('cart.checkout')}
+        </button>
+        <p className={styles.checkoutNote}>
+          {t('cart.checkoutNote')}
+        </p>
+      </div>
+
+      {recommended && recommended.length > 0 && (
+        <div className={styles.recommended}>
+          <h3 className={styles.recTitle}>{t('cart.recommended')}</h3>
+          <div className={styles.recList}>
+            {recommended.map((p) => (
+              <div
+                key={p.productCityId}
+                className={styles.recCard}
+                onClick={() => navigate(`/shop/product/${p.id}`)}
+              >
+                <div className={styles.recImg}>
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} />
+                  ) : (
+                    <span>📦</span>
+                  )}
+                </div>
+                <p className={styles.recName}>{p.name}</p>
+                <p className={styles.recPrice}>{formatCurrency(p.price, language)}</p>
+              </div>
             ))}
           </div>
-        </section>
-      ) : null}
+        </div>
+      )}
     </div>
-  )
+  );
 }

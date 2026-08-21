@@ -1,29 +1,30 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useApp } from '../context/AppContext'
-import { useI18n } from '../i18n'
-import { getLocalizedCityName } from '../lib/localized'
-import styles from './CitySelectPage.module.css'
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
+import { getLocalizedCityName } from '../lib/localized';
+import styles from './CitySelectPage.module.css';
+import { useTranslation } from 'react-i18next';
+import i18n from '../lib/i18n';
 
 export default function CitySelectPage() {
-  const { cities, loading, selectCity, user } = useApp()
-  const { language, t } = useI18n()
-  const navigate = useNavigate()
-  const [selecting, setSelecting] = useState<number | null>(null)
+  const { cities, loading, selectCity, user } = useApp();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const [selecting, setSelecting] = useState<number | null>(null);
 
   useEffect(() => {
     if (user?.selectedCityId) {
-      navigate('/shop', { replace: true })
+      navigate('/shop', { replace: true });
     }
-  }, [navigate, user])
+  }, [navigate, user]);
 
   async function handleSelect(cityId: number) {
-    setSelecting(cityId)
+    setSelecting(cityId);
     try {
-      await selectCity(cityId)
-      navigate('/shop', { replace: true })
+      await selectCity(cityId);
+      navigate('/shop', { replace: true });
     } finally {
-      setSelecting(null)
+      setSelecting(null);
     }
   }
 
@@ -31,8 +32,8 @@ export default function CitySelectPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.icon}>📍</div>
-        <h1 className={styles.title}>{t('cityPicker.title')}</h1>
-        <p className={styles.subtitle}>{t('cityPicker.helper')}</p>
+        <h1 className={styles.title}>{t('city.title')}</h1>
+        <p className={styles.subtitle}>{t('city.subtitle')}</p>
       </div>
 
       {loading ? (
@@ -49,12 +50,12 @@ export default function CitySelectPage() {
               disabled={selecting !== null}
               type="button"
             >
-              <span className={styles.cityName}>{getLocalizedCityName(city, language)}</span>
+              <span className={styles.cityName}>{getLocalizedCityName(city, i18n.language as 'ru' | 'en')}</span>
               <span className={styles.arrow}>→</span>
             </button>
           ))}
         </div>
       )}
     </div>
-  )
+  );
 }

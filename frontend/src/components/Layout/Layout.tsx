@@ -1,39 +1,42 @@
-import { useEffect } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useApp } from '../../context/AppContext'
-import { useI18n } from '../../i18n'
-import { CityPicker } from '../CityPicker'
-import styles from './Layout.module.css'
+import { useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useApp } from '../../context/AppContext';
+import { CityPicker } from '../CityPicker';
+import styles from './Layout.module.css';
+import { useTranslation } from 'react-i18next';
 
 const NAV_ITEMS = [
-  { path: '/shop', icon: '🛍', labelKey: 'nav.shop' },
-  { path: '/casino', icon: '🎰', labelKey: 'nav.casino' },
-  { path: '/balance', icon: '💰', labelKey: 'nav.balance' },
+  { path: '/home', icon: '🏠', labelKey: 'nav.home' },
+  { path: '/catalog', icon: '🗂', labelKey: 'nav.catalog' },
+  { path: '/shop/cart', icon: '🛒', labelKey: 'nav.cart', exact: true },
   { path: '/profile', icon: '👤', labelKey: 'nav.profile' },
-  { path: '/support', icon: '🎧', labelKey: 'nav.support' },
-] as const
+];
 
-export function Layout() {
-  const { error, loading, setError, user } = useApp()
-  const { t } = useI18n()
-  const navigate = useNavigate()
-  const location = useLocation()
+export default function Layout() {
+  const { error, loading, setError, user, cart } = useApp();
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (!loading && user && !user.selectedCityId) {
-      navigate('/select-city', { replace: true })
+      navigate('/select-city', { replace: true });
     }
-  }, [loading, navigate, user])
+  }, [loading, navigate, user]);
 
   if (loading) {
     return (
       <div className={styles.loading}>
         <div className={styles.spinner} aria-hidden="true" />
       </div>
-    )
+    );
   }
 
-  const activeTab = NAV_ITEMS.find((item) => location.pathname.startsWith(item.path))?.path
+  const cartCount = cart?.items.length ?? 0;
+
+  const activeTab = NAV_ITEMS.find((item) =>
+    item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)
+  )?.path;
 
   return (
     <div className={styles.root}>
@@ -58,12 +61,17 @@ export function Layout() {
             onClick={() => navigate(item.path)}
             type="button"
           >
-            <span className={styles.navIcon}>{item.icon}</span>
+            <span className={styles.navIconWrap}>
+              <span className={styles.navIcon}>{item.icon}</span>
+              {item.labelKey === 'nav.cart' && cartCount > 0 && (
+                <span className={styles.navBadge}>{cartCount}</span>
+              )}
+            </span>
             <span className={styles.navLabel}>{t(item.labelKey)}</span>
           </button>
         ))}
       </nav>
       <CityPicker />
     </div>
-  )
+  );
 }

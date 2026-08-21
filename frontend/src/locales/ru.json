@@ -1,0 +1,119 @@
+{
+  "nav": {
+    "home": "Главная",
+    "catalog": "Каталог",
+    "shop": "Магазин",
+    "casino": "Казино",
+    "balance": "Баланс",
+    "cart": "Корзина",
+    "profile": "Профиль",
+    "support": "Поддержка"
+  },
+  "home": {
+    "title": "Магазин",
+    "featured": "🔥 Рекомендуем",
+    "newest": "✨ Новинки",
+    "popular": "⭐ Популярное",
+    "viewAll": "Все →",
+    "categories": "Категории",
+    "searchPlaceholder": "🔍 Поиск товаров..."
+  },
+  "catalog": {
+    "title": "Каталог",
+    "allCategories": "Все",
+    "sort": "Сортировка",
+    "sortNewest": "Новинки",
+    "sortPriceAsc": "Цена ↑",
+    "sortPriceDesc": "Цена ↓",
+    "sortPopular": "Популярные",
+    "empty": "Товары не найдены",
+    "searchPlaceholder": "🔍 Поиск товаров..."
+  },
+  "shop": {
+    "title": "Магазин",
+    "searchPlaceholder": "🔍 Поиск товаров...",
+    "allCategories": "Все",
+    "loading": "Загрузка...",
+    "empty": "Товары не найдены"
+  },
+  "product": {
+    "back": "← Назад",
+    "inStock": "В наличии: {{count}} {{unit}}",
+    "outOfStock": "Нет в наличии",
+    "quantity": "Количество",
+    "total": "Итого",
+    "addToCart": "🛒 Добавить в корзину",
+    "updateCart": "🛒 Обновить корзину",
+    "added": "✓ Добавлено",
+    "adding": "Добавляем...",
+    "goToCart": "Перейти в корзину →",
+    "notInCity": "Товар недоступен в выбранном городе",
+    "notFound": "Товар не найден",
+    "related": "Похожие товары"
+  },
+  "cart": {
+    "title": "Корзина",
+    "back": "←",
+    "empty": "Корзина пуста",
+    "emptyHint": "Добавьте товары из каталога",
+    "goToShop": "Перейти в магазин",
+    "itemCount_one": "{{count}} товар",
+    "itemCount_few": "{{count}} товара",
+    "itemCount_many": "{{count}} товаров",
+    "itemCount_other": "{{count}} товаров",
+    "pricePerUnit": "{{price}} / {{unit}}",
+    "itemTotal": "Итого: {{total}}",
+    "items": "Товары ({{count}})",
+    "discount": "Скидка",
+    "delivery": "Доставка",
+    "orderTotal": "Итого",
+    "soon": "— (скоро)",
+    "checkout": "💳 Оформить заказ (скоро)",
+    "checkoutNote": "Оплата будет доступна в следующей версии",
+    "recommended": "🔥 Вам может понравиться"
+  },
+  "profile": {
+    "title": "Профиль",
+    "defaultName": "Пользователь",
+    "telegramId": "Telegram ID",
+    "city": "Город",
+    "cityNotSelected": "Не выбран",
+    "balance": "Баланс",
+    "balanceSoon": "Баланс будет доступен позже",
+    "orders": "Мои заказы",
+    "ordersSoon": "История заказов будет доступна позже",
+    "language": "Язык",
+    "selectCity": "📍 Выберите город",
+    "cancel": "Отмена",
+    "languageRu": "🇷🇺 Русский",
+    "languageEn": "🇬🇧 English"
+  },
+  "city": {
+    "title": "Выберите город",
+    "subtitle": "Каталог товаров зависит от выбранного города",
+    "loading": "Загрузка..."
+  },
+  "balance": {
+    "title": "Баланс",
+    "text": "Баланс будет доступен позже",
+    "soon": "Скоро"
+  },
+  "casino": {
+    "title": "Казино",
+    "text": "Казино будет доступно позже",
+    "soon": "Скоро"
+  },
+  "support": {
+    "title": "Поддержка",
+    "text": "Поддержка будет доступна позже",
+    "soon": "Скоро"
+  },
+  "common": {
+    "loading": "Загрузка...",
+    "soon": "Скоро",
+    "back": "← Назад",
+    "addToCart": "В корзину",
+    "outOfStock": "Нет в наличии",
+    "close": "Закрыть"
+  }
+}
