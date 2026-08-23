@@ -30,7 +30,8 @@ services:
         value: "false"
 
   # Frontend Static Site
-  - type: static
+  - type: web
+    runtime: static
     name: telegram-shop-frontend
     buildCommand: npm install && npm run build --workspace frontend
     staticPublishPath: frontend/dist
