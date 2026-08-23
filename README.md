@@ -1,5 +1,7 @@
 # Telegram Shop 🛍
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/anyya420-dev/Telegram-shop)
+
 Telegram Web App магазин с каталогом по городам, гибкими правилами количества, рабочей корзиной и русско-английской локализацией интерфейса.
 
 ## Стек
