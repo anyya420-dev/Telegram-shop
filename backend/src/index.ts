@@ -20,9 +20,22 @@ import wishlistRouter from './routes/wishlist.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3001)
-const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
 
-app.use(cors({ origin: frontendUrl }))
+const allowedOrigins = [
+  process.env.FRONTEND_URL ?? 'https://telegram-shop-378j.onrender.com',
+  'http://localhost:5173',
+  'http://localhost:4173',
+]
+
+app.use(cors({
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // allow requests with no origin (e.g. mobile apps, curl, Telegram WebApp)
+    if (!origin) return callback(null, true)
+    if (allowedOrigins.includes(origin)) return callback(null, true)
+    return callback(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+}))
 app.use(express.json())
 
 app.use('/api/session', sessionRouter)
