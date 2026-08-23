@@ -42,6 +42,10 @@ app.use('/api/wishlist', wishlistRouter)
 app.use('/api/delivery', deliveryRouter)
 app.use('/api/admin', adminRouter)
 
+app.get('/', (_request, response) => {
+  response.json({ status: 'ok', message: 'Backend is running' })
+})
+
 app.get('/api/health', (_request, response) => {
   response.json({ status: 'ok' })
 })
