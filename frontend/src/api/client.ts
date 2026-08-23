@@ -107,6 +107,11 @@ export const api = {
     return request<{ order: Order }>(`/orders/${id}/refund-request`, { method: 'POST' })
   },
 
+  // Profile
+  getProfile() {
+    return request<{ user: UserProfile }>('/users/me')
+  },
+
   // Balance
   getBalance() {
     return request<{ balance: Balance }>('/balance')

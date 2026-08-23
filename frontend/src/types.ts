@@ -22,9 +22,12 @@ export type UserProfile = {
   telegramId: string
   username: string | null
   firstName: string
+  lastName?: string | null
   selectedCityId: number | null
   selectedCity: City | null
   language: Language
+  balance?: number | null
+  orderCount?: number | null
 }
 
 export type TelegramIdentity = {

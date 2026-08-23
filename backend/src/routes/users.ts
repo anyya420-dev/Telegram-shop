@@ -12,6 +12,36 @@ import {
 
 const router = Router()
 
+router.get('/me', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
+
+  if (!user) {
+    return
+  }
+
+  const fullUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: {
+      selectedCity: true,
+      balance: true,
+      _count: { select: { orders: true } },
+    },
+  })
+
+  if (!fullUser) {
+    sendError(response, 404, 'user_not_found', 'User not found')
+    return
+  }
+
+  response.json({
+    user: {
+      ...mapUser(fullUser),
+      balance: fullUser.balance ? fullUser.balance.amount : 0,
+      orderCount: fullUser._count.orders,
+    },
+  })
+})
+
 router.patch('/city', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
 
