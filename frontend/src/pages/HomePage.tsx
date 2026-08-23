@@ -42,7 +42,11 @@ export default function HomePage() {
           )}
         </div>
         <button className={styles.cartBtn} onClick={() => navigate('/shop/cart')}>
-          🛒
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 10a4 4 0 0 1-8 0" />
+          </svg>
           {cartCount > 0 && <span className={styles.cartBadge}>{cartCount}</span>}
         </button>
       </div>
@@ -59,7 +63,12 @@ export default function HomePage() {
 
       {!user?.selectedCityId ? (
         <div className={styles.noCityWrap}>
-          <div className={styles.noCityIcon}>📍</div>
+          <div className={styles.noCityIcon}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+          </div>
           <p className={styles.noCityText}>{t('city.subtitle')}</p>
           <button className={styles.noCityBtn} onClick={openCityPicker}>
             {t('profile.selectCity')}

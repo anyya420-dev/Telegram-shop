@@ -31,7 +31,12 @@ export default function CitySelectPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <div className={styles.icon}>📍</div>
+        <div className={styles.icon}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+            <circle cx="12" cy="10" r="3" />
+          </svg>
+        </div>
         <h1 className={styles.title}>{t('city.title')}</h1>
         <p className={styles.subtitle}>{t('city.subtitle')}</p>
       </div>

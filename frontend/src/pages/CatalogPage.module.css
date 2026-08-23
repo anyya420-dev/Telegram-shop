@@ -77,7 +77,7 @@
 .catBtn.catActive {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0a0a0f;
+  color: #080810;
   font-weight: 700;
 }
 
@@ -107,8 +107,16 @@
 }
 
 .emptyIcon {
-  font-size: 48px;
-  margin-bottom: 12px;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  margin: 0 auto 14px;
 }
 
 .grid {

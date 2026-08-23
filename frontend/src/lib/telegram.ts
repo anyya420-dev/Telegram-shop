@@ -31,8 +31,8 @@ export function getTelegramContext() {
   if (webApp) {
     webApp.ready()
     webApp.expand()
-    webApp.setHeaderColor?.('#0b1020')
-    webApp.setBackgroundColor?.('#06090f')
+    webApp.setHeaderColor?.('#080810')
+    webApp.setBackgroundColor?.('#080810')
   }
 
   return {

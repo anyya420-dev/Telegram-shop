@@ -5,38 +5,69 @@
 }
 
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #111118;
-  --bg-card: #16161f;
-  --bg-card-hover: #1c1c28;
-  --bg-input: #1a1a24;
-  --border: #2a2a38;
-  --border-light: #353548;
+  /* Backgrounds */
+  --bg-primary: #080810;
+  --bg-secondary: #0f0f1a;
+  --bg-card: #14141f;
+  --bg-card-hover: #1a1a28;
+  --bg-input: #181825;
+  --bg-surface: #101018;
+
+  /* Borders */
+  --border: #252535;
+  --border-light: #2e2e42;
+  --border-accent: rgba(201, 168, 76, 0.25);
+
+  /* Champagne gold accent */
   --accent: #c9a84c;
+  --accent-light: #d4b866;
   --accent-dark: #a8893e;
-  --accent-glow: rgba(201, 168, 76, 0.15);
-  --accent-subtle: rgba(201, 168, 76, 0.08);
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --accent-glow: rgba(201, 168, 76, 0.12);
+  --accent-subtle: rgba(201, 168, 76, 0.07);
+
+  /* Deep burgundy secondary */
+  --burgundy: #7d2a3c;
+  --burgundy-subtle: rgba(125, 42, 60, 0.15);
+
+  /* Text */
+  --text-primary: #f0f0f8;
+  --text-secondary: #8a8aa8;
+  --text-muted: #3e3e58;
+  --text-accent: #c9a84c;
+
+  /* Semantic */
+  --success: #2d9e6e;
+  --success-bg: rgba(45, 158, 110, 0.10);
+  --danger: #c0394a;
+  --danger-bg: rgba(192, 57, 74, 0.10);
+  --warning: #c49a2a;
+
+  /* Layout */
   --nav-height: calc(64px + env(safe-area-inset-bottom, 0px));
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --content-padding: 16px;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+
+  /* Shadows */
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
+
 
 html, body {
   height: 100%;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif;
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
 }
 
@@ -60,9 +91,11 @@ button {
   font-size: inherit;
 }
 
-input {
+input, textarea {
   font-family: inherit;
   font-size: inherit;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 a {
@@ -77,4 +110,18 @@ img {
 
 ::-webkit-scrollbar {
   width: 0;
+}
+
+/* Shared animation */
+@keyframes shimmer {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -46,7 +46,12 @@ export default function ProfilePage() {
       <div className={styles.page}>
         <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
         <div className={styles.placeholder}>
-          <span className={styles.placeholderIcon}>⏳</span>
+          <span className={styles.placeholderIcon}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </span>
           <p>{t('common.loading', 'Loading...')}</p>
         </div>
       </div>
@@ -58,7 +63,13 @@ export default function ProfilePage() {
       <div className={styles.page}>
         <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
         <div className={styles.placeholder}>
-          <span className={styles.placeholderIcon}>⚠️</span>
+          <span className={styles.placeholderIcon}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </span>
           <p>{profileError}</p>
         </div>
       </div>
@@ -70,7 +81,12 @@ export default function ProfilePage() {
       <div className={styles.page}>
         <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
         <div className={styles.placeholder}>
-          <span className={styles.placeholderIcon}>👤</span>
+          <span className={styles.placeholderIcon}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+            </svg>
+          </span>
           <p>{t('profile.defaultName')}</p>
         </div>
       </div>
@@ -168,7 +184,11 @@ export default function ProfilePage() {
         {profile.orderCount != null ? (
           profile.orderCount === 0 ? (
             <div className={styles.placeholder}>
-              <span className={styles.placeholderIcon}>📦</span>
+              <span className={styles.placeholderIcon}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                </svg>
+              </span>
               <p>{t('profile.ordersEmpty')}</p>
             </div>
           ) : (
@@ -182,7 +202,11 @@ export default function ProfilePage() {
           )
         ) : orders.length === 0 ? (
           <div className={styles.placeholder}>
-            <span className={styles.placeholderIcon}>📦</span>
+            <span className={styles.placeholderIcon}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              </svg>
+            </span>
             <p>{t('profile.ordersEmpty')}</p>
           </div>
         ) : (

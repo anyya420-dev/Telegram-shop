@@ -62,7 +62,13 @@ export default function CartPage() {
       <div className={styles.empty}>
         <button className={styles.back} onClick={() => navigate('/shop')}>{t('common.back')}</button>
         <div className={styles.emptyContent}>
-          <div className={styles.emptyIcon}>🛒</div>
+          <div className={styles.emptyIcon}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <path d="M16 10a4 4 0 0 1-8 0" />
+            </svg>
+          </div>
           <h2 className={styles.emptyTitle}>{t('cart.empty')}</h2>
           <p className={styles.emptyText}>{t('cart.emptyHint')}</p>
           <button className={styles.shopBtn} onClick={() => navigate('/shop')}>
@@ -98,7 +104,9 @@ export default function CartPage() {
                 {pc.image ? (
                   <img src={pc.image} alt={pc.name} />
                 ) : (
-                  <span>📦</span>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  </svg>
                 )}
               </div>
               <div className={styles.itemInfo}>
@@ -220,7 +228,9 @@ export default function CartPage() {
                   {p.image ? (
                     <img src={p.image} alt={p.name} />
                   ) : (
-                    <span>📦</span>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    </svg>
                   )}
                 </div>
                 <p className={styles.recName}>{p.name}</p>
