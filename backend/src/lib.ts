@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import rateLimit from 'express-rate-limit'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-process.env.DATABASE_URL ??= 'file:./prisma/dev.db'
+process.env.DATABASE_URL ??= 'postgresql://localhost/dev'
 
 export const prisma = new PrismaClient()
 export const DEMO_TELEGRAM_USER = {
