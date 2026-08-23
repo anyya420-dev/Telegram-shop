@@ -1,3 +1,7 @@
+databases:
+  - name: narcos-shop-db2.0
+    plan: free
+
 services:
   # Backend Web Service
   - type: web
@@ -12,11 +16,9 @@ services:
       - key: PORT
         value: 10000
       - key: DATABASE_URL
-        # Set this to an absolute path on the persistent disk, e.g.:
-        # file:/opt/render/project/data/app.db
-        # Or configure a Render Disk and mount it at /data, then use:
-        # file:/data/app.db
-        sync: false
+        fromDatabase:
+          name: narcos-shop-db2.0
+          property: connectionString
       - key: SESSION_SECRET
         sync: false
       - key: TELEGRAM_BOT_TOKEN
