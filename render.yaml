@@ -24,10 +24,9 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: FRONTEND_URL
-        # Set to your Render static site URL, e.g. https://telegram-shop-frontend.onrender.com
-        sync: false
+        value: https://telegram-shop-378j.onrender.com
       - key: ALLOW_DEMO_MODE
-        value: "false"
+        value: "true"
 
   # Frontend Static Site
   - type: web
@@ -37,8 +36,7 @@ services:
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_URL
-        # Set to your backend URL, e.g. https://telegram-shop-backend.onrender.com/api
-        sync: false
+        value: https://telegram-shop-backend.onrender.com/api
     routes:
       - type: rewrite
         source: /*
