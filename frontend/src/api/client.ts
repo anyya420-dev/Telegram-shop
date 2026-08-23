@@ -15,7 +15,9 @@ import type {
   WishlistItem,
 } from '../types'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api'
+// In production VITE_API_URL is baked in by Vite at build time (set in render.yaml).
+// In local dev without the env var, fall back to '' so Vite's proxy forwards /api/* to localhost:3001.
+const API_URL: string = import.meta.env.VITE_API_URL ?? ''
 let sessionToken: string | null = null
 
 export class ApiError extends Error {

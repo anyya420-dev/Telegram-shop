@@ -226,5 +226,33 @@
     "filter": "Filter",
     "createDiscount": "Create discount code",
     "minOrder": "Min order"
+  },
+  "errors": {
+    "request_failed": "The request could not be completed.",
+    "network_error": "Connection problem. Check your network and try again.",
+    "too_many_requests": "Too many requests. Please try again later.",
+    "invalid_session_token": "The session is invalid. Reopen the shop.",
+    "user_not_found": "User profile was not found.",
+    "telegram_bot_token_required": "The Telegram server is temporarily unavailable.",
+    "telegram_verification_failed": "Telegram session verification failed.",
+    "telegram_init_data_required": "Telegram Web App is required to open the shop.",
+    "city_required": "The city must be provided correctly.",
+    "city_not_found": "The selected city was not found.",
+    "product_city_required": "The product selection is invalid.",
+    "product_not_found": "The product was not found for the selected city.",
+    "product_unavailable": "The product is currently unavailable.",
+    "city_mismatch": "Choose the same city as the product first.",
+    "quantity_invalid": "The quantity does not match the product rules.",
+    "stock_exceeded": "The requested quantity exceeds stock.",
+    "cart_item_required": "The cart item selection is invalid.",
+    "cart_item_not_found": "The cart item was not found.",
+    "shop_load_failed": "Failed to load the shop.",
+    "catalog_refresh_failed": "Failed to refresh the catalog.",
+    "product_load_failed": "Failed to load the product.",
+    "cart_update_failed": "Failed to update the cart.",
+    "language_update_failed": "Failed to save the language.",
+    "checkout_failed": "Failed to place the order.",
+    "orders_fetch_failed": "Failed to load orders.",
+    "cart_empty": "Cart is empty."
   }
 }

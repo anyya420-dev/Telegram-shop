@@ -232,5 +232,33 @@
     "filter": "Фильтр",
     "createDiscount": "Создать промокод",
     "minOrder": "Мин. заказ"
+  },
+  "errors": {
+    "request_failed": "Не удалось выполнить запрос.",
+    "network_error": "Проблема с соединением. Проверьте сеть и попробуйте снова.",
+    "too_many_requests": "Слишком много запросов. Попробуйте позже.",
+    "invalid_session_token": "Сессия недействительна. Откройте магазин заново.",
+    "user_not_found": "Профиль пользователя не найден.",
+    "telegram_bot_token_required": "Сервер Telegram временно недоступен.",
+    "telegram_verification_failed": "Не удалось подтвердить Telegram-сессию.",
+    "telegram_init_data_required": "Для открытия магазина требуется Telegram Web App.",
+    "city_required": "Город должен быть указан корректно.",
+    "city_not_found": "Выбранный город не найден.",
+    "product_city_required": "Товар выбран некорректно.",
+    "product_not_found": "Товар не найден для выбранного города.",
+    "product_unavailable": "Товар сейчас недоступен.",
+    "city_mismatch": "Сначала выберите тот же город, что и у товара.",
+    "quantity_invalid": "Количество не соответствует правилам товара.",
+    "stock_exceeded": "Запрошенное количество превышает остаток.",
+    "cart_item_required": "Позиция корзины выбрана некорректно.",
+    "cart_item_not_found": "Позиция корзины не найдена.",
+    "shop_load_failed": "Не удалось загрузить магазин.",
+    "catalog_refresh_failed": "Не удалось обновить каталог.",
+    "product_load_failed": "Не удалось загрузить товар.",
+    "cart_update_failed": "Не удалось обновить корзину.",
+    "language_update_failed": "Не удалось сохранить язык.",
+    "checkout_failed": "Не удалось оформить заказ.",
+    "orders_fetch_failed": "Не удалось загрузить заказы.",
+    "cart_empty": "Корзина пуста."
   }
 }
