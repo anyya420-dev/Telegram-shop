@@ -43,7 +43,7 @@ export default function ProductCard({ product, onClick }: Props) {
           <div className={styles.outOfStock}>{t('product.outOfStock')}</div>
         )}
         {product.isRecommended && (
-          <div className={styles.badge}>{t('product.featured', 'TOP')}</div>
+          <div className={styles.badge}>{t('product.featured', { defaultValue: 'TOP' })}</div>
         )}
       </div>
       <div className={styles.info}>

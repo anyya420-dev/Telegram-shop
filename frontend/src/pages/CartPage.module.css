@@ -158,11 +158,11 @@
   opacity: 0.6;
 }
 
-.total {
+.summaryRow.total {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
-  border-bottom: none !important;
+  border-bottom: none;
   padding-top: 10px;
   margin-top: 4px;
 }
