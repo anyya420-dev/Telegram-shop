@@ -6,17 +6,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 12px;
+  padding: 20px 16px 14px;
 }
 
 .topLeft {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .logo {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.5px;
@@ -25,11 +25,14 @@
 .cityBadge {
   font-size: 11px;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.1px;
 }
 
 .cartBtn {
   position: relative;
-  font-size: 22px;
   width: 42px;
   height: 42px;
   display: flex;
@@ -38,6 +41,12 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  transition: border-color 0.15s;
+}
+
+.cartBtn:active {
+  border-color: var(--accent);
 }
 
 .cartBadge {
@@ -58,19 +67,19 @@
 }
 
 .searchForm {
-  padding: 0 16px 16px;
+  padding: 0 16px 20px;
 }
 
 .searchInput {
   width: 100%;
-  padding: 12px 16px;
+  padding: 11px 16px;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   outline: none;
   transition: border-color 0.15s;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .searchInput::placeholder {
@@ -78,30 +87,11 @@
 }
 
 .searchInput:focus {
-  border-color: var(--accent);
-}
-
-.loadingWrap {
-  display: flex;
-  justify-content: center;
-  margin-top: 80px;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  border-color: var(--border-accent);
 }
 
 .section {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .sectionHeader {
@@ -112,15 +102,17 @@
 }
 
 .sectionTitle {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.2px;
 }
 
 .viewAll {
   font-size: 12px;
   color: var(--accent);
   font-weight: 600;
+  letter-spacing: 0.1px;
 }
 
 .catScroll {
@@ -145,11 +137,11 @@
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition: border-color 0.15s, color 0.15s;
 }
 
 .catChip:active {
-  border-color: var(--accent);
+  border-color: var(--border-accent);
   color: var(--accent);
 }
 
@@ -167,7 +159,7 @@
 
 .hCard {
   flex-shrink: 0;
-  width: 150px;
+  width: 148px;
 }
 
 .grid {
@@ -182,26 +174,43 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 32px;
+  padding: 64px 32px;
   text-align: center;
+  gap: 12px;
 }
 
 .noCityIcon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  margin-bottom: 4px;
 }
 
 .noCityText {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-secondary);
-  margin-bottom: 20px;
+  line-height: 1.5;
+  max-width: 220px;
 }
 
 .noCityBtn {
-  padding: 12px 24px;
+  margin-top: 4px;
+  padding: 12px 28px;
   background: var(--accent);
-  color: white;
-  border-radius: var(--radius-md);
-  font-size: 15px;
-  font-weight: 600;
+  color: #080810;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  transition: opacity 0.15s;
+}
+
+.noCityBtn:active {
+  opacity: 0.8;
 }

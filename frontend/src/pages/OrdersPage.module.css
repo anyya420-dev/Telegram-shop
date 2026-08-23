@@ -56,11 +56,19 @@
 }
 
 .emptyIcon {
-  font-size: 56px;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
 }
 
 .emptyText {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-secondary);
   text-align: center;
 }
@@ -69,11 +77,16 @@
   margin-top: 8px;
   padding: 12px 28px;
   background: var(--accent);
-  color: white;
+  color: #080810;
   border-radius: var(--radius-lg);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.shopBtn:active {
+  opacity: 0.8;
 }
 
 .list {
@@ -83,16 +96,16 @@
 }
 
 .card {
-  background: var(--surface);
+  background: var(--bg-card);
   border-radius: var(--radius-lg);
   padding: 16px;
   cursor: pointer;
   border: 1px solid var(--border);
-  transition: opacity 0.15s;
+  transition: border-color 0.15s;
 }
 
 .card:active {
-  opacity: 0.7;
+  border-color: var(--border-accent);
 }
 
 .cardTop {
@@ -117,12 +130,12 @@
   color: var(--text-secondary);
 }
 
-.status_pending { background: #fff3e0; color: #e65100; }
-.status_confirmed { background: #e3f2fd; color: #1565c0; }
-.status_processing { background: #f3e5f5; color: #6a1b9a; }
-.status_ready { background: #e8f5e9; color: #2e7d32; }
-.status_delivered { background: #e8f5e9; color: #1b5e20; }
-.status_cancelled { background: #fce4ec; color: #b71c1c; }
+.status_pending { background: rgba(230, 130, 0, 0.15); color: #e6a040; }
+.status_confirmed { background: rgba(60, 130, 220, 0.15); color: #7ab4f0; }
+.status_processing { background: rgba(150, 80, 200, 0.15); color: #c085f0; }
+.status_ready { background: rgba(45, 158, 110, 0.15); color: #6fd4a8; }
+.status_delivered { background: rgba(45, 158, 110, 0.15); color: #5ec89a; }
+.status_cancelled { background: rgba(192, 57, 74, 0.15); color: #f87171; }
 
 .cardItems {
   display: flex;

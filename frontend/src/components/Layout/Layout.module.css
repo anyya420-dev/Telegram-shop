@@ -13,6 +13,29 @@
   padding-bottom: var(--nav-height);
 }
 
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 16px 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+  border: 1px solid rgba(192, 57, 74, 0.3);
+  color: #f87171;
+  font-size: 14px;
+}
+
+.errorBanner button {
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
 .nav {
   position: fixed;
   bottom: 0;
@@ -35,14 +58,27 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   color: var(--text-muted);
   transition: color 0.15s;
   padding: 8px 4px;
+  position: relative;
 }
 
 .navItem.active {
   color: var(--accent);
+}
+
+.navItem.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 0 0 2px 2px;
+  opacity: 0.9;
 }
 
 .navIconWrap {
@@ -52,14 +88,9 @@
   justify-content: center;
 }
 
-.navIcon {
-  font-size: 20px;
-  line-height: 1;
-}
-
 .navBadge {
   position: absolute;
-  top: -5px;
+  top: -6px;
   right: -8px;
   background: var(--danger);
   color: white;
@@ -77,7 +108,7 @@
 .navLabel {
   font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
 }
 
 .loading {
@@ -91,10 +122,10 @@
 .spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid var(--border);
+  border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.9s linear infinite;
 }
 
 @keyframes spin {

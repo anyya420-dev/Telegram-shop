@@ -40,8 +40,13 @@ export default function ShopPage() {
         <button
           className={styles.cartBtn}
           onClick={() => navigate('/shop/cart')}
+          aria-label="Cart"
         >
-          🛒
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 10a4 4 0 0 1-8 0" />
+          </svg>
           {cartCount > 0 && (
             <span className={styles.cartBadge}>{cartCount}</span>
           )}
@@ -85,7 +90,11 @@ export default function ShopPage() {
 
       {products.length === 0 ? (
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}>📦</div>
+          <div className={styles.emptyIcon}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            </svg>
+          </div>
           <p>{t('shop.empty')}</p>
         </div>
       ) : (

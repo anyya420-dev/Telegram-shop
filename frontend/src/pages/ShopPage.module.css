@@ -28,7 +28,6 @@
 
 .cartBtn {
   position: relative;
-  font-size: 24px;
   width: 44px;
   height: 44px;
   display: flex;
@@ -37,6 +36,12 @@
   background: var(--bg-card);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: border-color 0.15s;
+}
+
+.cartBtn:active {
+  border-color: var(--border-accent);
 }
 
 .cartBadge {
@@ -102,7 +107,8 @@
 .catBtn.catActive {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: #080810;
+  font-weight: 700;
 }
 
 .grid {
@@ -138,6 +144,14 @@
 }
 
 .emptyIcon {
-  font-size: 48px;
-  margin-bottom: 12px;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  margin: 0 auto 14px;
 }
