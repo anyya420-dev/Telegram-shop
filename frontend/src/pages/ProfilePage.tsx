@@ -33,7 +33,7 @@ export default function ProfilePage() {
     }
     void loadProfile();
     void fetchOrders();
-  }, []);
+  }, [fetchOrders]);
 
   function handleLanguageChange(lang: Language) {
     void i18n.changeLanguage(lang);
