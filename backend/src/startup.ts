@@ -5,7 +5,7 @@ type StartupLogger = Pick<Console, 'error' | 'info' | 'log'>
 
 export type BackgroundInitializationOptions = {
   seedAdminConfigForFreshInstall: () => Promise<void>
-  initializeTelegramBot: () => Promise<void>
+  initializeTelegramBot: () => Promise<unknown>
   delay?: (ms: number) => Promise<void>
   logger?: StartupLogger
   retryDelayMs?: number
@@ -26,8 +26,9 @@ function wait(ms: number) {
 }
 
 export async function listen(app: Express, port: number, host = '0.0.0.0') {
-  return await new Promise<Server>((resolve) => {
-    const server = app.listen(port, host, () => {
+  return new Promise<Server>((resolve) => {
+    let server!: Server
+    server = app.listen(port, host, () => {
       resolve(server)
     })
   })

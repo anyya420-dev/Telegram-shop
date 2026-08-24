@@ -32,8 +32,14 @@ export const SERVICE_NAME = 'telegram-shop-backend'
  *   4. API routers (each router owns its own auth)
  *   5. JSON 404 + JSON error handler
  */
-export function createApp(options: { allowedOrigins?: readonly string[] } = {}): Express {
+export function createApp(options: {
+  allowedOrigins?: readonly string[]
+  logger?: Pick<Console, 'error' | 'warn'>
+  readinessCheck?: () => Promise<unknown>
+} = {}): Express {
   const allowedOrigins = options.allowedOrigins ?? getAllowedCorsOrigins()
+  const logger = options.logger ?? console
+  const readinessCheck = options.readinessCheck ?? (() => prisma.$queryRaw`SELECT 1`)
   const app = express()
 
   app.disable('x-powered-by')
@@ -44,7 +50,7 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
   app.use(createCorsMiddleware({
     allowedOrigins,
     onRejected: (origin) => {
-      console.warn('[cors] rejected origin', { origin, allowedOrigins })
+      logger.warn('[cors] rejected origin', { origin, allowedOrigins })
     },
   }))
 
@@ -61,7 +67,7 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
     const timestamp = new Date().toISOString()
 
     try {
-      await prisma.$queryRaw`SELECT 1`
+      await readinessCheck()
       response.status(200).json({
         status: 'ok',
         service: SERVICE_NAME,
@@ -71,7 +77,7 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
         },
       })
     } catch (error) {
-      console.error(
+      logger.error(
         '[ready] database readiness check failed',
         error instanceof Error ? error.message : String(error),
       )
@@ -130,7 +136,7 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
       return
     }
 
-    console.error('[http] unhandled error', error instanceof Error ? error.message : String(error))
+    logger.error('[http] unhandled error', error instanceof Error ? error.message : String(error))
     response.status(500).json({ code: 'server_error', message: 'Internal server error' })
   })
 

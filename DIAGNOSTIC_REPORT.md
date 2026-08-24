@@ -415,15 +415,11 @@ Important source path:
 - `/backend/src/index.ts`
 - `await seedAdminConfigForFreshInstall()`
 
-This call happens **before** `app.listen(...)`.
+This call is now scheduled by `startHttpServer()` **after** the HTTP listener binds.
 
-That means backend startup still depends on database connectivity before the HTTP server binds.
+That means `/health` can become reachable immediately even when PostgreSQL is temporarily unavailable.
 
-This is important because the source comments say:
-
-- "Start HTTP server first so Render's health check succeeds immediately."
-
-But the code currently seeds admin config before starting the server, so database failure can still prevent the health endpoint from ever becoming reachable.
+The background startup path now logs database-dependent initialization failures and retries them without blocking Render's port bind.
 
 ---
 
@@ -455,11 +451,11 @@ Source: `/backend/src/app.ts`
 - return HTTP `200` with `database: ok` on success
 - return HTTP `503` with `database: error` on failure
 
-### 9.3 Current limitation
+### 9.3 Current startup behavior
 
-Although readiness endpoints exist, the backend process can still fail before listening if the DB is unreachable during startup seeding.
+Readiness endpoints still report database failure with HTTP `503`, but the backend now binds the HTTP port before any database-dependent startup seeding runs.
 
-So readiness endpoints improve observability **after startup**, but do not yet eliminate database-dependent startup failure.
+So `/health` remains reachable during a transient PostgreSQL outage, while `/ready` and `/api/ready` continue to surface degraded database state until recovery.
 
 ---
 
@@ -560,9 +556,11 @@ Therefore:
 
 ### 12.2 Root cause of local production-like startup failure without DB
 
-The backend startup path executes `seedAdminConfigForFreshInstall()` before `app.listen(...)`.
+The previous backend startup path executed `seedAdminConfigForFreshInstall()` before `app.listen(...)`.
 
-Observed exact startup failure:
+That ordering was a real production reliability problem because a transient database outage could prevent Render from ever observing `/health`. The current branch fixes this by binding the HTTP port first and moving database-dependent initialization into the background with logged retries.
+
+Observed exact startup failure before the fix:
 
 ```text
 Backend startup failed.
@@ -1167,7 +1165,7 @@ This report does **not** claim that production currently works.
 1. Live Render deployment could not be reached from this environment.
 2. It is unknown whether Render is deployed from a commit containing the current branch fixes.
 3. It is unknown whether the live Render dashboard has the required `sync: false` values correctly set.
-4. Backend startup still depends on DB availability before listen because `seedAdminConfigForFreshInstall()` runs before `app.listen(...)`.
+4. Backend startup ordering issue is fixed in the current branch, but live Render deployment of that fix is still unverified from this environment.
 5. There is no existing lint script.
 6. There are no repository CI workflows in `.github/workflows`.
 7. Telegram BotFather / menu-button / Mini App configuration was not directly verifiable from this environment.
@@ -1329,7 +1327,7 @@ However, this investigation also confirmed:
 
 - there is still no live proof from this environment that Render is serving the fixed code
 - there is still no live proof from this environment that dashboard env values are correct
-- backend startup is still DB-dependent before the server begins listening
+- backend startup ordering is fixed in the current branch, but live deployment of that fix could not be confirmed from this environment
 
 So the technically accurate final statement is:
 
