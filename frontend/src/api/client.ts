@@ -75,8 +75,7 @@ async function request<T>(path: string, init?: RequestInit) {
       },
     })
   } catch {
-    const fullUrl = `${API_URL}${path}`
-    console.error('[api] Network error – failed to reach', fullUrl)
+    console.error('[api] Network error – failed to reach', API_URL)
     throw new ApiError('Network error', 'network_error')
   }
 
