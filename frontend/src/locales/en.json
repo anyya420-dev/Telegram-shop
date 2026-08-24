@@ -194,7 +194,9 @@
     "addToCart": "Add to cart",
     "outOfStock": "Out of stock",
     "close": "Close",
-    "retry": "Retry"
+    "retry": "Retry",
+    "yes": "Yes",
+    "no": "No"
   },
   "cityPicker": {
     "badge": "Location",
@@ -285,6 +287,17 @@
     "validation_failed": "Please check your input and try again.",
     "server_error": "Temporary server error. Please try again later.",
     "service_unavailable": "Service is temporarily unavailable. Please try again later.",
-    "invalid_admin_session": "Administrator session expired. Sign in again."
+    "invalid_admin_session": "Administrator session expired. Sign in again.",
+    "cors_or_network_error": "The server is not responding to requests from the app. The connection appears to be blocked (CORS or network). Please try again later.",
+    "api_not_configured": "The app was built without an API address. Please contact the administrator.",
+    "request_timeout": "The server did not respond in time. Please try again.",
+    "server_unreachable": "The server is unreachable. Please try again in a minute.",
+    "cors_origin_not_allowed": "The server rejected the request from this address. Please contact the administrator.",
+    "invalid_request_body": "Invalid request."
+  },
+  "diagnostics": {
+    "origin": "App origin",
+    "code": "Error code",
+    "config": "Configuration"
   }
 }

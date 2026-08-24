@@ -39,16 +39,23 @@ function setAppViewportHeight(webApp?: TelegramWebApp) {
   }
 }
 
-export function getTelegramContext() {
-  const webApp = window.Telegram?.WebApp
+export type TelegramContext = {
+  initData: string
+  isTelegramEnvironment: boolean
+  /** True when the Telegram SDK is present but did not provide signed initData. */
+  hasEmptyInitData: boolean
+}
+
+export function getTelegramContext(): TelegramContext {
+  const webApp = typeof window === 'undefined' ? undefined : window.Telegram?.WebApp
 
   if (webApp) {
-    setAppViewportHeight(webApp)
-
     if (!initialized) {
       initialized = true
 
       try {
+        // ready() must be the first call so Telegram stops showing its own
+        // loading placeholder and exposes the final viewport metrics.
         webApp.ready()
         webApp.expand()
         webApp.setHeaderColor?.('#080810')
@@ -61,12 +68,17 @@ export function getTelegramContext() {
       webApp.onEvent?.('viewportChanged', handleViewportChange)
       window.addEventListener('resize', handleViewportChange, { passive: true })
     }
+
+    setAppViewportHeight(webApp)
   } else {
     setAppViewportHeight(undefined)
   }
 
+  const initData = webApp?.initData ?? ''
+
   return {
-    initData: webApp?.initData ?? '',
+    initData,
     isTelegramEnvironment: Boolean(webApp),
+    hasEmptyInitData: Boolean(webApp) && initData.length === 0,
   }
 }

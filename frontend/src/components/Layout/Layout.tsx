@@ -52,7 +52,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
-  const { authStatus, error, loading, setError, user, cart, citySelectionSkipped } = useApp();
+  const { authStatus, error, loading, setError, user, cart, citySelectionSkipped, diagnostics } = useApp();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,14 +72,44 @@ export default function Layout() {
   }
 
   if (authStatus === 'AUTHENTICATION_FAILED' && !user) {
+    const outsideTelegram = diagnostics ? !diagnostics.inTelegram : false;
+    const headline = outsideTelegram
+      ? t('errors.telegram_init_data_required')
+      : error ?? t('errors.shop_load_failed');
+
     return (
       <div className={styles.loading}>
         <div className={styles.errorBanner} role="alert">
-          <span>{error ?? t('errors.shop_load_failed')}</span>
+          <span>{headline}</span>
           <button type="button" onClick={() => window.location.reload()}>
             {t('common.retry')}
           </button>
         </div>
+        {diagnostics ? (
+          <dl className={styles.diagnostics}>
+            <dt>API</dt>
+            <dd>{diagnostics.apiBaseUrl || '—'}</dd>
+            <dt>{t('diagnostics.origin')}</dt>
+            <dd>{diagnostics.pageOrigin ?? '—'}</dd>
+            <dt>Telegram</dt>
+            <dd>{diagnostics.inTelegram ? t('common.yes') : t('common.no')}</dd>
+            {diagnostics.errorCode ? (
+              <>
+                <dt>{t('diagnostics.code')}</dt>
+                <dd>
+                  {diagnostics.errorCode}
+                  {diagnostics.errorStatus ? ` (${diagnostics.errorStatus})` : ''}
+                </dd>
+              </>
+            ) : null}
+            {diagnostics.apiConfigError ? (
+              <>
+                <dt>{t('diagnostics.config')}</dt>
+                <dd>{diagnostics.apiConfigError}</dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
       </div>
     );
   }

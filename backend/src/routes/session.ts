@@ -20,8 +20,15 @@ const router = Router()
 
 router.post('/bootstrap', authRateLimiter, async (request, response) => {
   let telegramUser: { id: string; username?: string; first_name: string; last_name?: string } | null = null
-  const initData = String(request.body.initData ?? '')
-  const allowDemoMode = isDemoModeEnabled() || process.env.NODE_ENV !== 'production'
+  const rawInitData = (request.body as { initData?: unknown } | undefined)?.initData
+
+  if (typeof rawInitData !== 'undefined' && typeof rawInitData !== 'string') {
+    sendError(response, 400, 'invalid_request_body', 'initData must be a string')
+    return
+  }
+
+  const initData = rawInitData ?? ''
+  const allowDemoMode = isDemoModeEnabled()
 
   if (initData) {
     const botToken = await getActiveBotToken()

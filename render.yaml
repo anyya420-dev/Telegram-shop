@@ -8,6 +8,7 @@ services:
     name: Narcos-shop
     runtime: node
     plan: free
+    healthCheckPath: /health
     buildCommand: npm install --include=dev && npm run build --workspace backend
     startCommand: npm run start --workspace backend
     envVars:
@@ -23,10 +24,15 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      # CORS allowlist + Telegram Web App button target. Must match the public
+      # frontend URL exactly (scheme + host, no trailing slash).
       - key: FRONTEND_URL
-        value: https://78j.onrender.com
+        value: https://telegram-shop-3781.onrender.com
       - key: WEB_APP_URL
-        value: https://78j.onrender.com
+        value: https://telegram-shop-3781.onrender.com
+      # Optional comma-separated extra CORS origins (deploy previews).
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
       - key: ALLOW_DEMO_MODE
         value: "false"
       - key: OWNER_TELEGRAM_ID
