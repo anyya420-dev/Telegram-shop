@@ -39,12 +39,14 @@ export async function initializeTelegramBot() {
     console.error(`[BOT] Polling error (updateType=${updateType}):`, error)
   })
 
-  bot.use((context, next) => {
-    const type = context.updateType ?? 'unknown'
-    const from = context.from?.id ?? 'unknown'
-    console.log(`[BOT] Update received: type=${type} from=${from}`)
-    return next()
-  })
+  if (process.env.LOG_BOT_UPDATES === 'true') {
+    bot.use((context, next) => {
+      const type = context.updateType ?? 'unknown'
+      const from = context.from?.id ?? 'unknown'
+      console.log(`[BOT] Update received: type=${type} from=${from}`)
+      return next()
+    })
+  }
 
   bot.start(async (context) => {
     const chatId = context.chat?.id ?? 'unknown'
