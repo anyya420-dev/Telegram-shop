@@ -83,6 +83,7 @@ export type BootstrapResponse = {
   telegramEnvironment: boolean
   sessionToken: string
   isAdmin: boolean
+  isOwner: boolean
   user: UserProfile
   cities: City[]
   categories: Category[]

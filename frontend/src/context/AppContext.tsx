@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
 import { getTelegramContext } from '../lib/telegram'
-import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
+import type { BootstrapResponse, Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
 
 const CITY_SELECTION_SKIPPED_KEY = 'telegram-shop-city-selection-skipped'
 
@@ -12,6 +12,7 @@ type AppState = {
   error: string | null
   telegramEnvironment: boolean
   isAdmin: boolean
+  isOwner: boolean
   user: UserProfile | null
   cities: City[]
   categories: Category[]
@@ -39,6 +40,17 @@ type AppState = {
 }
 
 const AppContext = createContext<AppState | null>(null)
+let bootstrapInFlight: Promise<BootstrapResponse> | null = null
+
+function bootstrapSession(initData: string) {
+  if (!bootstrapInFlight) {
+    api.setSessionToken(null)
+    bootstrapInFlight = api.bootstrap({ initData }).finally(() => {
+      bootstrapInFlight = null
+    })
+  }
+  return bootstrapInFlight
+}
 
 function emptyCart(): Cart {
   return {
@@ -64,6 +76,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [cities, setCities] = useState<City[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -116,14 +129,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLoading(true)
         setError(null)
         const telegram = getTelegramContext()
-        api.setSessionToken(null)
-        const response = await api.bootstrap({
-          initData: telegram.initData,
-        })
+        const response = await bootstrapSession(telegram.initData)
 
         api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
         setIsAdmin(response.isAdmin ?? false)
+        setIsOwner(response.isOwner ?? false)
         setUser(response.user)
         void i18n.changeLanguage(response.user.language)
         setCities(response.cities)
@@ -286,6 +297,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     error,
     telegramEnvironment,
     isAdmin,
+    isOwner,
     user,
     cities,
     categories,
