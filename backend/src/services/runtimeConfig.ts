@@ -24,10 +24,6 @@ function readEnv(key: string) {
   return value?.trim() ?? ''
 }
 
-function isConfigured(value: string) {
-  return Boolean(value)
-}
-
 function isValidTelegramId(value: string) {
   return TELEGRAM_ID_PATTERN.test(value)
 }
@@ -40,26 +36,30 @@ export function isProductionRuntime() {
   return getRuntimeEnvironmentLabel() === 'production'
 }
 
+export function isDemoModeEnabled() {
+  return readEnv('ALLOW_DEMO_MODE') === 'true'
+}
+
 export function getSessionSecret() {
   const raw = readEnv('SESSION_SECRET')
   if (raw) {
     return raw
   }
-
-  export function getBotTokenEncryptionSecret() {
-    const raw = readEnv('BOT_TOKEN_ENCRYPTION_KEY')
-    if (raw) {
-      return raw
-    }
-    if (isProductionRuntime()) {
-      throw new Error('[config] BOT_TOKEN_ENCRYPTION_KEY is required in production')
-    }
-    return getSessionSecret()
-  }
   if (isProductionRuntime()) {
     throw new Error('[config] SESSION_SECRET is required in production')
   }
   return 'dev-session-secret'
+}
+
+export function getBotTokenEncryptionSecret() {
+  const raw = readEnv('BOT_TOKEN_ENCRYPTION_KEY')
+  if (raw) {
+    return raw
+  }
+  if (isProductionRuntime()) {
+    throw new Error('[config] BOT_TOKEN_ENCRYPTION_KEY is required in production')
+  }
+  return getSessionSecret()
 }
 
 export function getFrontendUrl() {
@@ -91,10 +91,6 @@ export function getAllowedCorsOrigins() {
   if (!isProductionRuntime()) {
     origins.add('http://localhost:5173')
     origins.add('http://localhost:4173')
-  }
-
-  export function isDemoModeEnabled() {
-    return readEnv('ALLOW_DEMO_MODE') === 'true'
   }
 
   return [...origins]
@@ -147,8 +143,7 @@ export function getRuntimeConfigStatus(): RuntimeConfigStatus {
 
 export function getMissingRequiredRuntimeConfigKeys() {
   const summary = getRuntimeConfigSummary()
-  return REQUIRED_PRODUCTION_KEYS
-    .filter((key) => summary[key] !== 'CONFIGURED')
+  return REQUIRED_PRODUCTION_KEYS.filter((key) => summary[key] !== 'CONFIGURED')
 }
 
 export function getInvalidRuntimeConfigKeys() {
