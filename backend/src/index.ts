@@ -66,6 +66,7 @@ app.get('/api/health', (_request, response) => {
 
 async function start() {
   try {
+    console.log('Backend startup: initializing Telegram bot before starting HTTP server')
     await initializeTelegramBot()
     app.listen(port, '0.0.0.0', () => {
       console.log(`Backend running on http://0.0.0.0:${port}`)
