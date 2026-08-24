@@ -129,8 +129,6 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response, { requireAdminSession: false })
   if (!admin) return
 
-
-  const telegramId = admin.user.telegramId
   const password = typeof request.body.password === 'string' ? request.body.password : ''
 
   if (!password) {
@@ -138,8 +136,12 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
     return
   }
 
-  const validPassword = await verifyAdminPassword(password)
-  if (!validPassword) {
+  const result = await verifyAdminPassword(password)
+  if (!result.valid) {
+    if (result.reason === 'configuration_error') {
+      sendError(response, 503, 'configuration_error', 'Admin password is not configured on the server')
+      return
+    }
     sendError(response, 401, 'invalid_credentials', 'Invalid administrator credentials')
     return
   }
@@ -196,8 +198,8 @@ router.post('/settings/password', authRateLimiter, async (request, response) => 
 
   const passwordConfigured = await hasAdminPasswordConfigured()
   if (passwordConfigured) {
-    const validCurrent = await verifyAdminPassword(currentPassword)
-    if (!validCurrent) {
+    const result = await verifyAdminPassword(currentPassword)
+    if (!result.valid) {
       sendError(response, 401, 'invalid_credentials', 'Current password is invalid')
       return
     }
