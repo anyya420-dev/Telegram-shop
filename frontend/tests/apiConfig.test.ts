@@ -46,8 +46,8 @@ test('production build refuses a relative API URL', () => {
 test('production build requires HTTPS and the /api path', () => {
   for (const [value, expectedPattern] of [
     ['http://narcos-shop.onrender.com/api', /HTTPS/],
-    ['https://narcos-shop.onrender.com', /\/api/],
-    ['https://narcos-shop.onrender.com/api/v1', /\/api/],
+    ['https://narcos-shop.onrender.com', /must point to the backend \/api base/],
+    ['https://narcos-shop.onrender.com/api/v1', /must point to the backend \/api base/],
   ] as const) {
     const result = resolveApiBaseUrl(value, true)
     assert.equal(result.baseUrl, '')

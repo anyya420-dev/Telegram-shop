@@ -90,6 +90,7 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
   app.get('/healthz', sendHealth)
   app.get('/api/health', sendHealth)
   app.get('/ready', sendReadiness)
+  app.get('/readyz', sendReadiness)
   app.get('/api/ready', sendReadiness)
 
   app.get('/', (_request, response) => {
