@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import type { SupportTicket } from '../types';
 import styles from './SupportPage.module.css';
+import { resolveApiErrorMessage } from '../lib/errors';
 
 export default function SupportPage() {
   const { t } = useTranslation();
@@ -12,14 +13,29 @@ export default function SupportPage() {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<number | null>(null);
-  const [reply, setReply] = useState('');
+  const [replies, setReplies] = useState<Record<number, string>>({});
   const [sendingReply, setSendingReply] = useState(false);
 
+  async function loadTickets() {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await api.getSupportTickets();
+      setTickets(response.tickets);
+    } catch (requestError) {
+      setLoadError(resolveApiErrorMessage(requestError, t, 'request_failed'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    void api.getSupportTickets().then((r) => { setTickets(r.tickets); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+    void loadTickets();
+  }, [t]);
 
   async function handleSubmit() {
     if (submitting) return;
@@ -33,21 +49,23 @@ export default function SupportPage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('support.error'));
+      setError(resolveApiErrorMessage(e, t, 'request_failed'));
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleReply(ticketId: number) {
+    const reply = replies[ticketId] ?? '';
     if (sendingReply || !reply.trim()) return;
     setSendingReply(true);
+    setReplyError(null);
     try {
       const r = await api.replySupportTicket(ticketId, reply);
       setTickets((prev) => prev.map((tk) => tk.id === ticketId ? r.ticket : tk));
-      setReply('');
-    } catch {
-      // ignore
+      setReplies((prev) => ({ ...prev, [ticketId]: '' }));
+    } catch (requestError) {
+      setReplyError(resolveApiErrorMessage(requestError, t, 'request_failed'));
     } finally {
       setSendingReply(false);
     }
@@ -80,23 +98,43 @@ export default function SupportPage() {
           className={styles.submitBtn}
           onClick={() => void handleSubmit()}
           disabled={submitting || !subject || !message}
+          type="button"
         >
           {submitting ? t('support.sending') : t('support.send')}
         </button>
       </div>
 
-      {!loading && tickets.length > 0 && (
+      {loading && <p className={styles.placeholder}>{t('common.loading')}</p>}
+      {!loading && loadError && (
+        <div className={styles.loadError}>
+          <p>{loadError}</p>
+          <button className={styles.retryBtn} onClick={() => void loadTickets()} type="button">
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
+      {!loading && !loadError && tickets.length === 0 && (
+        <div className={styles.placeholder}>
+          <p>{t('support.myTickets')}: 0</p>
+        </div>
+      )}
+
+      {!loading && !loadError && tickets.length > 0 && (
         <div className={styles.tickets}>
           <h3 className={styles.formTitle}>{t('support.myTickets')}</h3>
           {tickets.map((ticket) => (
             <div key={ticket.id} className={styles.ticket}>
-              <div className={styles.ticketHeader} onClick={() => setOpenTicketId(openTicketId === ticket.id ? null : ticket.id)}>
+              <button
+                className={styles.ticketHeader}
+                onClick={() => setOpenTicketId(openTicketId === ticket.id ? null : ticket.id)}
+                type="button"
+              >
                 <div>
                   <p className={styles.ticketSubject}>{ticket.subject}</p>
                   <span className={`${styles.ticketStatus} ${styles[`status_${ticket.status}`]}`}>{t(`support.status_${ticket.status}`, { defaultValue: ticket.status })}</span>
                 </div>
                 <span className={styles.ticketArrow}>{openTicketId === ticket.id ? '▲' : '▼'}</span>
-              </div>
+              </button>
               {openTicketId === ticket.id && (
                 <div className={styles.ticketBody}>
                   <p className={styles.ticketMsg}>{ticket.message}</p>
@@ -110,18 +148,20 @@ export default function SupportPage() {
                       <input
                         className={styles.input}
                         placeholder={t('support.replyPlaceholder')}
-                        value={reply}
-                        onChange={(e) => setReply(e.target.value)}
+                        value={replies[ticket.id] ?? ''}
+                        onChange={(event) => setReplies((prev) => ({ ...prev, [ticket.id]: event.target.value }))}
                       />
                       <button
                         className={styles.replyBtn}
-                        disabled={sendingReply || !reply.trim()}
+                        disabled={sendingReply || !(replies[ticket.id] ?? '').trim()}
                         onClick={() => void handleReply(ticket.id)}
+                        type="button"
                       >
                         {t('support.send')}
                       </button>
                     </div>
                   )}
+                  {replyError && <p className={styles.error}>{replyError}</p>}
                 </div>
               )}
             </div>
@@ -131,4 +171,3 @@ export default function SupportPage() {
     </div>
   );
 }
-
