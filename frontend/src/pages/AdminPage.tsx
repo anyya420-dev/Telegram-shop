@@ -1,449 +1,299 @@
-import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { api } from '../api/client';
-import type { AdminStats, BotStatusResponse, Order, SupportTicket, Discount } from '../types';
-import { formatCurrency } from '../lib/format';
-import i18n from '../lib/i18n';
-import type { Language } from '../types';
-import styles from './AdminPage.module.css';
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { api } from '../api/client'
+import type { AdminSettingsResponse, AdminStats } from '../types'
+import styles from './AdminPage.module.css'
 
-type Tab = 'stats' | 'orders' | 'discounts' | 'support' | 'audit' | 'bot';
+type StatusTone = 'success' | 'error' | 'info'
 
-const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
+function ShieldIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l8 4v5c0 5-3.5 8.8-8 10-4.5-1.2-8-5-8-10V7l8-4z" />
+    </svg>
+  )
+}
+
+function BotIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="8" width="16" height="11" rx="3" />
+      <path d="M12 8V4" />
+      <circle cx="9" cy="13" r="1" />
+      <circle cx="15" cy="13" r="1" />
+    </svg>
+  )
+}
 
 export default function AdminPage() {
-  const { t } = useTranslation();
-  const language = i18n.language as Language;
-  const [tab, setTab] = useState<Tab>('stats');
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(false);
-  const [orderFilter, setOrderFilter] = useState('');
-  const [discounts, setDiscounts] = useState<Discount[]>([]);
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation()
+  const [telegramId, setTelegramId] = useState('')
+  const [password, setPassword] = useState('')
+  const [authenticated, setAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [settings, setSettings] = useState<AdminSettingsResponse | null>(null)
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [status, setStatus] = useState<{ tone: StatusTone; message: string } | null>(null)
 
-  // New discount form
-  const [newCode, setNewCode] = useState('');
-  const [newType, setNewType] = useState('percent');
-  const [newValue, setNewValue] = useState('');
-  const [newMin, setNewMin] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [newPassword, setNewPassword] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [addAdminId, setAddAdminId] = useState('')
+  const [changeFromId, setChangeFromId] = useState('')
+  const [changeToId, setChangeToId] = useState('')
+  const [botToken, setBotToken] = useState('')
 
-  // Support reply
-  const [replyText, setReplyText] = useState<Record<number, string>>({});
+  const canManage = authenticated && settings
 
-  // Status update
-  const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
-
-  // Bot settings
-  const [botStatus, setBotStatus] = useState<BotStatusResponse | null>(null);
-  const [botToken, setBotToken] = useState('');
-  const [botLoading, setBotLoading] = useState(false);
-  const [botError, setBotError] = useState<string | null>(null);
-  const [botSuccess, setBotSuccess] = useState<string | null>(null);
-  const [showTokenInput, setShowTokenInput] = useState(false);
+  async function loadProtectedData() {
+    const [settingsResponse, statsResponse] = await Promise.all([api.getAdminSettings(), api.getAdminStats()])
+    setSettings(settingsResponse)
+    setStats(statsResponse)
+  }
 
   useEffect(() => {
-    void loadTab(tab);
-  }, [tab]);
-
-  async function loadTab(t: Tab) {
-    setError(null);
-    try {
-      if (t === 'stats') {
-        const r = await api.getAdminStats();
-        setStats(r);
-      } else if (t === 'orders') {
-        setOrdersLoading(true);
-        const r = await api.getAdminOrders(1, orderFilter || undefined);
-        setOrders(r.orders);
-        setOrdersLoading(false);
-      } else if (t === 'discounts') {
-        const r = await api.getAdminDiscounts();
-        setDiscounts(r.discounts);
-      } else if (t === 'support') {
-        const r = await api.getAdminSupportTickets();
-        setTickets(r.tickets);
-      } else if (t === 'audit') {
-        const r = await api.getAuditLogs();
-        setAuditLogs(r.logs);
-      } else if (t === 'bot') {
-        setBotError(null);
-        setBotSuccess(null);
-        const r = await api.getAdminBot();
-        setBotStatus(r);
-        setBotToken('');
-        setShowTokenInput(false);
+    void (async () => {
+      try {
+        await loadProtectedData()
+        setAuthenticated(true)
+      } catch {
+        setAuthenticated(false)
       }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error loading data');
-    }
-  }
+    })()
+  }, [])
 
-  async function handleStatusChange(orderId: number, status: string) {
-    setUpdatingOrder(orderId);
+  async function handleLogin() {
+    if (!telegramId.trim() || !password) return
+    setLoading(true)
+    setStatus(null)
     try {
-      const r = await api.updateAdminOrderStatus(orderId, status);
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to update status');
+      const response = await api.adminLogin({ telegramId: telegramId.trim(), password })
+      api.setAdminToken(response.adminToken)
+      setSettings(response.settings)
+      setAuthenticated(true)
+      setPassword('')
+      const statsResponse = await api.getAdminStats()
+      setStats(statsResponse)
+      setStatus({ tone: 'success', message: 'Administrator session started.' })
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Login failed' })
     } finally {
-      setUpdatingOrder(null);
+      setLoading(false)
     }
   }
 
-  async function handleCreateDiscount() {
-    if (creating || !newCode || !newValue) return;
-    setCreating(true);
+  async function handleLogout() {
+    setLoading(true)
     try {
-      const r = await api.createAdminDiscount({
-        code: newCode,
-        type: newType,
-        value: Number(newValue),
-        minOrderAmount: newMin ? Number(newMin) : 0,
-      });
-      setDiscounts((prev) => [r.discount, ...prev]);
-      setNewCode(''); setNewValue(''); setNewMin('');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create discount');
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function handleAdminReply(ticketId: number) {
-    const msg = replyText[ticketId]?.trim();
-    if (!msg) return;
-    try {
-      const r = await api.adminReplySupportTicket(ticketId, msg);
-      setTickets((prev) => prev.map((tk) => (tk.id === ticketId ? r.ticket : tk)));
-      setReplyText((prev) => ({ ...prev, [ticketId]: '' }));
+      await api.adminLogout()
     } catch {
-      // ignore
+      // no-op
+    } finally {
+      api.setAdminToken(null)
+      setAuthenticated(false)
+      setSettings(null)
+      setLoading(false)
+      setStatus({ tone: 'info', message: 'Administrator session closed.' })
     }
   }
 
-  async function handleBotConnect() {
-    if (botLoading || !botToken.trim()) return;
-    setBotLoading(true);
-    setBotError(null);
-    setBotSuccess(null);
+  async function refreshSettings(successMessage?: string) {
+    const next = await api.getAdminSettings()
+    setSettings(next)
+    if (successMessage) setStatus({ tone: 'success', message: successMessage })
+  }
+
+  async function handlePasswordChange() {
+    if (!newPassword.trim()) return
+    setLoading(true)
+    setStatus(null)
     try {
-      const r = await api.connectAdminBot(botToken.trim());
-      setBotStatus(r);
-      setBotToken('');
-      setShowTokenInput(false);
-      setBotSuccess('Telegram bot connected.');
-    } catch (e: unknown) {
-      setBotError(e instanceof Error ? e.message : 'Failed to connect bot');
+      const response = await api.updateAdminPassword({ currentPassword, newPassword })
+      api.setAdminToken(response.adminToken)
+      setCurrentPassword('')
+      setNewPassword('')
+      await refreshSettings('Password saved successfully.')
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Password update failed' })
     } finally {
-      setBotLoading(false);
+      setLoading(false)
     }
   }
 
-  async function handleBotChange() {
-    if (botLoading || !botToken.trim()) return;
-    setBotLoading(true);
-    setBotError(null);
-    setBotSuccess(null);
+  async function handleAddAdmin() {
+    if (!addAdminId.trim()) return
+    setLoading(true)
+    setStatus(null)
     try {
-      const r = await api.changeAdminBot(botToken.trim());
-      setBotStatus(r);
-      setBotToken('');
-      setShowTokenInput(false);
-      setBotSuccess('Bot token updated.');
-    } catch (e: unknown) {
-      setBotError(e instanceof Error ? e.message : 'Failed to change bot token');
+      await api.addAdministrator(addAdminId.trim())
+      setAddAdminId('')
+      await refreshSettings('Administrator added.')
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to add administrator' })
     } finally {
-      setBotLoading(false);
+      setLoading(false)
     }
   }
 
-  async function handleBotTest() {
-    if (botLoading) return;
-    setBotLoading(true);
-    setBotError(null);
-    setBotSuccess(null);
+  async function handleChangeAdmin() {
+    if (!changeFromId.trim() || !changeToId.trim()) return
+    setLoading(true)
+    setStatus(null)
     try {
-      const r = await api.testAdminBot();
-      setBotStatus(r);
-      setBotSuccess('✓ Telegram bot is working.');
-    } catch (e: unknown) {
-      setBotError(e instanceof Error ? e.message : 'Connection test failed');
+      await api.changeAdministrator(changeFromId.trim(), changeToId.trim())
+      setChangeFromId('')
+      setChangeToId('')
+      await refreshSettings('Administrator Telegram ID updated.')
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update administrator' })
     } finally {
-      setBotLoading(false);
+      setLoading(false)
     }
   }
 
-  async function handleBotDisconnect() {
-    if (botLoading) return;
-    if (!window.confirm('Disconnect the Telegram bot? This will disable notifications.')) return;
-    setBotLoading(true);
-    setBotError(null);
-    setBotSuccess(null);
+  async function handleRemoveAdmin(id: string) {
+    setLoading(true)
+    setStatus(null)
     try {
-      const r = await api.disconnectAdminBot();
-      setBotStatus(r);
-      setBotSuccess('Bot disconnected.');
-    } catch (e: unknown) {
-      setBotError(e instanceof Error ? e.message : 'Failed to disconnect bot');
+      await api.removeAdministrator(id)
+      await refreshSettings('Administrator removed.')
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to remove administrator' })
     } finally {
-      setBotLoading(false);
+      setLoading(false)
     }
   }
+
+  async function handleSaveBot() {
+    if (!botToken.trim()) return
+    setLoading(true)
+    setStatus(null)
+    try {
+      if (settings?.bot.connected) {
+        await api.changeAdminBot(botToken.trim())
+      } else {
+        await api.connectAdminBot(botToken.trim())
+      }
+      setBotToken('')
+      await refreshSettings('Telegram bot token saved and validated.')
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to save bot token' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleTestBot() {
+    setLoading(true)
+    setStatus(null)
+    try {
+      await api.testAdminBot()
+      await refreshSettings('Telegram bot connection is healthy.')
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Connection test failed' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const botStatusLabel = useMemo(() => {
+    if (!settings) return 'Disconnected'
+    if (settings.bot.connected) return 'Connected'
+    return 'Disconnected'
+  }, [settings])
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}>⚙️ Admin Panel</h1>
+      <h1 className={styles.title}>Administration</h1>
 
-      {error && <p className={styles.error}>{error}</p>}
+      {status && <div className={`${styles.alert} ${styles[status.tone]}`}>{status.message}</div>}
 
-      <div className={styles.tabs}>
-        {(['stats', 'orders', 'discounts', 'support', 'audit', 'bot'] as Tab[]).map((tabName) => (
-          <button
-            key={tabName}
-            className={`${styles.tab} ${tab === tabName ? styles.tabActive : ''}`}
-            onClick={() => setTab(tabName)}
-          >
-            {tabName === 'bot' ? '🤖 Bot' : t(`admin.tab_${tabName}`, { defaultValue: tabName })}
+      {!authenticated && (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
+          <p className={styles.help}>Enter your Telegram ID and administrator password.</p>
+          <div className={styles.formRow}>
+            <input className={styles.input} placeholder="Telegram ID" value={telegramId} onChange={(event) => setTelegramId(event.target.value)} />
+            <input className={styles.input} type="password" placeholder="Administrator password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          </div>
+          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={loading || !telegramId.trim() || !password}>
+            {loading ? t('common.loading') : 'Login to administration'}
           </button>
-        ))}
-      </div>
-
-      {tab === 'stats' && stats && (
-        <div className={styles.stats}>
-          <div className={styles.statCard}><span className={styles.statValue}>{stats.totalOrders}</span><span>{t('admin.totalOrders', { defaultValue: 'Total Orders' })}</span></div>
-          <div className={styles.statCard}><span className={styles.statValue}>{stats.pendingOrders}</span><span>{t('admin.pendingOrders', { defaultValue: 'Pending' })}</span></div>
-          <div className={styles.statCard}><span className={styles.statValue}>{stats.totalUsers}</span><span>{t('admin.totalUsers', { defaultValue: 'Users' })}</span></div>
-          <div className={styles.statCard}><span className={styles.statValue}>{formatCurrency(stats.totalRevenue, language)}</span><span>{t('admin.revenue', { defaultValue: 'Revenue' })}</span></div>
-        </div>
+        </section>
       )}
 
-      {tab === 'orders' && (
-        <div>
-          <div className={styles.filterRow}>
-            <select className={styles.filterSelect} value={orderFilter} onChange={(e) => setOrderFilter(e.target.value)}>
-              <option value="">{t('admin.allStatuses', { defaultValue: 'All statuses' })}</option>
-              {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button className={styles.filterBtn} onClick={() => void loadTab('orders')}>
-              {t('admin.filter', { defaultValue: 'Filter' })}
-            </button>
-          </div>
-          {ordersLoading ? <p className={styles.loading}>Loading...</p> : (
-            <div className={styles.orderList}>
-              {orders.map((order) => (
-                <div key={order.id} className={styles.orderCard}>
-                  <div className={styles.orderHeader}>
-                    <span className={styles.orderId}>#{order.id}</span>
-                    <span className={styles.orderTotal}>{formatCurrency(order.total, language)}</span>
-                  </div>
-                  <p className={styles.orderMeta}>{new Date(order.createdAt).toLocaleString()} • {order.items.length} items</p>
-                  <div className={styles.statusRow}>
-                    <select
-                      className={styles.statusSelect}
-                      value={order.status}
-                      onChange={(e) => void handleStatusChange(order.id, e.target.value)}
-                      disabled={updatingOrder === order.id}
-                    >
-                      {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    {order.refundStatus && (
-                      <span className={styles.refundTag}>Refund: {order.refundStatus}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+      {canManage && (
+        <>
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}><ShieldIcon /> Security</h2>
+            <p className={styles.help}>Use a strong administrator password and rotate it regularly.</p>
+            <div className={styles.formRow}>
+              <input className={styles.input} type="password" placeholder="Current password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+              <input className={styles.input} type="password" placeholder="New password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
             </div>
+            <div className={styles.actions}>
+              <button className={styles.primaryButton} onClick={() => void handlePasswordChange()} disabled={loading || !newPassword.trim()}>
+                Save password
+              </button>
+              <button className={styles.ghostButton} onClick={() => void handleLogout()} disabled={loading}>
+                Logout
+              </button>
+            </div>
+          </section>
+
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}><ShieldIcon /> Administrators</h2>
+            <p className={styles.help}>Current authorized Telegram IDs.</p>
+            <ul className={styles.adminList}>
+              {settings.administrators.map((id) => (
+                <li key={id} className={styles.adminItem}>
+                  <span>{id}</span>
+                  <button className={styles.removeButton} onClick={() => void handleRemoveAdmin(id)} disabled={loading}>Remove</button>
+                </li>
+              ))}
+            </ul>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Add Telegram ID" value={addAdminId} onChange={(event) => setAddAdminId(event.target.value)} />
+              <button className={styles.primaryButton} onClick={() => void handleAddAdmin()} disabled={loading || !addAdminId.trim()}>Add</button>
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Current Telegram ID" value={changeFromId} onChange={(event) => setChangeFromId(event.target.value)} />
+              <input className={styles.input} placeholder="New Telegram ID" value={changeToId} onChange={(event) => setChangeToId(event.target.value)} />
+              <button className={styles.primaryButton} onClick={() => void handleChangeAdmin()} disabled={loading || !changeFromId.trim() || !changeToId.trim()}>Change</button>
+            </div>
+          </section>
+
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}><BotIcon /> Telegram bot</h2>
+            <p className={styles.help}>Status: <strong>{botStatusLabel}</strong></p>
+            {settings.bot.connected && (
+              <p className={styles.help}>Connected bot: @{settings.bot.bot.username} ({settings.bot.bot.firstName})</p>
+            )}
+            <p className={styles.help}>Token: {settings.bot.tokenMasked ?? 'not configured'}</p>
+            <div className={styles.formRow}>
+              <input className={styles.input} type="password" placeholder="Telegram Bot Token" value={botToken} onChange={(event) => setBotToken(event.target.value)} />
+              <button className={styles.primaryButton} onClick={() => void handleSaveBot()} disabled={loading || !botToken.trim()}>
+                Save / Connect Bot
+              </button>
+            </div>
+            <div className={styles.actions}>
+              <button className={styles.ghostButton} onClick={() => void handleTestBot()} disabled={loading || !settings.bot.connected}>Test connection</button>
+              <button className={styles.removeButton} onClick={() => void api.disconnectAdminBot().then(() => refreshSettings('Bot disconnected.')).catch((error: unknown) => setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to disconnect bot' }))} disabled={loading || !settings.bot.connected}>Disconnect</button>
+            </div>
+          </section>
+
+          {stats && (
+            <section className={styles.card}>
+              <h2 className={styles.cardTitle}>Shop statistics</h2>
+              <div className={styles.statsGrid}>
+                <article className={styles.statCard}><span>Total orders</span><strong>{stats.totalOrders}</strong></article>
+                <article className={styles.statCard}><span>Pending orders</span><strong>{stats.pendingOrders}</strong></article>
+                <article className={styles.statCard}><span>Total users</span><strong>{stats.totalUsers}</strong></article>
+                <article className={styles.statCard}><span>Revenue</span><strong>{stats.totalRevenue.toFixed(2)}</strong></article>
+              </div>
+            </section>
           )}
-        </div>
-      )}
-
-      {tab === 'discounts' && (
-        <div>
-          <div className={styles.form}>
-            <h3 className={styles.formTitle}>{t('admin.createDiscount', { defaultValue: 'Create discount code' })}</h3>
-            <div className={styles.formRow}>
-              <input className={styles.input} placeholder="Code" value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} />
-              <select className={styles.select} value={newType} onChange={(e) => setNewType(e.target.value)}>
-                <option value="percent">%</option>
-                <option value="fixed">Fixed</option>
-              </select>
-            </div>
-            <div className={styles.formRow}>
-              <input className={styles.input} type="number" placeholder="Value" value={newValue} onChange={(e) => setNewValue(e.target.value)} />
-              <input className={styles.input} type="number" placeholder="Min order" value={newMin} onChange={(e) => setNewMin(e.target.value)} />
-            </div>
-            <button className={styles.createBtn} onClick={() => void handleCreateDiscount()} disabled={creating || !newCode || !newValue}>
-              {creating ? 'Creating...' : 'Create'}
-            </button>
-          </div>
-          <div className={styles.discountList}>
-            {discounts.map((d) => (
-              <div key={d.id} className={styles.discountCard}>
-                <span className={styles.discountCode}>{d.code}</span>
-                <span>{d.value}{d.type === 'percent' ? '%' : ' fix'}</span>
-                <span>{t('admin.minOrder', { defaultValue: 'Min' })}: {d.minOrderAmount}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {tab === 'support' && (
-        <div className={styles.ticketList}>
-          {tickets.map((ticket) => (
-            <div key={ticket.id} className={styles.ticketCard}>
-              <div className={styles.ticketHeader}>
-                <span className={styles.ticketSubject}>{ticket.subject}</span>
-                <span className={styles.ticketStatus}>{ticket.status}</span>
-              </div>
-              <p className={styles.ticketMsg}>{ticket.message}</p>
-              {ticket.replies.map((r) => (
-                <div key={r.id} className={`${styles.reply} ${r.isAdmin ? styles.replyAdmin : styles.replyUser}`}>
-                  <strong>{r.isAdmin ? 'Admin' : 'User'}</strong>: {r.message}
-                </div>
-              ))}
-              <div className={styles.replyRow}>
-                <input
-                  className={styles.input}
-                  placeholder="Reply..."
-                  value={replyText[ticket.id] ?? ''}
-                  onChange={(e) => setReplyText((prev) => ({ ...prev, [ticket.id]: e.target.value }))}
-                />
-                <button className={styles.replyBtn} onClick={() => void handleAdminReply(ticket.id)}>
-                  Send
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === 'audit' && (
-        <div className={styles.auditList}>
-          {auditLogs.map((log) => (
-            <div key={log.id} className={styles.auditRow}>
-              <span className={styles.auditAction}>{log.action}</span>
-              {log.entity && <span className={styles.auditEntity}>{log.entity}#{log.entityId}</span>}
-              {log.meta && <span className={styles.auditMeta}>{log.meta}</span>}
-              <span className={styles.auditDate}>{new Date(log.createdAt).toLocaleString()}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === 'bot' && (
-        <div className={styles.botSection}>
-          <div className={styles.botCard}>
-            <h3 className={styles.botCardTitle}>Telegram Bot</h3>
-
-            {botError && (
-              <div className={styles.botError}>{botError}</div>
-            )}
-            {botSuccess && (
-              <div className={styles.botSuccess}>{botSuccess}</div>
-            )}
-
-            <div className={styles.botStatusRow}>
-              <span className={styles.botStatusLabel}>Connection status:</span>
-              {botStatus === null ? (
-                <span className={styles.botStatusUnknown}>Loading…</span>
-              ) : botStatus.connected ? (
-                <span className={styles.botStatusConnected}>● Connected</span>
-              ) : (
-                <span className={styles.botStatusDisconnected}>○ Not connected</span>
-              )}
-            </div>
-
-            {botStatus?.connected && (
-              <div className={styles.botInfo}>
-                <span className={styles.botUsername}>@{botStatus.bot.username}</span>
-                <span className={styles.botName}>{botStatus.bot.firstName}</span>
-              </div>
-            )}
-
-            {botStatus?.connected && !showTokenInput && (
-              <div className={styles.botTokenConfigured}>
-                <span className={styles.botTokenMask}>Bot token configured</span>
-                <span className={styles.botTokenDots}>••••••••••••••••••••••••:••••••••••</span>
-              </div>
-            )}
-
-            {!botStatus?.connected && !showTokenInput && (
-              <div className={styles.botActions}>
-                <button
-                  className={styles.botBtnPrimary}
-                  onClick={() => { setShowTokenInput(true); setBotError(null); setBotSuccess(null); }}
-                >
-                  Connect Telegram Bot
-                </button>
-              </div>
-            )}
-
-            {botStatus?.connected && !showTokenInput && (
-              <div className={styles.botActions}>
-                <button
-                  className={styles.botBtnSecondary}
-                  onClick={() => void handleBotTest()}
-                  disabled={botLoading}
-                >
-                  {botLoading ? 'Testing…' : 'Test connection'}
-                </button>
-                <button
-                  className={styles.botBtnOutline}
-                  onClick={() => { setShowTokenInput(true); setBotError(null); setBotSuccess(null); }}
-                >
-                  Change bot token
-                </button>
-                <button
-                  className={styles.botBtnDanger}
-                  onClick={() => void handleBotDisconnect()}
-                  disabled={botLoading}
-                >
-                  Disconnect bot
-                </button>
-              </div>
-            )}
-
-            {showTokenInput && (
-              <div className={styles.botTokenForm}>
-                <label className={styles.botTokenLabel}>
-                  {botStatus?.connected ? 'New bot token' : 'Telegram Bot Token'}
-                </label>
-                <input
-                  type="password"
-                  className={styles.botTokenInput}
-                  placeholder="Enter BotFather token"
-                  value={botToken}
-                  onChange={(e) => setBotToken(e.target.value)}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
-                <div className={styles.botTokenActions}>
-                  <button
-                    className={styles.botBtnPrimary}
-                    onClick={() => void (botStatus?.connected ? handleBotChange() : handleBotConnect())}
-                    disabled={botLoading || !botToken.trim()}
-                  >
-                    {botLoading ? 'Connecting…' : botStatus?.connected ? 'Update bot token' : 'Connect bot'}
-                  </button>
-                  <button
-                    className={styles.botBtnOutline}
-                    onClick={() => { setShowTokenInput(false); setBotToken(''); setBotError(null); }}
-                    disabled={botLoading}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        </>
       )}
     </div>
-  );
+  )
 }

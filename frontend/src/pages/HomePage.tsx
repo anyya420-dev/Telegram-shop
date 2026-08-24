@@ -33,11 +33,11 @@ export default function HomePage() {
           <h1 className={styles.logo}>{t('home.title')}</h1>
           {user?.selectedCity ? (
             <button className={styles.cityBadge} onClick={openCityPicker}>
-              📍 {user.selectedCity.name}
+              {user.selectedCity.name}
             </button>
           ) : (
             <button className={styles.cityBadge} onClick={openCityPicker}>
-              📍 {t('profile.cityNotSelected')}
+              {t('profile.cityNotSelected')}
             </button>
           )}
         </div>

@@ -1,4 +1,5 @@
 import type {
+  AdminSettingsResponse,
   AdminStats,
   Balance,
   BootstrapResponse,
@@ -21,6 +22,7 @@ import type {
 // In local dev without the env var, fall back to '' so Vite's proxy forwards /api/* to localhost:3001.
 const API_URL: string = import.meta.env.VITE_API_URL ?? ''
 let sessionToken: string | null = null
+let adminToken: string | null = null
 
 export class ApiError extends Error {
   code?: string
@@ -41,6 +43,7 @@ async function request<T>(path: string, init?: RequestInit) {
       headers: {
         'Content-Type': 'application/json',
         ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
+        ...(adminToken ? { 'X-Admin-Token': adminToken } : {}),
         ...(init?.headers ?? {}),
       },
     })
@@ -59,6 +62,9 @@ async function request<T>(path: string, init?: RequestInit) {
 export const api = {
   setSessionToken(token: string | null) {
     sessionToken = token
+  },
+  setAdminToken(token: string | null) {
+    adminToken = token
   },
   bootstrap(payload: { initData: string; telegramUser: TelegramIdentity; isTelegramEnvironment: boolean }) {
     return request<BootstrapResponse>('/session/bootstrap', {
@@ -174,6 +180,44 @@ export const api = {
   // Delivery
   getDeliveryOptions() {
     return request<{ options: { id: number; name: string; nameEn: string | null; type: string; price: number }[] }>('/delivery')
+  },
+
+
+  // Admin auth/settings
+  adminLogin(data: { telegramId: string; password: string }) {
+    return request<{ adminToken: string; expiresAt: string; settings: AdminSettingsResponse }>('/admin/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+  adminLogout() {
+    return request<{ ok: boolean }>('/admin/auth/logout', { method: 'POST' })
+  },
+  getAdminSettings() {
+    return request<AdminSettingsResponse>('/admin/settings')
+  },
+  updateAdminPassword(data: { currentPassword: string; newPassword: string }) {
+    return request<{ saved: boolean; adminToken: string; expiresAt: string }>('/admin/settings/password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+  addAdministrator(telegramId: string) {
+    return request<{ administrators: string[] }>('/admin/settings/administrators', {
+      method: 'POST',
+      body: JSON.stringify({ telegramId }),
+    })
+  },
+  changeAdministrator(currentTelegramId: string, telegramId: string) {
+    return request<{ administrators: string[] }>(`/admin/settings/administrators/${currentTelegramId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ telegramId }),
+    })
+  },
+  removeAdministrator(telegramId: string) {
+    return request<{ administrators: string[] }>(`/admin/settings/administrators/${telegramId}`, {
+      method: 'DELETE',
+    })
   },
 
   // Admin

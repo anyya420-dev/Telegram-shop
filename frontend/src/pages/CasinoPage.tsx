@@ -69,7 +69,7 @@ export default function CasinoPage() {
         {animDice !== null ? (
           <span className={styles.diceFace}>{DICE_FACES[animDice - 1]}</span>
         ) : (
-          <span className={styles.dicePlaceholder}>🎲</span>
+          <span className={styles.dicePlaceholder}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="15" r="1"/></svg></span>
         )}
       </div>
 

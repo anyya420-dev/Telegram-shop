@@ -33,7 +33,7 @@ export default function ShopPage() {
           <h1 className={styles.title}>{t('shop.title')}</h1>
           {user?.selectedCity && (
             <button className={styles.city} onClick={() => openCityPicker()}>
-              📍 {user.selectedCity.name}
+              {user.selectedCity.name}
             </button>
           )}
         </div>

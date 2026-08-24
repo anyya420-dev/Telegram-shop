@@ -4,7 +4,6 @@ import {
   createSessionToken,
   DEMO_TELEGRAM_USER,
   getOrCreateCart,
-  isAdminTelegramId,
   mapCategory,
   mapCity,
   mapUser,
@@ -12,6 +11,8 @@ import {
   sendError,
   verifyTelegramInitData,
 } from '../lib.js'
+import { seedAdminConfigForFreshInstall, isAdminTelegramId } from '../services/adminAuthService.js'
+import { getActiveBotToken } from '../services/botService.js'
 
 const router = Router()
 
@@ -21,7 +22,7 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
   const allowDemoMode = process.env.ALLOW_DEMO_MODE === 'true' || process.env.NODE_ENV !== 'production'
 
   if (initData) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN
+    const botToken = await getActiveBotToken()
 
     if (!botToken) {
       sendError(response, 503, 'telegram_bot_token_required', 'Telegram bot token is required for Web App verification')
@@ -40,6 +41,8 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
     sendError(response, 401, 'telegram_init_data_required', 'Telegram init data is required')
     return
   }
+
+  await seedAdminConfigForFreshInstall(String(telegramUser.id))
 
   const user = await prisma.user.upsert({
     where: { telegramId: String(telegramUser.id) },
@@ -60,15 +63,16 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
 
   await getOrCreateCart(user.id)
 
-  const [cities, categories] = await Promise.all([
+  const [cities, categories, isAdmin] = await Promise.all([
     prisma.city.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
     prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
+    isAdminTelegramId(user.telegramId),
   ])
 
   response.json({
     telegramEnvironment: Boolean(initData),
     sessionToken: createSessionToken(user.telegramId),
-    isAdmin: isAdminTelegramId(user.telegramId),
+    isAdmin,
     user: mapUser(user),
     cities: cities.map(mapCity),
     categories: categories.map(mapCategory),

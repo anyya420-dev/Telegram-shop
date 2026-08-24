@@ -20,6 +20,12 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function loadProfile() {
+      if (!bootstrapUser) {
+        setProfileLoading(false);
+        setProfile(null);
+        return;
+      }
+
       try {
         setProfileLoading(true);
         setProfileError(null);
@@ -32,8 +38,10 @@ export default function ProfilePage() {
       }
     }
     void loadProfile();
-    void fetchOrders();
-  }, [fetchOrders]);
+    if (bootstrapUser) {
+      void fetchOrders();
+    }
+  }, [bootstrapUser, fetchOrders, t]);
 
   function handleLanguageChange(lang: Language) {
     void i18n.changeLanguage(lang);
@@ -142,7 +150,7 @@ export default function ProfilePage() {
           <div className={styles.card} onClick={() => navigate('/balance')} style={{ cursor: 'pointer' }}>
             <span className={styles.cardLabel}>{t('profile.balance')}</span>
             <div className={styles.cardRight}>
-              <span className={styles.cardValue}>💰 {profile.balance.toFixed(2)}</span>
+              <span className={styles.cardValue}>{profile.balance.toFixed(2)}</span>
               <span className={styles.cardArrow}>›</span>
             </div>
           </div>
@@ -165,7 +173,7 @@ export default function ProfilePage() {
               aria-label={t('profile.languageRu')}
               title={t('profile.languageRu')}
             >
-              🇷🇺
+              RU
             </button>
             <button
               className={`${styles.langBtn} ${i18n.language === 'en' ? styles.langActive : ''}`}
@@ -173,7 +181,7 @@ export default function ProfilePage() {
               aria-label={t('profile.languageEn')}
               title={t('profile.languageEn')}
             >
-              🇬🇧
+              EN
             </button>
           </div>
         </div>
@@ -185,7 +193,7 @@ export default function ProfilePage() {
           className={styles.ordersLink}
           onClick={() => navigate('/wishlist')}
         >
-          <span>🤍 {t('wishlist.title')}</span>
+          <span>{t('wishlist.title')}</span>
           <span className={styles.cardArrow}>›</span>
         </div>
       </div>
@@ -237,7 +245,7 @@ export default function ProfilePage() {
             className={styles.ordersLink}
             onClick={() => navigate('/admin')}
           >
-            <span>⚙️ {t('admin.settings', { defaultValue: 'Admin Settings' })}</span>
+            <span>{t('admin.settings', { defaultValue: 'Admin Settings' })}</span>
             <span className={styles.cardArrow}>›</span>
           </div>
         </div>
