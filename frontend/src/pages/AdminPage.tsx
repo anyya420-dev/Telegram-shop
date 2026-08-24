@@ -811,7 +811,7 @@ export default function AdminPage() {
         </section>
       )}
 
-      {!authLoading && !isAdmin && (
+      {!authLoading && authStatus === 'AUTHENTICATED' && !isAdmin && (
         <section className={styles.card}>
           <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
           <p className={styles.help}>This Telegram account does not have administrator access.</p>

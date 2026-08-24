@@ -130,16 +130,11 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   if (!admin) return
 
 
-  const telegramId = normalizeTelegramId(request.body.telegramId)
+  const telegramId = admin.user.telegramId
   const password = typeof request.body.password === 'string' ? request.body.password : ''
 
   if (!password) {
     sendError(response, 400, 'invalid_credentials', 'Administrator password is required')
-    return
-  }
-
-  if (telegramId && telegramId !== admin.user.telegramId) {
-    sendError(response, 403, 'forbidden', 'Telegram ID does not match current user session')
     return
   }
 

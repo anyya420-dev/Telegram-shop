@@ -52,6 +52,7 @@ type AppState = {
 
 const AppContext = createContext<AppState | null>(null)
 let bootstrapInFlight: Promise<BootstrapSnapshot> | null = null
+let bootstrapInFlightKey: string | null = null
 let cachedBootstrapSnapshot: BootstrapSnapshot | null = null
 let cachedBootstrapKey: string | null = null
 
@@ -107,52 +108,69 @@ async function bootstrapSession(initData: string) {
     return cachedBootstrapSnapshot
   }
 
-  if (!bootstrapInFlight || cachedBootstrapKey !== cacheKey) {
+  if (cachedBootstrapKey !== cacheKey) {
+    cachedBootstrapSnapshot = null
+    cachedBootstrapKey = null
+  }
+
+  if (!bootstrapInFlight || bootstrapInFlightKey !== cacheKey) {
     cachedBootstrapKey = cacheKey
+    bootstrapInFlightKey = cacheKey
     api.setSessionToken(null)
-    bootstrapInFlight = (async () => {
-      const response = await api.bootstrap({ initData })
-      api.setSessionToken(response.sessionToken)
+    const currentPromise = (async () => {
+      try {
+        const response = await api.bootstrap({ initData })
+        api.setSessionToken(response.sessionToken)
 
-      let products: ProductSummary[] = []
-      let cart = emptyCart()
-      let recommended: ProductSummary[] = []
-      let optionalError: string | null = null
-      const citySelectionSkipped = !response.user.selectedCityId && readCitySelectionSkipped(response.user.telegramId)
+        let products: ProductSummary[] = []
+        let cart = emptyCart()
+        let recommended: ProductSummary[] = []
+        let optionalError: string | null = null
+        const citySelectionSkipped = !response.user.selectedCityId && readCitySelectionSkipped(response.user.telegramId)
 
-      if (response.user.selectedCityId) {
-        writeCitySelectionSkipped(response.user.telegramId, false)
+        if (response.user.selectedCityId) {
+          writeCitySelectionSkipped(response.user.telegramId, false)
 
-        try {
-          const [catalogResponse, cartResponse] = await Promise.all([
-            api.getCatalog({ cityId: response.user.selectedCityId }),
-            api.getCart(),
-          ])
-          products = catalogResponse.products
-          cart = cartResponse.cart
-          recommended = cartResponse.recommended
-        } catch (error) {
-          optionalError = translateError(error, 'catalog_refresh_failed')
+          try {
+            const [catalogResponse, cartResponse] = await Promise.all([
+              api.getCatalog({ cityId: response.user.selectedCityId }),
+              api.getCart(),
+            ])
+            products = catalogResponse.products
+            cart = cartResponse.cart
+            recommended = cartResponse.recommended
+          } catch (error) {
+            optionalError = translateError(error, 'catalog_refresh_failed')
+          }
         }
+
+        const snapshot = {
+          response,
+          products,
+          cart,
+          recommended,
+          citySelectionSkipped,
+          optionalError,
+        } satisfies BootstrapSnapshot
+
+        cachedBootstrapSnapshot = snapshot
+        return snapshot
+      } catch (error) {
+        cachedBootstrapKey = null
+        cachedBootstrapSnapshot = null
+        throw error
       }
-
-      const snapshot = {
-        response,
-        products,
-        cart,
-        recommended,
-        citySelectionSkipped,
-        optionalError,
-      } satisfies BootstrapSnapshot
-
-      cachedBootstrapSnapshot = snapshot
-      return snapshot
-    })().finally(() => {
-      bootstrapInFlight = null
+    })()
+    bootstrapInFlight = currentPromise
+    void currentPromise.finally(() => {
+      if (bootstrapInFlight === currentPromise) {
+        bootstrapInFlight = null
+        bootstrapInFlightKey = null
+      }
     })
   }
 
-  return bootstrapInFlight
+  return bootstrapInFlight!
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -210,7 +228,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const requestKey = JSON.stringify([user.selectedCityId, search, categoryId])
+    const selectedCityId = user.selectedCityId
+    const requestKey = JSON.stringify([selectedCityId, search, categoryId])
     if (catalogRequestRef.current?.key === requestKey) {
       return catalogRequestRef.current.promise
     }
@@ -219,7 +238,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const promise = (async () => {
       try {
         setError(null)
-        const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
+        const response = await api.getCatalog({ cityId: selectedCityId, search, categoryId })
         if (requestId === latestCatalogRequestId.current) {
           setProducts(response.products)
         }
@@ -294,7 +313,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [resetCityScopedState])
+  }, [])
 
   const selectCity = useCallback(async (cityId: number) => {
     if (!user) {
@@ -434,7 +453,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await ordersRequestRef.current
   }, [user])
 
-  const openCityPicker = useCallback(() => setCityPickerOpen(true), [])
+  const openCityPicker = useCallback(() => {
+    setCityPickerOpen(true)
+    void refreshCities()
+  }, [refreshCities])
   const closeCityPicker = useCallback(() => setCityPickerOpen(false), [])
 
   const skipCitySelection = useCallback(() => {
@@ -486,7 +508,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setError,
   } satisfies AppState), [
     authStatus,
-    loading,
     error,
     telegramEnvironment,
     isAdmin,
