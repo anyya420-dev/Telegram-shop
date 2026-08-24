@@ -47,6 +47,7 @@ async function request<T>(path: string, init?: RequestInit) {
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),

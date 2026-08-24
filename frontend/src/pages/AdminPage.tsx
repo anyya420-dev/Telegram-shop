@@ -13,50 +13,6 @@ type AdminRestoreState = {
 }
 
 let adminRestoreInFlight: Promise<AdminRestoreState> | null = null
-let cachedAdminToken: string | null = null
-const ADMIN_TOKEN_STORAGE_KEY = 'telegram-shop:admin-token'
-const ADMIN_TOKEN_TELEGRAM_ID_KEY = 'telegram-shop:admin-token:telegram-id'
-
-function readStoredAdminToken(currentTelegramId?: string | null) {
-  if (typeof window === 'undefined') {
-    return cachedAdminToken
-  }
-
-  const storedToken = window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)?.trim() || null
-  const storedTelegramId = window.localStorage.getItem(ADMIN_TOKEN_TELEGRAM_ID_KEY)?.trim() || null
-
-  if (!storedToken || !storedTelegramId) {
-    cachedAdminToken = null
-    return null
-  }
-
-  if (currentTelegramId && storedTelegramId !== currentTelegramId) {
-    window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY)
-    window.localStorage.removeItem(ADMIN_TOKEN_TELEGRAM_ID_KEY)
-    cachedAdminToken = null
-    return null
-  }
-
-  cachedAdminToken = storedToken
-  return storedToken
-}
-
-function storeAdminToken(token: string | null, telegramId?: string | null) {
-  cachedAdminToken = token?.trim() || null
-
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  if (!cachedAdminToken || !telegramId) {
-    window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY)
-    window.localStorage.removeItem(ADMIN_TOKEN_TELEGRAM_ID_KEY)
-    return
-  }
-
-  window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, cachedAdminToken)
-  window.localStorage.setItem(ADMIN_TOKEN_TELEGRAM_ID_KEY, telegramId)
-}
 
 function ShieldIcon() {
   return (
@@ -600,7 +556,6 @@ export default function AdminPage() {
 
     if (!isAdmin) {
       api.setAdminToken(null)
-      storeAdminToken(null)
       setAuthLoading(false)
       setAuthenticated(false)
       setSettings(null)
@@ -610,21 +565,12 @@ export default function AdminPage() {
       }
     }
 
-    const hasToken = Boolean(readStoredAdminToken(user?.telegramId))
-    setAuthLoading(hasToken)
+    setAuthLoading(true)
 
     async function restoreAdminSession() {
       let activeRestore = adminRestoreInFlight
       if (!activeRestore) {
         const restorePromise = (async () => {
-          const savedToken = readStoredAdminToken(user?.telegramId)
-          if (!savedToken) {
-            api.setAdminToken(null)
-            return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
-          }
-
-          api.setAdminToken(savedToken)
-
           try {
             const { settingsResponse, statsResponse } = await loadProtectedData()
             return {
@@ -634,7 +580,6 @@ export default function AdminPage() {
             } satisfies AdminRestoreState
           } catch {
             api.setAdminToken(null)
-            storeAdminToken(null)
             return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
           }
         })()
@@ -658,7 +603,6 @@ export default function AdminPage() {
       } catch {
         if (cancelled) return
         api.setAdminToken(null)
-        storeAdminToken(null)
         setAuthenticated(false)
         setSettings(null)
         setStats(null)
@@ -673,7 +617,7 @@ export default function AdminPage() {
     return () => {
       cancelled = true
     }
-  }, [authStatus, isAdmin, user?.telegramId])
+  }, [authStatus, isAdmin])
 
   async function handleLogin() {
     if (!user?.telegramId || !password) return
@@ -682,7 +626,6 @@ export default function AdminPage() {
     try {
       const response = await api.adminLogin({ password })
       api.setAdminToken(response.adminToken)
-      storeAdminToken(response.adminToken, user.telegramId)
       setSettings(response.settings)
       setAuthenticated(true)
       setPassword('')
@@ -704,7 +647,6 @@ export default function AdminPage() {
       // no-op
     } finally {
       api.setAdminToken(null)
-      storeAdminToken(null)
       setAuthenticated(false)
       setSettings(null)
       setLoading(false)
@@ -725,7 +667,6 @@ export default function AdminPage() {
     try {
       const response = await api.updateAdminPassword({ currentPassword, newPassword })
       api.setAdminToken(response.adminToken)
-      storeAdminToken(response.adminToken, user?.telegramId)
       setCurrentPassword('')
       setNewPassword('')
       await refreshSettings('Password saved successfully.')
