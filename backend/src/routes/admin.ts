@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { Router } from 'express'
 import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError, verifySessionToken } from '../lib.js'
 import type { Request, Response } from 'express'
@@ -82,6 +83,24 @@ function normalizeTelegramId(value: unknown) {
 
 function meetsMinimumPasswordLength(password: string) {
   return password.length >= 8
+}
+
+function isWholeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value)
+}
+
+async function getCityUsageCounts(cityId: number) {
+  const [orderCount, productCityCount, selectedUserCount] = await Promise.all([
+    prisma.order.count({ where: { cityId } }),
+    prisma.productCity.count({ where: { cityId } }),
+    prisma.user.count({ where: { selectedCityId: cityId } }),
+  ])
+
+  return {
+    orderCount,
+    productCityCount,
+    selectedUserCount,
+  }
 }
 
 async function getAdminSettingsPayload() {
@@ -975,26 +994,45 @@ router.post('/cities', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const { name, nameEn, sortOrder } = request.body
+  const { name, nameEn, sortOrder, isActive } = request.body
   if (typeof name !== 'string' || !name.trim()) {
     sendError(response, 400, 'invalid_name', 'City name is required')
     return
   }
 
-  const city = await prisma.city.create({
-    data: {
-      name: name.trim(),
-      nameEn: typeof nameEn === 'string' ? nameEn.trim() || null : null,
-      sortOrder: typeof sortOrder === 'number' ? sortOrder : 0,
-      isActive: true,
-    },
-  })
+  if (sortOrder !== undefined && !isWholeNumber(sortOrder)) {
+    sendError(response, 400, 'invalid_sort_order', 'sortOrder must be an integer')
+    return
+  }
 
-  await prisma.auditLog.create({
-    data: { userId: admin.user.id, action: 'city_created', entity: 'city', entityId: city.id, meta: JSON.stringify({ name: city.name }) },
-  })
+  if (isActive !== undefined && typeof isActive !== 'boolean') {
+    sendError(response, 400, 'invalid_active_flag', 'isActive must be a boolean')
+    return
+  }
 
-  response.status(201).json({ city })
+  try {
+    const city = await prisma.city.create({
+      data: {
+        name: name.trim(),
+        nameEn: typeof nameEn === 'string' ? nameEn.trim() || null : null,
+        sortOrder: isWholeNumber(sortOrder) ? sortOrder : 0,
+        isActive: typeof isActive === 'boolean' ? isActive : true,
+      },
+    })
+
+    await prisma.auditLog.create({
+      data: { userId: admin.user.id, action: 'city_created', entity: 'city', entityId: city.id, meta: JSON.stringify({ name: city.name, isActive: city.isActive }) },
+    })
+
+    response.status(201).json({ city })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      sendError(response, 409, 'city_exists', 'City with this name already exists')
+      return
+    }
+
+    throw error
+  }
 })
 
 router.patch('/cities/:id', authRateLimiter, async (request, response) => {
@@ -1012,15 +1050,35 @@ router.patch('/cities/:id', authRateLimiter, async (request, response) => {
   if (typeof name === 'string' && name.trim()) data.name = name.trim()
   if (typeof nameEn === 'string') data.nameEn = nameEn.trim() || null
   if (typeof isActive === 'boolean') data.isActive = isActive
-  if (typeof sortOrder === 'number') data.sortOrder = sortOrder
+  if (sortOrder !== undefined) {
+    if (!isWholeNumber(sortOrder)) {
+      sendError(response, 400, 'invalid_sort_order', 'sortOrder must be an integer')
+      return
+    }
+    data.sortOrder = sortOrder
+  }
 
-  const city = await prisma.city.update({ where: { id: cityId }, data })
+  try {
+    const city = await prisma.city.update({ where: { id: cityId }, data })
 
-  await prisma.auditLog.create({
-    data: { userId: admin.user.id, action: 'city_updated', entity: 'city', entityId: cityId, meta: JSON.stringify(data) },
-  })
+    await prisma.auditLog.create({
+      data: { userId: admin.user.id, action: 'city_updated', entity: 'city', entityId: cityId, meta: JSON.stringify(data) },
+    })
 
-  response.json({ city })
+    response.json({ city })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      sendError(response, 409, 'city_exists', 'City with this name already exists')
+      return
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      sendError(response, 404, 'city_not_found', 'City not found')
+      return
+    }
+
+    throw error
+  }
 })
 
 router.delete('/cities/:id', authRateLimiter, async (request, response) => {
@@ -1033,14 +1091,21 @@ router.delete('/cities/:id', authRateLimiter, async (request, response) => {
     return
   }
 
-  // Soft-delete: deactivate rather than hard delete if there are related orders
-  const orderCount = await prisma.order.count({ where: { cityId } })
-  if (orderCount > 0) {
-    const city = await prisma.city.update({ where: { id: cityId }, data: { isActive: false } })
+  const city = await prisma.city.findUnique({ where: { id: cityId } })
+  if (!city) {
+    sendError(response, 404, 'city_not_found', 'City not found')
+    return
+  }
+
+  const usage = await getCityUsageCounts(cityId)
+  const hasReferences = usage.orderCount > 0 || usage.productCityCount > 0 || usage.selectedUserCount > 0
+
+  if (hasReferences) {
+    const updatedCity = await prisma.city.update({ where: { id: cityId }, data: { isActive: false } })
     await prisma.auditLog.create({
-      data: { userId: admin.user.id, action: 'city_deactivated', entity: 'city', entityId: cityId, meta: JSON.stringify({ reason: 'has_orders' }) },
+      data: { userId: admin.user.id, action: 'city_deactivated', entity: 'city', entityId: cityId, meta: JSON.stringify({ reason: 'has_references', ...usage }) },
     })
-    response.json({ city, deactivated: true })
+    response.json({ city: updatedCity, deactivated: true, usage })
     return
   }
 
