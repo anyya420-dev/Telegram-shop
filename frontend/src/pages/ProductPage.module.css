@@ -184,7 +184,7 @@
   width: 100%;
   padding: 16px;
   background: var(--accent);
-  color: #080810;
+  color: #ffffff;
   font-size: 15px;
   font-weight: 700;
   border-radius: var(--radius-lg);
@@ -444,7 +444,7 @@
   margin-top: 10px;
   padding: 11px 22px;
   background: var(--accent);
-  color: #080810;
+  color: #ffffff;
   border: none;
   border-radius: var(--radius-md);
   font-size: 14px;

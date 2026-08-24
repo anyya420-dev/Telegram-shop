@@ -13,7 +13,7 @@
   width: 32px;
   height: 32px;
   border: 3px solid var(--tg-theme-hint-color, #ccc);
-  border-top-color: var(--tg-theme-button-color, #3e86f5);
+  border-top-color: var(--tg-theme-button-color, #7C3AED);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -70,7 +70,7 @@
 }
 
 .amountBtn {
-  background: var(--tg-theme-button-color, #3e86f5);
+  background: var(--tg-theme-button-color, #7C3AED);
   color: var(--tg-theme-button-text-color, #fff);
   border: none;
   border-radius: 10px;
@@ -101,7 +101,7 @@
 }
 
 .customBtn {
-  background: var(--tg-theme-button-color, #3e86f5);
+  background: var(--tg-theme-button-color, #7C3AED);
   color: var(--tg-theme-button-text-color, #fff);
   border: none;
   border-radius: 10px;

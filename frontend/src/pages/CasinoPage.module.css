@@ -106,7 +106,7 @@
 }
 
 .targetActive {
-  border-color: var(--tg-theme-button-color, #3e86f5);
+  border-color: var(--tg-theme-button-color, #7C3AED);
 }
 
 .hint {
@@ -123,7 +123,7 @@
 
 .spinBtn {
   width: 100%;
-  background: var(--tg-theme-button-color, #3e86f5);
+  background: var(--tg-theme-button-color, #7C3AED);
   color: var(--tg-theme-button-text-color, #fff);
   border: none;
   border-radius: 12px;
