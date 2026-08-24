@@ -9,6 +9,7 @@ type AppState = {
   loading: boolean
   error: string | null
   telegramEnvironment: boolean
+  isAdmin: boolean
   user: UserProfile | null
   cities: City[]
   categories: Category[]
@@ -56,6 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [cities, setCities] = useState<City[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -105,6 +107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
+        setIsAdmin(response.isAdmin ?? false)
         setUser(response.user)
         void i18n.changeLanguage(response.user.language)
         setCities(response.cities)
@@ -258,6 +261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     telegramEnvironment,
+    isAdmin,
     user,
     cities,
     categories,

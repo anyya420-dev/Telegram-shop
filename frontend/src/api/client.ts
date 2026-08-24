@@ -2,6 +2,7 @@ import type {
   AdminStats,
   Balance,
   BootstrapResponse,
+  BotStatusResponse,
   Cart,
   City,
   Discount,
@@ -217,5 +218,28 @@ export const api = {
   },
   getAuditLogs(page = 1) {
     return request<{ logs: { id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[] }>(`/admin/audit-logs?page=${page}`)
+  },
+
+  // Admin – Bot configuration
+  getAdminBot() {
+    return request<BotStatusResponse>('/admin/bot')
+  },
+  connectAdminBot(token: string) {
+    return request<BotStatusResponse>('/admin/bot/connect', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
+  },
+  testAdminBot() {
+    return request<BotStatusResponse>('/admin/bot/test', { method: 'POST' })
+  },
+  changeAdminBot(token: string) {
+    return request<BotStatusResponse>('/admin/bot/change', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
+  },
+  disconnectAdminBot() {
+    return request<BotStatusResponse>('/admin/bot/disconnect', { method: 'POST' })
   },
 }

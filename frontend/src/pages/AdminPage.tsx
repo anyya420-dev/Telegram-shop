@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
-import type { AdminStats, Order, SupportTicket, Discount } from '../types';
+import type { AdminStats, BotStatusResponse, Order, SupportTicket, Discount } from '../types';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'discounts' | 'support' | 'audit';
+type Tab = 'stats' | 'orders' | 'discounts' | 'support' | 'audit' | 'bot';
 
 const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
 
@@ -37,6 +37,14 @@ export default function AdminPage() {
   // Status update
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
 
+  // Bot settings
+  const [botStatus, setBotStatus] = useState<BotStatusResponse | null>(null);
+  const [botToken, setBotToken] = useState('');
+  const [botLoading, setBotLoading] = useState(false);
+  const [botError, setBotError] = useState<string | null>(null);
+  const [botSuccess, setBotSuccess] = useState<string | null>(null);
+  const [showTokenInput, setShowTokenInput] = useState(false);
+
   useEffect(() => {
     void loadTab(tab);
   }, [tab]);
@@ -61,6 +69,13 @@ export default function AdminPage() {
       } else if (t === 'audit') {
         const r = await api.getAuditLogs();
         setAuditLogs(r.logs);
+      } else if (t === 'bot') {
+        setBotError(null);
+        setBotSuccess(null);
+        const r = await api.getAdminBot();
+        setBotStatus(r);
+        setBotToken('');
+        setShowTokenInput(false);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error loading data');
@@ -110,6 +125,75 @@ export default function AdminPage() {
     }
   }
 
+  async function handleBotConnect() {
+    if (botLoading || !botToken.trim()) return;
+    setBotLoading(true);
+    setBotError(null);
+    setBotSuccess(null);
+    try {
+      const r = await api.connectAdminBot(botToken.trim());
+      setBotStatus(r);
+      setBotToken('');
+      setShowTokenInput(false);
+      setBotSuccess('Telegram bot connected.');
+    } catch (e: unknown) {
+      setBotError(e instanceof Error ? e.message : 'Failed to connect bot');
+    } finally {
+      setBotLoading(false);
+    }
+  }
+
+  async function handleBotChange() {
+    if (botLoading || !botToken.trim()) return;
+    setBotLoading(true);
+    setBotError(null);
+    setBotSuccess(null);
+    try {
+      const r = await api.changeAdminBot(botToken.trim());
+      setBotStatus(r);
+      setBotToken('');
+      setShowTokenInput(false);
+      setBotSuccess('Bot token updated.');
+    } catch (e: unknown) {
+      setBotError(e instanceof Error ? e.message : 'Failed to change bot token');
+    } finally {
+      setBotLoading(false);
+    }
+  }
+
+  async function handleBotTest() {
+    if (botLoading) return;
+    setBotLoading(true);
+    setBotError(null);
+    setBotSuccess(null);
+    try {
+      const r = await api.testAdminBot();
+      setBotStatus(r);
+      setBotSuccess('✓ Telegram bot is working.');
+    } catch (e: unknown) {
+      setBotError(e instanceof Error ? e.message : 'Connection test failed');
+    } finally {
+      setBotLoading(false);
+    }
+  }
+
+  async function handleBotDisconnect() {
+    if (botLoading) return;
+    if (!window.confirm('Disconnect the Telegram bot? This will disable notifications.')) return;
+    setBotLoading(true);
+    setBotError(null);
+    setBotSuccess(null);
+    try {
+      const r = await api.disconnectAdminBot();
+      setBotStatus(r);
+      setBotSuccess('Bot disconnected.');
+    } catch (e: unknown) {
+      setBotError(e instanceof Error ? e.message : 'Failed to disconnect bot');
+    } finally {
+      setBotLoading(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <h1 className={styles.title}>⚙️ Admin Panel</h1>
@@ -117,13 +201,13 @@ export default function AdminPage() {
       {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.tabs}>
-        {(['stats', 'orders', 'discounts', 'support', 'audit'] as Tab[]).map((tabName) => (
+        {(['stats', 'orders', 'discounts', 'support', 'audit', 'bot'] as Tab[]).map((tabName) => (
           <button
             key={tabName}
             className={`${styles.tab} ${tab === tabName ? styles.tabActive : ''}`}
             onClick={() => setTab(tabName)}
           >
-            {t(`admin.tab_${tabName}`, { defaultValue: tabName })}
+            {tabName === 'bot' ? '🤖 Bot' : t(`admin.tab_${tabName}`, { defaultValue: tabName })}
           </button>
         ))}
       </div>
@@ -248,6 +332,116 @@ export default function AdminPage() {
               <span className={styles.auditDate}>{new Date(log.createdAt).toLocaleString()}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'bot' && (
+        <div className={styles.botSection}>
+          <div className={styles.botCard}>
+            <h3 className={styles.botCardTitle}>Telegram Bot</h3>
+
+            {botError && (
+              <div className={styles.botError}>{botError}</div>
+            )}
+            {botSuccess && (
+              <div className={styles.botSuccess}>{botSuccess}</div>
+            )}
+
+            <div className={styles.botStatusRow}>
+              <span className={styles.botStatusLabel}>Connection status:</span>
+              {botStatus === null ? (
+                <span className={styles.botStatusUnknown}>Loading…</span>
+              ) : botStatus.connected ? (
+                <span className={styles.botStatusConnected}>● Connected</span>
+              ) : (
+                <span className={styles.botStatusDisconnected}>○ Not connected</span>
+              )}
+            </div>
+
+            {botStatus?.connected && (
+              <div className={styles.botInfo}>
+                <span className={styles.botUsername}>@{botStatus.bot.username}</span>
+                <span className={styles.botName}>{botStatus.bot.firstName}</span>
+              </div>
+            )}
+
+            {botStatus?.connected && !showTokenInput && (
+              <div className={styles.botTokenConfigured}>
+                <span className={styles.botTokenMask}>Bot token configured</span>
+                <span className={styles.botTokenDots}>••••••••••••••••••••••••:••••••••••</span>
+              </div>
+            )}
+
+            {!botStatus?.connected && !showTokenInput && (
+              <div className={styles.botActions}>
+                <button
+                  className={styles.botBtnPrimary}
+                  onClick={() => { setShowTokenInput(true); setBotError(null); setBotSuccess(null); }}
+                >
+                  Connect Telegram Bot
+                </button>
+              </div>
+            )}
+
+            {botStatus?.connected && !showTokenInput && (
+              <div className={styles.botActions}>
+                <button
+                  className={styles.botBtnSecondary}
+                  onClick={() => void handleBotTest()}
+                  disabled={botLoading}
+                >
+                  {botLoading ? 'Testing…' : 'Test connection'}
+                </button>
+                <button
+                  className={styles.botBtnOutline}
+                  onClick={() => { setShowTokenInput(true); setBotError(null); setBotSuccess(null); }}
+                >
+                  Change bot token
+                </button>
+                <button
+                  className={styles.botBtnDanger}
+                  onClick={() => void handleBotDisconnect()}
+                  disabled={botLoading}
+                >
+                  Disconnect bot
+                </button>
+              </div>
+            )}
+
+            {showTokenInput && (
+              <div className={styles.botTokenForm}>
+                <label className={styles.botTokenLabel}>
+                  {botStatus?.connected ? 'New bot token' : 'Telegram Bot Token'}
+                </label>
+                <input
+                  type="password"
+                  className={styles.botTokenInput}
+                  placeholder="Enter BotFather token"
+                  value={botToken}
+                  onChange={(e) => setBotToken(e.target.value)}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <div className={styles.botTokenActions}>
+                  <button
+                    className={styles.botBtnPrimary}
+                    onClick={() => void (botStatus?.connected ? handleBotChange() : handleBotConnect())}
+                    disabled={botLoading || !botToken.trim()}
+                  >
+                    {botLoading ? 'Connecting…' : botStatus?.connected ? 'Update bot token' : 'Connect bot'}
+                  </button>
+                  <button
+                    className={styles.botBtnOutline}
+                    onClick={() => { setShowTokenInput(false); setBotToken(''); setBotError(null); }}
+                    disabled={botLoading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

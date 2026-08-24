@@ -1,9 +1,13 @@
 /**
  * Telegram bot notifier – sends order status updates to users via the bot.
  * This is a best-effort fire-and-forget helper; it never throws.
+ *
+ * Token resolution order:
+ *   1. Active bot config from the database (admin-configured)
+ *   2. TELEGRAM_BOT_TOKEN environment variable (legacy fallback)
  */
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+import { getActiveBotToken } from './botService.js'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: '⏳ Ожидает подтверждения',
@@ -19,21 +23,24 @@ export function notifyOrderStatusChange(
   orderId: number,
   status: string,
 ): void {
-  if (!TELEGRAM_BOT_TOKEN) {
-    return
-  }
-
   const label = STATUS_LABELS[status] ?? status
   const text = `Статус вашего заказа #${orderId} изменён:\n${label}`
 
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`
-  const body = JSON.stringify({ chat_id: telegramId, text, parse_mode: 'HTML' })
+  // Resolve token asynchronously; errors are silently ignored
+  getActiveBotToken()
+    .then((token) => {
+      if (!token) return
 
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  }).catch(() => {
-    // Ignore notification errors – they must not affect the API response
-  })
+      const url = `https://api.telegram.org/bot${token}/sendMessage`
+      const body = JSON.stringify({ chat_id: telegramId, text, parse_mode: 'HTML' })
+
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      })
+    })
+    .catch(() => {
+      // Ignore notification errors – they must not affect the API response
+    })
 }

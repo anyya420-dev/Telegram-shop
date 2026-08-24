@@ -10,7 +10,7 @@ import { getLocalizedCityName } from '../lib/localized';
 import type { Language, UserProfile } from '../types';
 
 export default function ProfilePage() {
-  const { user: bootstrapUser, telegramEnvironment, openCityPicker, updateLanguagePreference, orders, fetchOrders } = useApp();
+  const { user: bootstrapUser, telegramEnvironment, openCityPicker, updateLanguagePreference, orders, fetchOrders, isAdmin } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -230,6 +230,18 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+      {isAdmin && (
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>{t('admin.title', { defaultValue: 'Admin' })}</h3>
+          <div
+            className={styles.ordersLink}
+            onClick={() => navigate('/admin')}
+          >
+            <span>⚙️ {t('admin.settings', { defaultValue: 'Admin Settings' })}</span>
+            <span className={styles.cardArrow}>›</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

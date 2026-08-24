@@ -304,6 +304,20 @@ model UserActivityLog {
   @@map("user_activity_logs")
 }
 
+model BotConfig {
+  id              Int       @id @default(autoincrement())
+  botId           String    @map("bot_id")
+  botUsername     String    @map("bot_username")
+  botFirstName    String    @map("bot_first_name")
+  encryptedToken  String    @map("encrypted_token")
+  enabled         Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  lastValidatedAt DateTime? @map("last_validated_at")
+
+  @@map("bot_configs")
+}
+
 model DeliveryOption {
   id          Int      @id @default(autoincrement())
   name        String
