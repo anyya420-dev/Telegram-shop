@@ -1,4 +1,7 @@
 import type {
+  AdminCategory,
+  AdminCity,
+  AdminProduct,
   AdminSettingsResponse,
   AdminStats,
   Balance,
@@ -238,10 +241,10 @@ export const api = {
     return request<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)
   },
   getAdminProducts() {
-    return request<{ products: ProductDetail[] }>('/admin/products')
+    return request<{ products: AdminProduct[] }>('/admin/products')
   },
-  updateAdminProduct(id: number, data: Partial<{ name: string; price: number; isActive: boolean; isRecommended: boolean }>) {
-    return request<{ product: ProductDetail }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  updateAdminProduct(id: number, data: Partial<{ name: string; nameEn: string; description: string; descriptionEn: string; price: number; image: string; isActive: boolean; isRecommended: boolean }>) {
+    return request<{ product: AdminProduct }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean }>) {
     return request<{ productCity: unknown }>(`/admin/product-cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
@@ -284,5 +287,41 @@ export const api = {
   },
   disconnectAdminBot() {
     return request<BotStatusResponse>('/admin/bot/disconnect', { method: 'POST' })
+  },
+
+  // Admin – Cities
+  getAdminCities() {
+    return request<{ cities: AdminCity[] }>('/admin/cities')
+  },
+  createAdminCity(data: { name: string; nameEn?: string; sortOrder?: number }) {
+    return request<{ city: AdminCity }>('/admin/cities', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCity(id: number, data: Partial<{ name: string; nameEn: string; isActive: boolean; sortOrder: number }>) {
+    return request<{ city: AdminCity }>(`/admin/cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  deleteAdminCity(id: number) {
+    return request<{ ok?: boolean; city?: AdminCity; deactivated?: boolean }>(`/admin/cities/${id}`, { method: 'DELETE' })
+  },
+
+  // Admin – Categories
+  getAdminCategories() {
+    return request<{ categories: AdminCategory[] }>('/admin/categories')
+  },
+  createAdminCategory(data: { name: string; nameEn?: string; sortOrder?: number }) {
+    return request<{ category: AdminCategory }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCategory(id: number, data: Partial<{ name: string; nameEn: string; isActive: boolean; sortOrder: number }>) {
+    return request<{ category: AdminCategory }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  deleteAdminCategory(id: number) {
+    return request<{ ok?: boolean; category?: AdminCategory; deactivated?: boolean }>(`/admin/categories/${id}`, { method: 'DELETE' })
+  },
+
+  // Admin – Products (create / delete)
+  createAdminProduct(data: { name: string; nameEn?: string; description: string; descriptionEn?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean }) {
+    return request<{ product: AdminProduct }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
+  },
+  deleteAdminProduct(id: number) {
+    return request<{ ok?: boolean; product?: AdminProduct; deactivated?: boolean }>(`/admin/products/${id}`, { method: 'DELETE' })
   },
 }

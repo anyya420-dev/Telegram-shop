@@ -214,3 +214,37 @@ export type AdminSettingsResponse = {
   passwordConfigured: boolean
   bot: BotStatusResponse
 }
+
+export type AdminCity = {
+  id: number
+  name: string
+  nameEn: string | null
+  isActive: boolean
+  sortOrder: number
+  createdAt: string
+}
+
+export type AdminCategory = {
+  id: number
+  name: string
+  nameEn: string | null
+  isActive: boolean
+  sortOrder: number
+  createdAt: string
+}
+
+export type AdminProduct = {
+  id: number
+  name: string
+  nameEn: string | null
+  description: string
+  descriptionEn: string | null
+  price: number
+  image: string | null
+  categoryId: number
+  isActive: boolean
+  isRecommended: boolean
+  createdAt: string
+  updatedAt: string
+  category: { id: number; name: string }
+}

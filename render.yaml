@@ -29,6 +29,14 @@ services:
         value: https://telegram-shop-378j.onrender.com
       - key: ALLOW_DEMO_MODE
         value: "false"
+      - key: OWNER_TELEGRAM_ID
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: BOT_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: ADMIN_TELEGRAM_IDS
+        sync: false
 
   # Frontend Static Site
   - type: web

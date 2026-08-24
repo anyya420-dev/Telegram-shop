@@ -3,11 +3,20 @@ import { prisma } from '../lib.js'
 
 const ADMIN_SESSION_TTL_HOURS = 12
 
+export function getOwnerTelegramId() {
+  return (process.env.OWNER_TELEGRAM_ID ?? '').trim() || null
+}
+
 function getEnvAdminIds() {
-  return (process.env.ADMIN_TELEGRAM_IDS ?? '')
+  const ids = (process.env.ADMIN_TELEGRAM_IDS ?? '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean)
+  const owner = getOwnerTelegramId()
+  if (owner && !ids.includes(owner)) {
+    ids.unshift(owner)
+  }
+  return ids
 }
 
 function getEnvAdminPassword() {
@@ -32,6 +41,16 @@ export async function seedAdminConfigForFreshInstall(currentTelegramId?: string)
     prisma.administrator.count(),
     prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } }),
   ])
+
+  // Always ensure the OWNER_TELEGRAM_ID is an administrator
+  const owner = getOwnerTelegramId()
+  if (owner) {
+    await prisma.administrator.upsert({
+      where: { telegramId: owner },
+      create: { telegramId: owner },
+      update: {},
+    })
+  }
 
   if (adminCount === 0) {
     const envIds = getEnvAdminIds()
@@ -61,6 +80,12 @@ export async function seedAdminConfigForFreshInstall(currentTelegramId?: string)
 }
 
 export async function isAdminTelegramId(telegramId: string) {
+  // OWNER_TELEGRAM_ID always has admin access regardless of db state
+  const owner = getOwnerTelegramId()
+  if (owner && telegramId === owner) {
+    return true
+  }
+
   const admin = await prisma.administrator.findUnique({ where: { telegramId } })
   if (admin) {
     return true
@@ -73,6 +98,11 @@ export async function isAdminTelegramId(telegramId: string) {
 
   const envIds = getEnvAdminIds()
   return envIds.length === 0 || envIds.includes(telegramId)
+}
+
+export function isOwnerTelegramId(telegramId: string) {
+  const owner = getOwnerTelegramId()
+  return Boolean(owner && telegramId === owner)
 }
 
 export async function listAdministratorIds() {
