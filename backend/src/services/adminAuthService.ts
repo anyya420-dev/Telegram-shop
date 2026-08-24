@@ -166,19 +166,62 @@ export async function listAdministratorIds() {
   return admins.map((admin) => admin.telegramId)
 }
 
-export async function verifyAdminPassword(password: string) {
+export type PasswordVerifyResult =
+  | { valid: true }
+  | { valid: false; reason: 'invalid_credentials' | 'configuration_error' }
+
+/**
+ * Verifies the provided password against the stored admin security record.
+ *
+ * Primary check: scrypt hash stored in the AdminSecurity DB table.
+ * Fallback check: if no DB record exists, or the DB hash does not match,
+ *   the ADMIN_PASSWORD environment variable is used as a recovery path.
+ *   This covers the common deployment scenario where ADMIN_PASSWORD was
+ *   set (or changed) in Render after the initial database seed, leaving
+ *   the adminSecurity table empty or holding a stale hash.
+ *
+ * Security properties preserved:
+ *  - timing-safe comparison in both paths
+ *  - env password is never logged or returned
+ *  - env password does not weaken the system: it is a server-side secret
+ *    controlled by the same party that controls the database
+ */
+export async function verifyAdminPassword(password: string): Promise<PasswordVerifyResult> {
   const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
-  if (!security) {
-    return false
+
+  if (security) {
+    const expectedHash = Buffer.from(security.passwordHash, 'hex')
+    const receivedHash = Buffer.from(derivePasswordHash(password, security.passwordSalt), 'hex')
+    if (expectedHash.length === receivedHash.length && timingSafeEqual(expectedHash, receivedHash)) {
+      return { valid: true }
+    }
   }
 
-  const expectedHash = Buffer.from(security.passwordHash, 'hex')
-  const receivedHash = Buffer.from(derivePasswordHash(password, security.passwordSalt), 'hex')
-  if (expectedHash.length !== receivedHash.length) {
-    return false
+  // Fallback: compare against the current ADMIN_PASSWORD env var.
+  // This handles two deployment scenarios:
+  //   1. No adminSecurity row yet (ADMIN_PASSWORD was added/changed in Render
+  //      after the initial seed ran without it).
+  //   2. ADMIN_PASSWORD was rotated in Render after the DB row was seeded,
+  //      leaving a stale hash in adminSecurity.
+  // A fixed salt is used so the comparison is timing-safe without exposing
+  // the env value through hash length differences.
+  const envPassword = getEnvAdminPassword()
+  if (!envPassword) {
+    // No DB record and no env password: admin login is not configured.
+    if (!security) {
+      return { valid: false, reason: 'configuration_error' }
+    }
+    return { valid: false, reason: 'invalid_credentials' }
   }
 
-  return timingSafeEqual(expectedHash, receivedHash)
+  const ENV_FALLBACK_SALT = 'admin-env-fallback-v1'
+  const envExpectedHash = Buffer.from(derivePasswordHash(envPassword, ENV_FALLBACK_SALT), 'hex')
+  const envReceivedHash = Buffer.from(derivePasswordHash(password, ENV_FALLBACK_SALT), 'hex')
+  if (envExpectedHash.length === envReceivedHash.length && timingSafeEqual(envExpectedHash, envReceivedHash)) {
+    return { valid: true }
+  }
+
+  return { valid: false, reason: 'invalid_credentials' }
 }
 
 export async function setAdminPassword(password: string, updatedByAdmin: number | null) {
@@ -266,5 +309,6 @@ export async function getAuthorizedAdminSession(token: string | undefined) {
 
 export async function hasAdminPasswordConfigured() {
   const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
-  return Boolean(security)
+  if (security) return true
+  return Boolean(getEnvAdminPassword())
 }
