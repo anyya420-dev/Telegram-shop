@@ -1,156 +1,116 @@
 # PRODUCTION_FINAL_REPORT
 
-## 1) Root cause
-The remaining production risk was configuration drift between runtime/deploy values and frontend build-time API embedding. `VITE_API_URL` could still be built incorrectly if not validated early enough, and there was no single command-line smoke verification for frontend/backend/CORS/live reachability.
+## Root causes
+- Checkout stock reservation was not atomic, so concurrent order creation could over-decrement stock.
+- Malformed JSON request bodies could surface as generic server errors instead of clear client errors.
+- Root-level verification was fragmented; `npm run build` depended on externally provided `VITE_API_URL`.
 
-## 2) Files changed
-- `/home/runner/work/Telegram-shop/Telegram-shop/frontend/vite.config.ts`
-- `/home/runner/work/Telegram-shop/Telegram-shop/frontend/src/lib/apiConfig.ts`
-- `/home/runner/work/Telegram-shop/Telegram-shop/frontend/tests/apiConfig.test.ts`
-- `/home/runner/work/Telegram-shop/Telegram-shop/frontend/tests/build.test.ts`
-- `/home/runner/work/Telegram-shop/Telegram-shop/scripts/production-smoke-test.mjs`
+## Fixes implemented
+- Hardened checkout transaction in `/api/orders`:
+  - atomic stock reservation with `updateMany(... stock: { gte: quantity })` inside transaction
+  - conflict response `409 checkout_conflict` when concurrent checkout drains stock first
+  - added quantity-rule revalidation at checkout (`422 quantity_invalid`) before transaction
+- Hardened centralized error handling in backend app:
+  - invalid JSON now returns structured `400 { code: "invalid_json" }`
+  - preserved JSON error responses for API consumers
+- Added regression coverage:
+  - new smoke test for malformed JSON payload handling
+- Added reliable local verification command:
+  - `npm run verify` runs generate + typecheck + tests + build with explicit production API default
+
+## Files changed
+- `/home/runner/work/Telegram-shop/Telegram-shop/backend/src/routes/orders.ts`
+- `/home/runner/work/Telegram-shop/Telegram-shop/backend/src/app.ts`
+- `/home/runner/work/Telegram-shop/Telegram-shop/backend/src/app.smoke.test.ts`
 - `/home/runner/work/Telegram-shop/Telegram-shop/package.json`
 - `/home/runner/work/Telegram-shop/Telegram-shop/README.md`
 - `/home/runner/work/Telegram-shop/Telegram-shop/PRODUCTION_FINAL_REPORT.md`
 
-## 3) Exact fixes
-- Enforced production build-time validation in Vite config:
-  - build fails if `VITE_API_URL` missing/malformed/non-HTTPS/not `/api`.
-  - build fails for retired backend host `78j.onrender.com`.
-- Kept frontend API URL normalization (`/api` base without double slash).
-- Added production smoke script with explicit `PASS|FAIL|BLOCKED` outcomes.
-- Added/updated tests for:
-  - API base normalization,
-  - no `/api/api`,
-  - production build failure on missing `VITE_API_URL`,
-  - production build failure on retired host.
-- Added root npm script: `npm run smoke:production`.
-- Updated README production env/docs to use current production API URL.
+## Configuration status (repository side)
+- Frontend production URL: `https://telegram-shop-3781.onrender.com`
+- Backend production URL: `https://narcos-shop.onrender.com`
+- API base URL: `https://narcos-shop.onrender.com/api`
+- `render.yaml` configured with:
+  - backend health check path `/health`
+  - backend start command `npm run start --workspace backend`
+  - backend preDeploy migration command `npm run db:migrate:deploy --workspace backend`
+  - frontend `VITE_API_URL=https://narcos-shop.onrender.com/api`
 
-## 4) API architecture
-- Frontend uses a single API base source: `import.meta.env.VITE_API_URL` (resolved by `resolveApiBaseUrl`).
-- Frontend requests call `${API_URL}${path}` where `API_URL` is normalized and validated.
-- Backend serves API under `/api/*`, with CORS middleware first and health/readiness public.
+## CORS
+- Strict allowlist-based CORS remains in place.
+- No wildcard origin with credentials.
+- Rejected origins return JSON `403 cors_origin_not_allowed`.
+- OPTIONS preflight is handled before auth/rate limiting.
+- `Vary: Origin` present.
 
-## 5) Frontend URL
-`https://telegram-shop-3781.onrender.com`
+## Telegram / authentication
+- Telegram WebApp init remains bootstrapped with `ready()`/`expand()` on frontend.
+- Backend auth still validates signed Telegram `initData` server-side.
+- `initDataUnsafe` is not used as authentication source.
+- No bot/admin secrets exposed to frontend code in these changes.
 
-## 6) Backend URL
-`https://narcos-shop.onrender.com`
+## Database / business logic
+- Checkout now protects against concurrent stock underflow.
+- Backend remains authoritative for stock/quantity/order totals in checkout path.
+- No destructive migration/data-reset operation executed.
 
-## 7) API base URL
-`https://narcos-shop.onrender.com/api`
+## Security
+- No secrets added to repository (secret scan passed on modified files).
+- No CORS weakening introduced.
+- Added explicit client error handling path for invalid JSON requests.
 
-## 8) Environment variables required
-### Frontend (Render static service)
+## Verification performed
+- `npm install` → PASS
+- `npm run db:generate` → PASS
+- `npm run verify` → PASS
+  - includes `typecheck`, backend/frontend tests, and full workspace build
+- Local startup verification:
+  - backend started with production-like env and bound to `PORT`
+  - `GET /health` → `200` JSON PASS
+  - `GET /ready` → `503` JSON PASS when local DB unavailable (expected degraded readiness)
+- `npm run smoke:production` → BLOCKED in this environment (no external fetch reachability)
+
+## Production verification
+LIVE VERIFICATION BLOCKED — EXTERNAL ENVIRONMENT
+
+Blocked checks:
+- Frontend URL reachability
+- Backend URL reachability
+- `/health`, `/ready`, `/api/health`, `/api/ready`
+- live CORS preflight to production backend
+- live frontend asset stale-URL scan
+
+Manual commands to run from a normal network:
+```bash
+npm run smoke:production
+curl -sS https://narcos-shop.onrender.com/health
+curl -sS https://narcos-shop.onrender.com/ready
+curl -sS https://narcos-shop.onrender.com/api/health
+curl -sS https://narcos-shop.onrender.com/api/ready
+curl -i -X OPTIONS https://narcos-shop.onrender.com/api/session/bootstrap \
+  -H "Origin: https://telegram-shop-3781.onrender.com" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type, Authorization"
+```
+
+## Required Render dashboard variables
+Frontend service:
 - `VITE_API_URL=https://narcos-shop.onrender.com/api`
 
-### Backend (Render web service)
+Backend service:
 - `NODE_ENV=production`
 - `DATABASE_URL`
 - `SESSION_SECRET`
-- `TELEGRAM_BOT_TOKEN` (or active bot token in DB)
+- `OWNER_TELEGRAM_ID=8405501187`
 - `ADMIN_PASSWORD`
 - `BOT_TOKEN_ENCRYPTION_KEY`
 - `FRONTEND_URL=https://telegram-shop-3781.onrender.com`
 - `WEB_APP_URL=https://telegram-shop-3781.onrender.com`
 - `ALLOW_DEMO_MODE=false`
-- `OWNER_TELEGRAM_ID=8405501187`
-- optional: `CORS_ALLOWED_ORIGINS`, `ADMIN_TELEGRAM_IDS`
+- optional: `TELEGRAM_BOT_TOKEN`, `CORS_ALLOWED_ORIGINS`, `ADMIN_TELEGRAM_IDS`
 
-## 9) Render deployment requirements
-- Backend `healthCheckPath: /health`.
-- Backend migrations via `preDeployCommand`.
-- Frontend must be rebuilt/redeployed after changing `VITE_*` values.
-- SPA rewrite route must point `/* -> /index.html`.
-
-## 10) CORS behavior
-- No wildcard origin with credentials.
-- Allowlist built from configured frontend origins (+ controlled extras).
-- Origin normalization handles trailing slash/case/default port.
-- Rejected origins return JSON `403` (`cors_origin_not_allowed`), not HTML 500.
-- OPTIONS preflight handled before auth.
-- `Vary: Origin` is emitted for dynamic origin handling.
-
-## 11) Authentication behavior
-- `/api/session/bootstrap` remains protected by Telegram `initData` verification.
-- `initDataUnsafe` is not trusted for backend auth.
-- No auth bypass introduced.
-- Demo mode remains disabled in production (`ALLOW_DEMO_MODE=false`).
-
-## 12) Tests executed
-- `npm run test --workspace backend` → PASS (73/73)
-- `npm run test --workspace frontend` → PASS (11/11)
-- `npm run test` → PASS (backend + frontend)
-
-## 13) Build executed
-- `VITE_API_URL=https://narcos-shop.onrender.com/api npm run build --workspace frontend` → PASS
-- `VITE_API_URL=https://narcos-shop.onrender.com/api npm run build` → PASS
-- `npm run typecheck` → PASS
-
-## 14) Smoke tests executed
-- `npm run smoke:production` → BLOCKED (network/DNS unavailable in this execution environment)
-
-## 15) Live tests executed
-Attempted through `npm run smoke:production` checks for:
-- frontend reachability
-- backend reachability
-- `/health`, `/ready`, `/api/health`, `/api/ready`
-- OPTIONS `/api/session/bootstrap` preflight + CORS headers
-- bundle stale-url checks
-
-All live checks returned `BLOCKED` due fetch/network restrictions in this environment.
-
-## 16) Blocked tests
-All network-dependent production checks are blocked here; no successful external DNS/HTTP verification was possible.
-
-## 17) Remaining manual steps
-1. Verify Render dashboard env values (section below).
-2. Redeploy frontend after confirming `VITE_API_URL`.
-3. Redeploy backend if env values changed.
-4. Run the manual live verification commands from a normal network.
-5. Open the Mini App on a physical Telegram client and verify bootstrap + API flows.
-
-## 18) Exact commands for manual verification
-```bash
-# Backend health/readiness
-curl -sS https://narcos-shop.onrender.com/health
-curl -sS https://narcos-shop.onrender.com/ready
-curl -sS https://narcos-shop.onrender.com/api/health
-curl -sS https://narcos-shop.onrender.com/api/ready
-
-# CORS preflight for session bootstrap
-curl -i -X OPTIONS \
-  https://narcos-shop.onrender.com/api/session/bootstrap \
-  -H "Origin: https://telegram-shop-3781.onrender.com" \
-  -H "Access-Control-Request-Method: POST" \
-  -H "Access-Control-Request-Headers: Content-Type, Authorization"
-
-# Expect:
-# - HTTP 200/204
-# - Access-Control-Allow-Origin: https://telegram-shop-3781.onrender.com
-# - Access-Control-Allow-Credentials: true
-# - Vary: Origin
-
-# Repository smoke verification command
-npm run smoke:production
-```
-
-## 19) CODE / BUILD / CONFIG / LIVE status
-- CODE VERIFIED: PASS
-- BUILD VERIFIED: PASS
-- CONFIG VERIFIED (repo-side): PASS
-- LIVE PRODUCTION VERIFIED: BLOCKED (external network unavailable)
-
-## 20) RENDER DASHBOARD VALUES THAT MUST BE VERIFIED
-### Frontend service
-- `VITE_API_URL=https://narcos-shop.onrender.com/api`
-
-### Backend service
-- `FRONTEND_URL=https://telegram-shop-3781.onrender.com`
-- `WEB_APP_URL=https://telegram-shop-3781.onrender.com`
-
-Important: because Vite embeds `VITE_*` at build time, after changing `VITE_API_URL` the frontend must be rebuilt/redeployed.
-
----
-LIVE VERIFICATION BLOCKED in this environment. Run section 18 commands from a normal network.
+## Remaining manual actions
+- Confirm Render env values exactly match required values above.
+- Redeploy frontend after any `VITE_API_URL` change (Vite embeds at build time).
+- Redeploy backend if runtime env values are changed.
+- Run production smoke checks from a network with external DNS/HTTP access.

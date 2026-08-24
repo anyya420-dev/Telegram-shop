@@ -48,6 +48,7 @@ npm run dev:bot
 ## Проверка
 
 ```bash
+npm run verify
 npm run typecheck
 npm run build
 ```
