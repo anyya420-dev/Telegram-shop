@@ -24,9 +24,9 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: https://78j.onrender.com
       - key: WEB_APP_URL
-        sync: false
+        value: https://78j.onrender.com
       - key: ALLOW_DEMO_MODE
         value: "false"
       - key: OWNER_TELEGRAM_ID
