@@ -123,6 +123,7 @@ router.post('/', authRateLimiter, async (request, response) => {
   // Resolve discount code
   let discountAmount = 0
   let discountId: number | null = null
+  let discountUsageLimit: number | null = null
   if (discountCode) {
     const discount = await prisma.discount.findFirst({ where: { code: discountCode, isActive: true } })
     if (discount) {
@@ -136,6 +137,7 @@ router.post('/', authRateLimiter, async (request, response) => {
             ? normalizeQuantity((subtotal * discount.value) / 100)
             : Math.min(discount.value, subtotal)
         discountId = discount.id
+        discountUsageLimit = discount.usageLimit
       }
     }
   }
@@ -164,10 +166,26 @@ router.post('/', authRateLimiter, async (request, response) => {
 
       // Increment discount usage when a code is attached.
       if (discountId) {
-        await tx.discount.update({
-          where: { id: discountId },
-          data: { usedCount: { increment: 1 } },
-        })
+        if (discountUsageLimit === null) {
+          await tx.discount.update({
+            where: { id: discountId },
+            data: { usedCount: { increment: 1 } },
+          })
+        } else {
+          const discountResult = await tx.discount.updateMany({
+            where: {
+              id: discountId,
+              isActive: true,
+              usageLimit: discountUsageLimit,
+              usedCount: { lt: discountUsageLimit },
+            },
+            data: { usedCount: { increment: 1 } },
+          })
+
+          if (discountResult.count !== 1) {
+            throw new CheckoutConflictError('Discount code is no longer available')
+          }
+        }
       }
 
       const newOrder = await tx.order.create({
