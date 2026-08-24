@@ -194,7 +194,9 @@
     "addToCart": "Add to cart",
     "outOfStock": "Out of stock",
     "close": "Close",
-    "retry": "Retry"
+    "retry": "Retry",
+    "yes": "Yes",
+    "no": "No"
   },
   "cityPicker": {
     "badge": "Location",

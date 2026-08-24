@@ -59,9 +59,11 @@ export type CorsMiddlewareOptions = {
  *
  * - Never emits `Access-Control-Allow-Origin: *` (incompatible with credentials).
  * - Always emits `Vary: Origin` so caches/CDNs never reuse a response across origins.
- * - Answers OPTIONS preflight requests itself, before any auth/rate-limit/body middleware.
- * - Requests without an `Origin` header (curl, Render health checks, server-to-server,
- *   Telegram webhooks) are passed through untouched: CORS only applies to browsers.
+ * - Answers every OPTIONS request itself, before any auth/rate-limit/body middleware,
+ *   so a preflight can never be rejected by a downstream guard.
+ * - Non-OPTIONS requests without an `Origin` header (curl, Render health checks,
+ *   server-to-server, Telegram webhooks) are passed through untouched and receive no
+ *   CORS headers: CORS only applies to browsers.
  */
 export function createCorsMiddleware({ allowedOrigins, onRejected }: CorsMiddlewareOptions) {
   const allowSet = buildAllowedOriginSet(allowedOrigins)

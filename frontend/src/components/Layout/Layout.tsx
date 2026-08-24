@@ -92,7 +92,7 @@ export default function Layout() {
             <dt>{t('diagnostics.origin')}</dt>
             <dd>{diagnostics.pageOrigin ?? '—'}</dd>
             <dt>Telegram</dt>
-            <dd>{diagnostics.inTelegram ? 'yes' : 'no'}</dd>
+            <dd>{diagnostics.inTelegram ? t('common.yes') : t('common.no')}</dd>
             {diagnostics.errorCode ? (
               <>
                 <dt>{t('diagnostics.code')}</dt>
