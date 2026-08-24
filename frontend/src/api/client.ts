@@ -33,12 +33,24 @@ let adminToken: string | null = null
 
 export class ApiError extends Error {
   code?: string
+  status?: number
 
-  constructor(message: string, code?: string) {
+  constructor(message: string, code?: string, status?: number) {
     super(message)
     this.name = 'ApiError'
     this.code = code
+    this.status = status
   }
+}
+
+const FALLBACK_CODE_BY_STATUS: Record<number, string> = {
+  401: 'unauthorized',
+  403: 'forbidden',
+  404: 'not_found',
+  409: 'conflict',
+  422: 'validation_failed',
+  500: 'server_error',
+  503: 'service_unavailable',
 }
 
 async function request<T>(path: string, init?: RequestInit) {
@@ -61,7 +73,13 @@ async function request<T>(path: string, init?: RequestInit) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed', code: 'request_failed' })) as { message?: string; code?: string }
-    throw new ApiError(error.message ?? 'Request failed', error.code ?? 'request_failed')
+    let code = error.code ?? FALLBACK_CODE_BY_STATUS[response.status] ?? 'request_failed'
+
+    if (response.status === 401) {
+      code = path.startsWith('/admin') ? 'invalid_admin_session' : 'invalid_session_token'
+    }
+
+    throw new ApiError(error.message ?? 'Request failed', code, response.status)
   }
 
   return (await response.json()) as T

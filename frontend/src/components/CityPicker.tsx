@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useApp } from '../context/AppContext'
 import { getLocalizedCityName } from '../lib/localized'
 import type { Language } from '../types'
+import { resolveApiErrorMessage } from '../lib/errors'
 
 export function CityPicker() {
   const { cities, cityPickerOpen, closeCityPicker, refreshCities, selectCity, skipCitySelection, user } = useApp()
@@ -18,7 +19,7 @@ export function CityPicker() {
       setError(null)
       await refreshCities()
     } catch (cityError) {
-      setError(cityError instanceof Error ? cityError.message : t('errors.request_failed'))
+      setError(resolveApiErrorMessage(cityError, t, 'request_failed'))
     } finally {
       setLoading(false)
     }
@@ -75,9 +76,15 @@ export function CityPicker() {
                 className="city-button"
                 disabled={pendingCityId === city.id}
                 onClick={async () => {
+                  if (pendingCityId !== null) {
+                    return
+                  }
                   setPendingCityId(city.id)
+                  setError(null)
                   try {
                     await selectCity(city.id)
+                  } catch (cityError) {
+                    setError(resolveApiErrorMessage(cityError, t, 'city_not_found'))
                   } finally {
                     setPendingCityId(null)
                   }

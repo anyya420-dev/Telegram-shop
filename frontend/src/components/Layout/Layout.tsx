@@ -76,6 +76,9 @@ export default function Layout() {
       <div className={styles.loading}>
         <div className={styles.errorBanner} role="alert">
           <span>{error ?? t('errors.shop_load_failed')}</span>
+          <button type="button" onClick={() => window.location.reload()}>
+            {t('common.retry')}
+          </button>
         </div>
       </div>
     );

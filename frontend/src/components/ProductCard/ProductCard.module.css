@@ -171,3 +171,7 @@
   opacity: 0.75;
   transform: scale(0.92);
 }
+
+.addBtn:disabled {
+  opacity: 0.5;
+}

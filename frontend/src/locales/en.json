@@ -277,6 +277,14 @@
     "language_update_failed": "Failed to save the language.",
     "checkout_failed": "Failed to place the order.",
     "orders_fetch_failed": "Failed to load orders.",
-    "cart_empty": "Cart is empty."
+    "cart_empty": "Cart is empty.",
+    "unauthorized": "Authorization required. Reopen the app and try again.",
+    "forbidden": "You do not have permission for this action.",
+    "not_found": "Requested data was not found.",
+    "conflict": "Data conflict detected. Refresh and try again.",
+    "validation_failed": "Please check your input and try again.",
+    "server_error": "Temporary server error. Please try again later.",
+    "service_unavailable": "Service is temporarily unavailable. Please try again later.",
+    "invalid_admin_session": "Administrator session expired. Sign in again."
   }
 }
