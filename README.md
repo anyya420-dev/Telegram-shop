@@ -108,6 +108,7 @@ Backend выполняет production startup validation и аварийно з�
 ### Verified from repository
 
 - `render.yaml` запускает backend как Node web service (`npm run start --workspace backend`) и frontend как static service.
+- Prisma production migrations должны выполняться на Render через `preDeployCommand`, чтобы backend успевал привязаться к `PORT` и отдавать `/health` даже при временных проблемах с БД.
 - Backend слушает `PORT` и `0.0.0.0` в `backend/src/index.ts`.
 - Production runtime validation блокирует запуск при отсутствующих обязательных переменных и при `ALLOW_DEMO_MODE != false`.
 - Telegram Mini App identity проверяется на backend через `initData` подпись и только затем создаётся `sessionToken`.
