@@ -21,17 +21,17 @@ export function getRuntimeConfigStatus(): RuntimeConfigStatus {
 export function getRuntimeConfigSummary() {
   const status = getRuntimeConfigStatus()
   return {
-    ADMIN_PASSWORD: status.adminPasswordConfigured ? 'configured' : 'missing',
-    OWNER_TELEGRAM_ID: status.ownerTelegramIdConfigured ? 'configured' : 'missing',
-    DATABASE_URL: status.databaseConfigured ? 'configured' : 'missing',
-    BOT_TOKEN_ENCRYPTION_KEY: status.botTokenEncryptionKeyConfigured ? 'configured' : 'missing',
+    ADMIN_PASSWORD: status.adminPasswordConfigured ? 'CONFIGURED' : 'MISSING',
+    OWNER_TELEGRAM_ID: status.ownerTelegramIdConfigured ? 'CONFIGURED' : 'MISSING',
+    DATABASE_URL: status.databaseConfigured ? 'CONFIGURED' : 'MISSING',
+    BOT_TOKEN_ENCRYPTION_KEY: status.botTokenEncryptionKeyConfigured ? 'CONFIGURED' : 'MISSING',
   }
 }
 
 export function getMissingRequiredRuntimeConfigKeys() {
   const summary = getRuntimeConfigSummary()
   return Object.entries(summary)
-    .filter(([, value]) => value === 'missing')
+    .filter(([, value]) => value === 'MISSING')
     .map(([key]) => key)
 }
 

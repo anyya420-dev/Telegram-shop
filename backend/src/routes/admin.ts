@@ -13,11 +13,12 @@ import {
   isAdminTelegramId,
   isOwnerTelegramId,
   listAdministratorIds,
+  normalizeTelegramId,
   revokeAdminSession,
   setAdminPassword,
   verifyAdminPassword,
 } from '../services/adminAuthService.js'
-import { getRuntimeConfigStatus, getRuntimeEnvironmentLabel } from '../services/runtimeConfig.js'
+import { getRuntimeConfigStatus, getRuntimeConfigSummary, getRuntimeEnvironmentLabel } from '../services/runtimeConfig.js'
 import rateLimit from 'express-rate-limit'
 
 const router = Router()
@@ -90,15 +91,6 @@ async function getAdminUser(request: Request, response: Response, options?: { re
   }
 
   return { user, administrator: resolvedAdministrator }
-}
-
-function normalizeTelegramId(value: unknown) {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim()
-  if (!/^\d{5,20}$/.test(normalized)) {
-    return null
-  }
-  return normalized
 }
 
 function meetsMinimumPasswordLength(password: string) {
@@ -200,6 +192,7 @@ router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
     adminPasswordConfigured: runtime.adminPasswordConfigured,
     databaseConfigured: runtime.databaseConfigured,
     botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
+    runtimeConfigSummary: getRuntimeConfigSummary(),
     adminSessionValid: true,
     environment: getRuntimeEnvironmentLabel(),
   })
@@ -219,6 +212,7 @@ router.get('/diagnostics/runtime', authRateLimiter, async (request, response) =>
     adminPasswordConfigured: runtime.adminPasswordConfigured,
     databaseConfigured: runtime.databaseConfigured,
     botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
+    runtimeConfigSummary: getRuntimeConfigSummary(),
     environment: getRuntimeEnvironmentLabel(),
   })
 })

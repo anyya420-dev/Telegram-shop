@@ -8,7 +8,11 @@ const TELEGRAM_ID_PATTERN = /^\d{5,20}$/
 const ENV_COMPARE_SALT = 'admin-env-compare-v1'
 let ownerValidationWarningShown = false
 
-function normalizeTelegramId(value: unknown) {
+export function normalizeTelegramId(value: unknown) {
+  if (typeof value === 'bigint') {
+    return value > 0n ? value.toString() : null
+  }
+
   if (typeof value === 'number') {
     if (!Number.isSafeInteger(value) || value <= 0) {
       return null
@@ -88,7 +92,7 @@ export function createRandomToken() {
   return randomBytes(48).toString('base64url')
 }
 
-export async function seedAdminConfigForFreshInstall(currentTelegramId?: string) {
+export async function seedAdminConfigForFreshInstall(currentTelegramId?: unknown) {
   const [adminCount, security] = await Promise.all([
     prisma.administrator.count(),
     prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } }),
@@ -106,7 +110,8 @@ export async function seedAdminConfigForFreshInstall(currentTelegramId?: string)
 
   if (adminCount === 0) {
     const envIds = getEnvAdminIds()
-    const idsToSeed = envIds.length > 0 ? envIds : currentTelegramId ? [currentTelegramId] : []
+    const normalizedCurrentTelegramId = normalizeTelegramId(currentTelegramId)
+    const idsToSeed = envIds.length > 0 ? envIds : normalizedCurrentTelegramId ? [normalizedCurrentTelegramId] : []
     if (idsToSeed.length > 0) {
       await prisma.administrator.createMany({
         data: idsToSeed.map((telegramId) => ({ telegramId })),
@@ -150,7 +155,7 @@ export async function seedAdminConfigForFreshInstall(currentTelegramId?: string)
   }
 }
 
-export async function isAdminTelegramId(telegramId: string) {
+export async function isAdminTelegramId(telegramId: unknown) {
   const normalizedTelegramId = normalizeTelegramId(telegramId)
   if (!normalizedTelegramId) {
     return false
@@ -176,13 +181,13 @@ export async function isAdminTelegramId(telegramId: string) {
   return envIds.length === 0 || envIds.includes(normalizedTelegramId)
 }
 
-export function isOwnerTelegramId(telegramId: string) {
+export function isOwnerTelegramId(telegramId: unknown) {
   const owner = getOwnerTelegramId()
   const normalizedTelegramId = normalizeTelegramId(telegramId)
   return Boolean(owner && normalizedTelegramId && normalizedTelegramId === owner)
 }
 
-export async function ensureOwnerAdministratorRecord(telegramId: string) {
+export async function ensureOwnerAdministratorRecord(telegramId: unknown) {
   const normalizedTelegramId = normalizeTelegramId(telegramId)
   if (!normalizedTelegramId || !isOwnerTelegramId(normalizedTelegramId)) {
     return null
@@ -207,28 +212,28 @@ export type PasswordVerifyResult =
 /**
  * Verifies the provided password against the stored admin security record.
  *
- * Primary check: scrypt hash stored in the AdminSecurity DB table.
- * Recovery check: if a DB record exists but the entered password does NOT
- *   match the stored hash, the ADMIN_PASSWORD environment variable is also
- *   tried.  If the env var matches, the DB record is updated with a fresh
- *   hash derived from the submitted password.  This handles the deployment
- *   scenario where ADMIN_PASSWORD was changed in Render after the initial
- *   DB seed, leaving a stale hash in the database.  The env var effectively
- *   acts as a "password reset" that re-syncs the DB on next successful login.
- * Fallback check: when no DB record exists at all, only ADMIN_PASSWORD is
- *   consulted (original fallback path, unchanged).
+ * ADMIN_PASSWORD is the source of truth and must be configured.
+ * If a DB hash exists and matches, auth succeeds.
+ * If the submitted password matches ADMIN_PASSWORD but DB hash is stale,
+ * the DB hash is re-generated from ADMIN_PASSWORD and auth succeeds.
  *
  * Security properties preserved:
  *  - timing-safe comparison in all paths
  *  - env password is never logged or returned
- *  - DB is authoritative when DB hash and entered password agree
- *  - env var can only promote itself to DB-authoritative by matching the
- *    server's current ADMIN_PASSWORD value; a leaked old password alone
- *    cannot bypass the env-gated recovery
+ *  - login is always gated by current ADMIN_PASSWORD
+ *  - stale DB hash is auto-recovered without exposing secrets
  */
 export async function verifyAdminPassword(password: string): Promise<PasswordVerifyResult> {
   const envPassword = getEnvAdminPassword()
   const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
+
+  if (!envPassword) {
+    return { valid: false, reason: 'configuration_error' }
+  }
+
+  if (!envPasswordMatchesSubmitted(envPassword, password)) {
+    return { valid: false, reason: 'invalid_credentials' }
+  }
 
   if (security) {
     const expectedHash = Buffer.from(security.passwordHash, 'hex')
@@ -236,37 +241,19 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
     if (expectedHash.length === receivedHash.length && timingSafeEqual(expectedHash, receivedHash)) {
       return { valid: true }
     }
-
-    // DB hash did not match.  Try the ADMIN_PASSWORD env var as a recovery
-    // path so that changing ADMIN_PASSWORD in the deployment environment
-    // (e.g. Render) re-syncs access without requiring direct DB access.
-    if (envPassword && envPasswordMatchesSubmitted(envPassword, password)) {
-      // Env password matches: re-sync DB record so future logins use the
-      // new hash and the env var is no longer needed as a recovery path.
-      const newSalt = randomBytes(16).toString('hex')
-      await prisma.adminSecurity.update({
-        where: { id: security.id },
-        data: {
-          passwordHash: derivePasswordHash(envPassword, newSalt),
-          passwordSalt: newSalt,
-          passwordAlgo: 'scrypt',
-        },
-      })
-      return { valid: true }
-    }
-
-    return { valid: false, reason: 'invalid_credentials' }
-  }
-
-  if (!envPassword) {
-    return { valid: false, reason: 'configuration_error' }
-  }
-
-  if (envPasswordMatchesSubmitted(envPassword, password)) {
+    const newSalt = randomBytes(16).toString('hex')
+    await prisma.adminSecurity.update({
+      where: { id: security.id },
+      data: {
+        passwordHash: derivePasswordHash(envPassword, newSalt),
+        passwordSalt: newSalt,
+        passwordAlgo: 'scrypt',
+      },
+    })
     return { valid: true }
   }
 
-  return { valid: false, reason: 'invalid_credentials' }
+  return { valid: true }
 }
 
 export async function setAdminPassword(password: string, updatedByAdmin: number | null) {
@@ -353,10 +340,5 @@ export async function getAuthorizedAdminSession(token: string | undefined) {
 }
 
 export async function hasAdminPasswordConfigured() {
-  if (getEnvAdminPassword()) {
-    return true
-  }
-
-  const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
-  return Boolean(security)
+  return Boolean(getEnvAdminPassword())
 }

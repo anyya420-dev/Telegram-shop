@@ -84,3 +84,13 @@ npm run build
 Во frontend запрещено передавать backend-секреты (`ADMIN_PASSWORD`, `BOT_TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`).
 
 ⚠️ Никогда не коммитьте реальные секреты в репозиторий.
+
+## Admin authentication contract
+
+- Frontend first bootstraps user session via `POST /api/session/bootstrap` with Telegram `initData`.
+- Backend verifies Telegram signature server-side and creates `sessionToken`.
+- Frontend sends `Authorization: ****** on admin auth requests.
+- Admin login request: `POST /api/admin/auth/login` with body `{ "password": "..." }`.
+- Backend identifies Telegram ID only from authenticated session token (not from request body).
+- On success backend returns `adminToken`; frontend must send it in `X-Admin-Token` for protected `/api/admin/*` routes.
+- `ADMIN_PASSWORD` is backend source of truth. If missing, runtime diagnostics must show `ADMIN_PASSWORD: MISSING` and admin login returns configuration error.

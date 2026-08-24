@@ -54,6 +54,8 @@ test.afterEach(() => {
 test('isOwnerTelegramId: true only for configured owner', () => {
   process.env.OWNER_TELEGRAM_ID = '8405501187'
   assert.equal(isOwnerTelegramId('8405501187'), true)
+  assert.equal(isOwnerTelegramId(8405501187), true)
+  assert.equal(isOwnerTelegramId(8405501187n), true)
   assert.equal(isOwnerTelegramId('8405501188'), false)
 })
 
@@ -99,18 +101,15 @@ test('verifyAdminPassword re-syncs stale AdminSecurity hash when env password ma
   assert.equal(updated, true)
 })
 
-test('verifyAdminPassword allows DB hash auth when ADMIN_PASSWORD is missing', async () => {
+test('verifyAdminPassword returns configuration_error when ADMIN_PASSWORD is missing even if DB hash exists', async () => {
   delete process.env.ADMIN_PASSWORD
   const salt = randomBytes(16).toString('hex')
   const hash = scryptSync('db-password', salt, 64).toString('hex')
   prismaAny.adminSecurity.findFirst = async () =>
     ({ id: 1, passwordHash: hash, passwordSalt: salt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null })
 
-  const ok = await verifyAdminPassword('db-password')
-  const fail = await verifyAdminPassword('wrong-password')
-
-  assert.deepEqual(ok, { valid: true })
-  assert.deepEqual(fail, { valid: false, reason: 'invalid_credentials' })
+  const result = await verifyAdminPassword('db-password')
+  assert.deepEqual(result, { valid: false, reason: 'configuration_error' })
 })
 
 test('seedAdminConfigForFreshInstall upserts owner and keeps bootstrap idempotent', async () => {
@@ -150,12 +149,11 @@ test('seedAdminConfigForFreshInstall upserts owner and keeps bootstrap idempoten
   assert.equal(securityCreateCount, 1)
 })
 
-test('hasAdminPasswordConfigured is true when DB hash exists even without env', async () => {
+test('hasAdminPasswordConfigured is false when ADMIN_PASSWORD is missing', async () => {
   delete process.env.ADMIN_PASSWORD
-  prismaAny.adminSecurity.findFirst = async () => ({ id: 1, passwordHash: 'hash', passwordSalt: 'salt', passwordAlgo: 'scrypt' })
 
   const configured = await hasAdminPasswordConfigured()
-  assert.equal(configured, true)
+  assert.equal(configured, false)
 })
 
 test('createAdminSession stores only token hash', async () => {

@@ -186,7 +186,7 @@ export const api = {
 
 
   // Admin auth/settings
-  adminLogin(data: { telegramId: string; password: string }) {
+  adminLogin(data: { password: string }) {
     return request<{ adminToken: string; expiresAt: string; settings: AdminSettingsResponse }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),

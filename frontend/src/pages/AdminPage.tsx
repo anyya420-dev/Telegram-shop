@@ -641,12 +641,11 @@ export default function AdminPage() {
   }, [authStatus, isAdmin])
 
   async function handleLogin() {
-    const sessionTelegramId = user?.telegramId?.trim()
-    if (!sessionTelegramId || !password) return
+    if (!user?.telegramId || !password) return
     setLoading(true)
     setStatus(null)
     try {
-      const response = await api.adminLogin({ telegramId: sessionTelegramId, password })
+      const response = await api.adminLogin({ password })
       api.setAdminToken(response.adminToken)
       storeAdminToken(response.adminToken)
       setSettings(response.settings)
