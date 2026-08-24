@@ -87,6 +87,27 @@
   margin-top: 40px;
 }
 
+.stateCard {
+  margin-top: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.retryBtn {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .spinner {
   width: 32px;
   height: 32px;

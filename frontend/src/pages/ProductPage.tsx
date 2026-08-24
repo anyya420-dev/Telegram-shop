@@ -7,13 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
 import type { Language, ProductDetail, Review } from '../types';
+import ProductCard from '../components/ProductCard/ProductCard';
 
 const STARS = [1, 2, 3, 4, 5];
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, addToCart, cart } = useApp();
+  const { user, addToCart, cart, products } = useApp();
   const { t } = useTranslation();
   const language = i18n.language as Language;
   const [product, setProduct] = useState<ProductDetail | null>(null);
@@ -135,6 +136,9 @@ export default function ProductPage() {
   }
 
   const itemInCart = cart?.items.find((i) => i.productCity.productCityId === product.productCityId);
+  const relatedProducts = products
+    .filter((item) => item.categoryId === product.categoryId && item.id !== product.id)
+    .slice(0, 4);
 
   return (
     <div className={styles.page}>
@@ -299,6 +303,21 @@ export default function ProductPage() {
           </div>
         ))}
       </div>
+
+      {relatedProducts.length > 0 && (
+        <div className={styles.relatedSection}>
+          <h3 className={styles.reviewsTitle}>{t('product.related')}</h3>
+          <div className={styles.relatedGrid}>
+            {relatedProducts.map((related) => (
+              <ProductCard
+                key={related.productCityId}
+                product={related}
+                onClick={() => navigate(`/shop/product/${related.id}`)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

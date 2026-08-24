@@ -3,6 +3,7 @@ import type {
   Balance,
   BootstrapResponse,
   Cart,
+  City,
   Discount,
   Language,
   Order,
@@ -69,6 +70,9 @@ export const api = {
     if (params.search) searchParams.set('search', params.search)
     if (params.categoryId && params.categoryId !== 'all') searchParams.set('categoryId', String(params.categoryId))
     return request<{ products: ProductSummary[] }>(`/catalog?${searchParams.toString()}`)
+  },
+  getCities() {
+    return request<City[]>('/cities')
   },
   getProduct(productId: number, cityId: number) {
     return request<{ product: ProductDetail }>(`/products/${productId}?cityId=${cityId}`)
@@ -215,4 +219,3 @@ export const api = {
     return request<{ logs: { id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[] }>(`/admin/audit-logs?page=${page}`)
   },
 }
-

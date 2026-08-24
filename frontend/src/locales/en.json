@@ -27,7 +27,10 @@
     "sortPriceDesc": "Price ↓",
     "sortPopular": "Popular",
     "empty": "No products found",
-    "searchPlaceholder": "🔍 Search products..."
+    "searchPlaceholder": "🔍 Search products...",
+    "clearSearch": "Clear search",
+    "resetFilters": "Reset filters",
+    "nothingFound": "Nothing found for your request"
   },
   "shop": {
     "title": "Shop",
@@ -59,6 +62,9 @@
     "submitting": "Submitting...",
     "addToWishlist": "Add to wishlist",
     "inWishlist": "In wishlist"
+    ,
+    "stockAvailable": "In stock: {{count}} {{unit}}",
+    "featured": "TOP"
   },
   "cart": {
     "title": "Cart",
@@ -84,7 +90,20 @@
     "applyCode": "Apply",
     "invalidDiscount": "Invalid or expired code",
     "deliveryOption": "Delivery method",
-    "free": "Free"
+    "free": "Free",
+    "continueShopping": "Continue shopping"
+  },
+  "checkout": {
+    "title": "Checkout",
+    "items": "Selected products",
+    "comment": "Order comment",
+    "commentPlaceholder": "Delivery details or notes",
+    "confirm": "Confirm order",
+    "deliveryRequired": "Please select a delivery method",
+    "noDeliveryOptions": "No delivery methods available",
+    "successTitle": "Order created",
+    "successText": "Your order was placed successfully.",
+    "viewOrder": "View order"
   },
   "profile": {
     "title": "Profile",
@@ -103,12 +122,14 @@
     "selectCity": "📍 Select city",
     "cancel": "Cancel",
     "languageRu": "🇷🇺 Russian",
-    "languageEn": "🇬🇧 English"
+    "languageEn": "🇬🇧 English",
+    "telegramWebAppOnly": "Open this store from Telegram Web App for full account features."
   },
   "city": {
     "title": "Select city",
     "subtitle": "The product catalog depends on the selected city",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "empty": "No cities available yet"
   },
   "balance": {
     "title": "Balance",
@@ -170,7 +191,8 @@
     "later": "Later",
     "addToCart": "Add to cart",
     "outOfStock": "Out of stock",
-    "close": "Close"
+    "close": "Close",
+    "retry": "Retry"
   },
   "cityPicker": {
     "badge": "Location",

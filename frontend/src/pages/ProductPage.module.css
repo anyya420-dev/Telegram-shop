@@ -501,4 +501,13 @@
   color: var(--text-muted);
 }
 
+.relatedSection {
+  padding: 0 16px 16px;
+}
+
+.relatedGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
 

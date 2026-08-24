@@ -86,10 +86,26 @@
   overflow: hidden;
 }
 
+.description {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.stock {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
 }
 
 .priceWrap {
@@ -110,10 +126,38 @@
   color: var(--text-muted);
 }
 
+.actionWrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.qtyBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.qtyBtn:disabled {
+  opacity: 0.4;
+}
+
+.qtyValue {
+  min-width: 18px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .addBtn {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-md);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
   background: var(--accent);
   color: #ffffff;
   display: flex;
@@ -127,4 +171,3 @@
   opacity: 0.75;
   transform: scale(0.92);
 }
-
