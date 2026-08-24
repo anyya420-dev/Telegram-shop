@@ -76,7 +76,11 @@ async function request<T>(path: string, init?: RequestInit) {
     let code = error.code ?? FALLBACK_CODE_BY_STATUS[response.status] ?? 'request_failed'
 
     if (response.status === 401) {
-      code = path.startsWith('/admin') ? 'invalid_admin_session' : 'invalid_session_token'
+      if (!error.code) {
+        code = path.startsWith('/admin') ? 'invalid_admin_session' : 'invalid_session_token'
+      } else if (path.startsWith('/admin') && path !== '/admin/auth/login' && error.code === 'unauthorized') {
+        code = 'invalid_admin_session'
+      }
     }
 
     throw new ApiError(error.message ?? 'Request failed', code, response.status)

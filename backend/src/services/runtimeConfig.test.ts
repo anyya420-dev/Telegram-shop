@@ -4,6 +4,7 @@ import {
   assertProductionRuntimeConfig,
   getAllowedCorsOrigins,
   getRuntimeConfigSummary,
+  getRuntimeConfigStatus,
   getSessionSecret,
 } from './runtimeConfig.js'
 
@@ -90,4 +91,22 @@ test('getSessionSecret throws in production when missing', () => {
   delete process.env.SESSION_SECRET
 
   assert.throws(() => getSessionSecret(), /SESSION_SECRET/)
+})
+
+test('getRuntimeConfigStatus reflects missing owner/admin configuration', () => {
+  setProductionBaseline()
+  delete process.env.OWNER_TELEGRAM_ID
+  delete process.env.ADMIN_PASSWORD
+
+  const status = getRuntimeConfigStatus()
+  assert.equal(status.ownerTelegramIdConfigured, false)
+  assert.equal(status.adminPasswordConfigured, false)
+})
+
+test('runtime summary never exposes secret values', () => {
+  setProductionBaseline()
+  const summary = getRuntimeConfigSummary()
+  assert.notEqual(String(summary.ADMIN_PASSWORD), process.env.ADMIN_PASSWORD)
+  assert.notEqual(String(summary.SESSION_SECRET), process.env.SESSION_SECRET)
+  assert.notEqual(String(summary.BOT_TOKEN_ENCRYPTION_KEY), process.env.BOT_TOKEN_ENCRYPTION_KEY)
 })
