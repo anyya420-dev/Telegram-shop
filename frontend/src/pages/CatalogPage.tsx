@@ -89,7 +89,7 @@ export default function CatalogPage() {
   if (!user?.selectedCityId) {
     return (
       <div className={styles.empty}>
-        <div className={styles.emptyIcon}>📍</div>
+        <div className={styles.emptyIcon}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg></div>
         <p>{t('city.subtitle')}</p>
       </div>
     );
@@ -180,7 +180,7 @@ export default function CatalogPage() {
         </div>
       ) : sortedProducts.length === 0 ? (
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}>🔍</div>
+          <div className={styles.emptyIcon}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg></div>
           <p>{search ? t('catalog.nothingFound') : t('catalog.empty')}</p>
         </div>
       ) : (

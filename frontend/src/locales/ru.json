@@ -11,12 +11,12 @@
   },
   "home": {
     "title": "Магазин",
-    "featured": "🔥 Рекомендуем",
-    "newest": "✨ Новинки",
-    "popular": "⭐ Популярное",
+    "featured": "Рекомендуем",
+    "newest": "Новинки",
+    "popular": "Популярное",
     "viewAll": "Все →",
     "categories": "Категории",
-    "searchPlaceholder": "🔍 Поиск товаров..."
+    "searchPlaceholder": "Поиск товаров..."
   },
   "catalog": {
     "title": "Каталог",
@@ -27,14 +27,14 @@
     "sortPriceDesc": "Цена ↓",
     "sortPopular": "Популярные",
     "empty": "Товары не найдены",
-    "searchPlaceholder": "🔍 Поиск товаров...",
+    "searchPlaceholder": "Поиск товаров...",
     "clearSearch": "Очистить поиск",
     "resetFilters": "Сбросить фильтры",
     "nothingFound": "По вашему запросу ничего не найдено"
   },
   "shop": {
     "title": "Магазин",
-    "searchPlaceholder": "🔍 Поиск товаров...",
+    "searchPlaceholder": "Поиск товаров...",
     "allCategories": "Все",
     "loading": "Загрузка...",
     "empty": "Товары не найдены"
@@ -45,8 +45,8 @@
     "outOfStock": "Нет в наличии",
     "quantity": "Количество",
     "total": "Итого",
-    "addToCart": "🛒 Добавить в корзину",
-    "updateCart": "🛒 Обновить корзину",
+    "addToCart": "Добавить в корзину",
+    "updateCart": "Обновить корзину",
     "added": "✓ Добавлено",
     "adding": "Добавляем...",
     "goToCart": "Перейти в корзину →",
@@ -82,11 +82,11 @@
     "delivery": "Доставка",
     "orderTotal": "Итого",
     "soon": "— (скоро)",
-    "checkout": "💳 Оформить заказ",
+    "checkout": "Оформить заказ",
     "checkingOut": "Оформляем...",
     "checkoutFailed": "Не удалось оформить заказ. Попробуйте ещё раз.",
     "checkoutNote": "Оплата будет доступна в следующей версии",
-    "recommended": "🔥 Вам может понравиться",
+    "recommended": "Вам может понравиться",
     "discountCode": "Промокод",
     "applyCode": "Применить",
     "invalidDiscount": "Неверный или просроченный код",
@@ -122,10 +122,10 @@
     "ordersCount_many": "{{count}} заказов",
     "ordersCount_other": "{{count}} заказов",
     "language": "Язык",
-    "selectCity": "📍 Выберите город",
+    "selectCity": "Выберите город",
     "cancel": "Отмена",
-    "languageRu": "🇷🇺 Русский",
-    "languageEn": "🇬🇧 English",
+    "languageRu": "Русский",
+    "languageEn": "English",
     "telegramWebAppOnly": "Откройте магазин в Telegram Web App для полного доступа к профилю."
   },
   "city": {
@@ -161,10 +161,10 @@
     "bet": "Ставка",
     "target": "Выберите число",
     "hint": "Если кубик совпадёт с вашим числом — вы выиграете 5× ставку",
-    "spin": "🎲 Бросить кубик",
+    "spin": "Бросить кубик",
     "rolling": "Бросаем...",
-    "won": "🎉 Вы выиграли {{payout}}!",
-    "lost": "😢 Вы проиграли {{bet}}",
+    "won": "Вы выиграли {{payout}}!",
+    "lost": "Вы проиграли {{bet}}",
     "history": "Последние игры",
     "error": "Ошибка"
   },
@@ -199,7 +199,7 @@
   },
   "cityPicker": {
     "badge": "Локация",
-    "title": "📍 Выберите город",
+    "title": "Выберите город",
     "helper": "Каталог, наличие и шаг количества зависят от выбранного города.",
     "changeCity": "Изменить город",
     "cityChangeNotice": "При смене города корзина очищается, чтобы не смешивать товары из разных локаций."

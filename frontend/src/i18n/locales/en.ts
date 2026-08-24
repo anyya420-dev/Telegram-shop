@@ -18,11 +18,11 @@ export const en = {
     support: 'Support',
   },
   placeholders: {
-    casinoTitle: '🎰 Casino',
+    casinoTitle: 'Casino',
     casinoDescription: 'Casino will be available later',
-    balanceTitle: '💰 Balance',
+    balanceTitle: 'Balance',
     balanceDescription: 'Balance will be available later',
-    supportTitle: '🎧 Support',
+    supportTitle: 'Support',
     supportDescription: 'Support will be available later',
   },
   shop: {
@@ -41,13 +41,13 @@ export const en = {
   },
   cityPicker: {
     badge: 'Location',
-    title: '📍 Choose a city',
+    title: 'Choose a city',
     helper: 'Catalog, stock, and quantity steps depend on the selected city.',
     changeCity: 'Change city',
     cityChangeNotice: 'When you change the city, the cart is cleared so products from different locations are not mixed.',
   },
   product: {
-    recommended: '🔥 Recommended',
+    recommended: 'Recommended',
     from: 'from',
     inStock: 'In stock: {{value}} {{unit}}',
     open: 'Open product',
@@ -77,7 +77,7 @@ export const en = {
     delivery: 'Delivery',
     total: 'Total',
     recommendedBadge: 'Recommended',
-    recommendedTitle: '🔥 You may also like',
+    recommendedTitle: 'You may also like',
   },
   profile: {
     badge: 'Profile',

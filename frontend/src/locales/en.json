@@ -11,12 +11,12 @@
   },
   "home": {
     "title": "Shop",
-    "featured": "🔥 Featured",
-    "newest": "✨ New arrivals",
-    "popular": "⭐ Popular",
+    "featured": "Featured",
+    "newest": "New arrivals",
+    "popular": "Popular",
     "viewAll": "All →",
     "categories": "Categories",
-    "searchPlaceholder": "🔍 Search products..."
+    "searchPlaceholder": "Search products..."
   },
   "catalog": {
     "title": "Catalog",
@@ -27,14 +27,14 @@
     "sortPriceDesc": "Price ↓",
     "sortPopular": "Popular",
     "empty": "No products found",
-    "searchPlaceholder": "🔍 Search products...",
+    "searchPlaceholder": "Search products...",
     "clearSearch": "Clear search",
     "resetFilters": "Reset filters",
     "nothingFound": "Nothing found for your request"
   },
   "shop": {
     "title": "Shop",
-    "searchPlaceholder": "🔍 Search products...",
+    "searchPlaceholder": "Search products...",
     "allCategories": "All",
     "loading": "Loading...",
     "empty": "No products found"
@@ -45,8 +45,8 @@
     "outOfStock": "Out of stock",
     "quantity": "Quantity",
     "total": "Total",
-    "addToCart": "🛒 Add to cart",
-    "updateCart": "🛒 Update cart",
+    "addToCart": "Add to cart",
+    "updateCart": "Update cart",
     "added": "✓ Added",
     "adding": "Adding...",
     "goToCart": "Go to cart →",
@@ -80,11 +80,11 @@
     "delivery": "Delivery",
     "orderTotal": "Total",
     "soon": "— (soon)",
-    "checkout": "💳 Checkout",
+    "checkout": "Checkout",
     "checkingOut": "Placing order...",
     "checkoutFailed": "Could not place order. Please try again.",
     "checkoutNote": "Payment will be available in the next version",
-    "recommended": "🔥 You might also like",
+    "recommended": "You might also like",
     "discountCode": "Promo code",
     "applyCode": "Apply",
     "invalidDiscount": "Invalid or expired code",
@@ -118,10 +118,10 @@
     "ordersCount_one": "{{count}} order",
     "ordersCount_other": "{{count}} orders",
     "language": "Language",
-    "selectCity": "📍 Select city",
+    "selectCity": "Select city",
     "cancel": "Cancel",
-    "languageRu": "🇷🇺 Russian",
-    "languageEn": "🇬🇧 English",
+    "languageRu": "Russian",
+    "languageEn": "English",
     "telegramWebAppOnly": "Open this store from Telegram Web App for full account features."
   },
   "city": {
@@ -157,10 +157,10 @@
     "bet": "Bet amount",
     "target": "Pick a number",
     "hint": "If the dice matches your number, you win 5× your bet",
-    "spin": "🎲 Roll dice",
+    "spin": "Roll dice",
     "rolling": "Rolling...",
-    "won": "🎉 You won {{payout}}!",
-    "lost": "😢 You lost {{bet}}",
+    "won": "You won {{payout}}!",
+    "lost": "You lost {{bet}}",
     "history": "Recent games",
     "error": "Spin failed"
   },
@@ -195,7 +195,7 @@
   },
   "cityPicker": {
     "badge": "Location",
-    "title": "📍 Choose a city",
+    "title": "Choose a city",
     "helper": "Catalog, stock, and quantity steps depend on the selected city.",
     "changeCity": "Change city",
     "cityChangeNotice": "When you change the city, the cart is cleared so products from different locations are not mixed."

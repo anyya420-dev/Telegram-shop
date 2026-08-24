@@ -1,8 +1,18 @@
 import { Router } from 'express'
-import { authRateLimiter, isAdminTelegramId, mapProduct, parsePositiveInt, prisma, sendError, verifySessionToken } from '../lib.js'
+import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError, verifySessionToken } from '../lib.js'
 import type { Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import { encryptToken, decryptToken, validateBotToken, getBotStatus } from '../services/botService.js'
+import {
+  createAdminSession,
+  getAuthorizedAdminSession,
+  hasAdminPasswordConfigured,
+  isAdminTelegramId,
+  listAdministratorIds,
+  revokeAdminSession,
+  setAdminPassword,
+  verifyAdminPassword,
+} from '../services/adminAuthService.js'
 import rateLimit from 'express-rate-limit'
 
 const router = Router()
@@ -15,7 +25,16 @@ const botRateLimiter = rateLimit({
   message: { code: 'too_many_requests', message: 'Too many requests, please try again later' },
 })
 
-async function getAdminUser(request: Request, response: Response) {
+function getAdminSessionToken(request: Request) {
+  return request.header('x-admin-token') ?? request.header('x-admin-session') ?? ''
+}
+
+type AdminContext = {
+  user: { id: number; telegramId: string }
+  administrator: { id: number; telegramId: string }
+}
+
+async function getAdminUser(request: Request, response: Response, options?: { requireAdminSession?: boolean }): Promise<AdminContext | null> {
   const authorization = request.header('authorization') ?? request.header('x-session-token') ?? ''
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : authorization
   const telegramId = verifySessionToken(token)
@@ -25,17 +44,244 @@ async function getAdminUser(request: Request, response: Response) {
     return null
   }
 
-  if (!isAdminTelegramId(telegramId)) {
+  const isAdmin = await isAdminTelegramId(telegramId)
+  if (!isAdmin) {
     sendError(response, 403, 'forbidden', 'Admin access required')
     return null
   }
 
-  return prisma.user.findUnique({ where: { telegramId } })
+  const [user, administrator] = await Promise.all([
+    prisma.user.findUnique({ where: { telegramId } }),
+    prisma.administrator.findUnique({ where: { telegramId } }),
+  ])
+  if (!user || !administrator) {
+    sendError(response, 403, 'forbidden', 'Admin access required')
+    return null
+  }
+
+  if (options?.requireAdminSession !== false) {
+    const adminToken = getAdminSessionToken(request)
+    const session = await getAuthorizedAdminSession(adminToken)
+    if (!session || session.admin.telegramId !== telegramId) {
+      sendError(response, 401, 'admin_auth_required', 'Admin authentication required')
+      return null
+    }
+  }
+
+  return { user, administrator }
 }
+
+function normalizeTelegramId(value: unknown) {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  if (!/^\d{5,20}$/.test(normalized)) {
+    return null
+  }
+  return normalized
+}
+
+function meetsMinimumPasswordLength(password: string) {
+  return password.length >= 8
+}
+
+async function getAdminSettingsPayload() {
+  const [administrators, botStatus, passwordConfigured] = await Promise.all([
+    listAdministratorIds(),
+    getBotStatus(),
+    hasAdminPasswordConfigured(),
+  ])
+
+  return {
+    administrators,
+    passwordConfigured,
+    bot: {
+      ...botStatus,
+      tokenMasked: botStatus.connected ? '••••••••••••••••••••••••:••••••••••' : null,
+    },
+  }
+}
+
+router.post('/auth/login', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireAdminSession: false })
+  if (!admin) return
+
+
+  const telegramId = normalizeTelegramId(request.body.telegramId)
+  const password = typeof request.body.password === 'string' ? request.body.password : ''
+
+  if (!telegramId || !password) {
+    sendError(response, 400, 'invalid_credentials', 'Telegram ID and password are required')
+    return
+  }
+
+  if (telegramId !== admin.user.telegramId) {
+    sendError(response, 403, 'forbidden', 'Telegram ID does not match current user session')
+    return
+  }
+
+  const validPassword = await verifyAdminPassword(password)
+  if (!validPassword) {
+    sendError(response, 401, 'invalid_credentials', 'Invalid administrator credentials')
+    return
+  }
+
+  const session = await createAdminSession(admin.administrator.id)
+
+  response.json({
+    adminToken: session.token,
+    expiresAt: session.expiresAt.toISOString(),
+    settings: await getAdminSettingsPayload(),
+  })
+})
+
+router.post('/auth/logout', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const token = getAdminSessionToken(request)
+  if (token) {
+    await revokeAdminSession(token)
+  }
+
+  response.json({ ok: true })
+})
+
+router.get('/auth/status', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  response.json({ authenticated: true })
+})
+
+router.get('/settings', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  response.json(await getAdminSettingsPayload())
+})
+
+router.post('/settings/password', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const currentPassword = typeof request.body.currentPassword === 'string' ? request.body.currentPassword : ''
+  const newPassword = typeof request.body.newPassword === 'string' ? request.body.newPassword : ''
+
+  if (!newPassword || !meetsMinimumPasswordLength(newPassword)) {
+    sendError(response, 400, 'weak_password', 'Password must contain at least 8 characters')
+    return
+  }
+
+  const passwordConfigured = await hasAdminPasswordConfigured()
+  if (passwordConfigured) {
+    const validCurrent = await verifyAdminPassword(currentPassword)
+    if (!validCurrent) {
+      sendError(response, 401, 'invalid_credentials', 'Current password is invalid')
+      return
+    }
+  }
+
+  await setAdminPassword(newPassword, admin.administrator.id)
+
+  await prisma.adminSession.updateMany({
+    where: { revokedAt: null },
+    data: { revokedAt: new Date() },
+  })
+
+  const newSession = await createAdminSession(admin.administrator.id)
+
+  response.json({
+    saved: true,
+    adminToken: newSession.token,
+    expiresAt: newSession.expiresAt.toISOString(),
+  })
+})
+
+router.post('/settings/administrators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const telegramId = normalizeTelegramId(request.body.telegramId)
+  if (!telegramId) {
+    sendError(response, 400, 'invalid_telegram_id', 'Telegram ID must contain only digits')
+    return
+  }
+
+  await prisma.administrator.upsert({
+    where: { telegramId },
+    create: { telegramId },
+    update: {},
+  })
+
+  response.json({ administrators: await listAdministratorIds() })
+})
+
+router.patch('/settings/administrators/:telegramId', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const currentId = normalizeTelegramId(request.params.telegramId)
+  const nextId = normalizeTelegramId(request.body.telegramId)
+
+  if (!currentId || !nextId) {
+    sendError(response, 400, 'invalid_telegram_id', 'Telegram ID must contain only digits')
+    return
+  }
+
+  const existing = await prisma.administrator.findUnique({ where: { telegramId: currentId } })
+  if (!existing) {
+    sendError(response, 404, 'admin_not_found', 'Administrator not found')
+    return
+  }
+
+  const conflict = await prisma.administrator.findUnique({ where: { telegramId: nextId } })
+  if (conflict && conflict.id !== existing.id) {
+    sendError(response, 409, 'admin_exists', 'Administrator with this Telegram ID already exists')
+    return
+  }
+
+  await prisma.administrator.update({
+    where: { id: existing.id },
+    data: { telegramId: nextId },
+  })
+
+  await prisma.adminSession.updateMany({
+    where: { adminId: existing.id, revokedAt: null },
+    data: { revokedAt: new Date() },
+  })
+
+  response.json({ administrators: await listAdministratorIds() })
+})
+
+router.delete('/settings/administrators/:telegramId', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const telegramId = normalizeTelegramId(request.params.telegramId)
+  if (!telegramId) {
+    sendError(response, 400, 'invalid_telegram_id', 'Telegram ID must contain only digits')
+    return
+  }
+
+  const administrators = await prisma.administrator.findMany({ orderBy: { createdAt: 'asc' } })
+  if (administrators.length <= 1) {
+    sendError(response, 400, 'last_admin_forbidden', 'At least one administrator must remain')
+    return
+  }
+
+  const target = administrators.find((item) => item.telegramId === telegramId)
+  if (!target) {
+    sendError(response, 404, 'admin_not_found', 'Administrator not found')
+    return
+  }
+
+  await prisma.administrator.delete({ where: { id: target.id } })
+
+  response.json({ administrators: await listAdministratorIds() })
+})
 
 // ──── Orders ────────────────────────────────────────────────────────────────
 
-// GET /api/admin/orders
 router.get('/orders', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -67,7 +313,6 @@ router.get('/orders', authRateLimiter, async (request, response) => {
   response.json({ orders, total, page, pages: Math.ceil(total / limit) })
 })
 
-// PATCH /api/admin/orders/:id/status
 router.patch('/orders/:id/status', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -113,7 +358,7 @@ router.patch('/orders/:id/status', authRateLimiter, async (request, response) =>
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'order_status_changed',
       entity: 'order',
       entityId: orderId,
@@ -121,13 +366,11 @@ router.patch('/orders/:id/status', authRateLimiter, async (request, response) =>
     },
   })
 
-  // Notify the customer via Telegram bot
   notifyOrderStatusChange(order.user.telegramId, orderId, status)
 
   response.json({ order: updated })
 })
 
-// PATCH /api/admin/orders/:id/refund
 router.patch('/orders/:id/refund', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -152,7 +395,6 @@ router.patch('/orders/:id/refund', authRateLimiter, async (request, response) =>
 
   const updated = await prisma.$transaction(async (tx) => {
     if (refundStatus === 'approved') {
-      // Return balance to user
       const balance = await tx.balance.upsert({
         where: { userId: order.userId },
         create: { userId: order.userId, amount: 0 },
@@ -180,7 +422,7 @@ router.patch('/orders/:id/refund', authRateLimiter, async (request, response) =>
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: `refund_${refundStatus}`,
       entity: 'order',
       entityId: orderId,
@@ -191,9 +433,6 @@ router.patch('/orders/:id/refund', authRateLimiter, async (request, response) =>
   response.json({ order: updated })
 })
 
-// ──── Products ────────────────────────────────────────────────────────────────
-
-// GET /api/admin/products
 router.get('/products', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -206,7 +445,6 @@ router.get('/products', authRateLimiter, async (request, response) => {
   response.json({ products })
 })
 
-// PATCH /api/admin/products/:id
 router.patch('/products/:id', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -236,7 +474,7 @@ router.patch('/products/:id', authRateLimiter, async (request, response) => {
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'product_updated',
       entity: 'product',
       entityId: productId,
@@ -247,7 +485,6 @@ router.patch('/products/:id', authRateLimiter, async (request, response) => {
   response.json({ product })
 })
 
-// PATCH /api/admin/product-cities/:id - update stock / availability
 router.patch('/product-cities/:id', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -270,7 +507,7 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'product_city_updated',
       entity: 'product_city',
       entityId: id,
@@ -281,9 +518,6 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
   response.json({ productCity: pc })
 })
 
-// ──── Users ────────────────────────────────────────────────────────────────
-
-// GET /api/admin/users
 router.get('/users', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -304,9 +538,6 @@ router.get('/users', authRateLimiter, async (request, response) => {
   response.json({ users, total, page, pages: Math.ceil(total / limit) })
 })
 
-// ──── Discounts ────────────────────────────────────────────────────────────────
-
-// GET /api/admin/discounts
 router.get('/discounts', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -315,7 +546,6 @@ router.get('/discounts', authRateLimiter, async (request, response) => {
   response.json({ discounts })
 })
 
-// POST /api/admin/discounts
 router.post('/discounts', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -351,7 +581,7 @@ router.post('/discounts', authRateLimiter, async (request, response) => {
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'discount_created',
       entity: 'discount',
       entityId: discount.id,
@@ -362,7 +592,6 @@ router.post('/discounts', authRateLimiter, async (request, response) => {
   response.json({ discount })
 })
 
-// PATCH /api/admin/discounts/:id
 router.patch('/discounts/:id', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -383,9 +612,6 @@ router.patch('/discounts/:id', authRateLimiter, async (request, response) => {
   response.json({ discount })
 })
 
-// ──── Delivery Options ────────────────────────────────────────────────────────────────
-
-// GET /api/admin/delivery-options
 router.get('/delivery-options', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -394,7 +620,6 @@ router.get('/delivery-options', authRateLimiter, async (request, response) => {
   response.json({ options })
 })
 
-// POST /api/admin/delivery-options
 router.post('/delivery-options', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -419,7 +644,6 @@ router.post('/delivery-options', authRateLimiter, async (request, response) => {
   response.json({ option })
 })
 
-// PATCH /api/admin/delivery-options/:id
 router.patch('/delivery-options/:id', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -443,9 +667,6 @@ router.patch('/delivery-options/:id', authRateLimiter, async (request, response)
   response.json({ option })
 })
 
-// ──── Support Tickets (admin) ────────────────────────────────────────────────
-
-// GET /api/admin/support
 router.get('/support', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -466,7 +687,6 @@ router.get('/support', authRateLimiter, async (request, response) => {
   response.json({ tickets })
 })
 
-// POST /api/admin/support/:id/reply
 router.post('/support/:id/reply', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -497,9 +717,6 @@ router.post('/support/:id/reply', authRateLimiter, async (request, response) => 
   response.json({ ticket: updated })
 })
 
-// ──── Audit Logs ──────────────────────────────────────────────────────────────
-
-// GET /api/admin/audit-logs
 router.get('/audit-logs', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -516,9 +733,6 @@ router.get('/audit-logs', authRateLimiter, async (request, response) => {
   response.json({ logs })
 })
 
-// ──── Stats ────────────────────────────────────────────────────────────────
-
-// GET /api/admin/stats
 router.get('/stats', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -541,18 +755,17 @@ router.get('/stats', authRateLimiter, async (request, response) => {
   })
 })
 
-// ──── Bot Configuration ──────────────────────────────────────────────────────
-
-// GET /api/admin/bot – returns safe bot status (no token)
 router.get('/bot', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
   const status = await getBotStatus()
-  response.json(status)
+  response.json({
+    ...status,
+    tokenMasked: status.connected ? '••••••••••••••••••••••••:••••••••••' : null,
+  })
 })
 
-// POST /api/admin/bot/connect – validate token and store it
 router.post('/bot/connect', botRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -564,7 +777,6 @@ router.post('/bot/connect', botRateLimiter, async (request, response) => {
     return
   }
 
-  // Basic format check: <digits>:<alphanumeric_string>
   if (!/^\d+:[A-Za-z0-9_-]{30,}$/.test(token)) {
     sendError(response, 400, 'invalid_token_format', 'Invalid Telegram bot token format')
     return
@@ -578,10 +790,8 @@ router.post('/bot/connect', botRateLimiter, async (request, response) => {
 
   const encryptedToken = encryptToken(token)
 
-  // Disable any existing enabled configs
   await prisma.botConfig.updateMany({ where: { enabled: true }, data: { enabled: false } })
 
-  // Create new config
   await prisma.botConfig.create({
     data: {
       botId: String(botInfo.id),
@@ -595,7 +805,7 @@ router.post('/bot/connect', botRateLimiter, async (request, response) => {
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'bot_connected',
       entity: 'bot_config',
       meta: JSON.stringify({ botUsername: botInfo.username }),
@@ -605,11 +815,11 @@ router.post('/bot/connect', botRateLimiter, async (request, response) => {
   response.json({
     connected: true,
     bot: { id: botInfo.id, username: botInfo.username, firstName: botInfo.firstName },
+    tokenMasked: '••••••••••••••••••••••••:••••••••••',
     lastValidatedAt: new Date().toISOString(),
   })
 })
 
-// POST /api/admin/bot/test – test the current bot connection
 router.post('/bot/test', botRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -637,7 +847,7 @@ router.post('/bot/test', botRateLimiter, async (request, response) => {
   if (!botInfo) {
     await prisma.auditLog.create({
       data: {
-        userId: admin.id,
+        userId: admin.user.id,
         action: 'bot_test_failed',
         entity: 'bot_config',
         meta: JSON.stringify({ botUsername: config.botUsername }),
@@ -647,7 +857,6 @@ router.post('/bot/test', botRateLimiter, async (request, response) => {
     return
   }
 
-  // Update last validated timestamp
   await prisma.botConfig.update({
     where: { id: config.id },
     data: { lastValidatedAt: new Date() },
@@ -655,7 +864,7 @@ router.post('/bot/test', botRateLimiter, async (request, response) => {
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'bot_test_success',
       entity: 'bot_config',
       meta: JSON.stringify({ botUsername: botInfo.username }),
@@ -665,11 +874,11 @@ router.post('/bot/test', botRateLimiter, async (request, response) => {
   response.json({
     connected: true,
     bot: { id: botInfo.id, username: botInfo.username, firstName: botInfo.firstName },
+    tokenMasked: '••••••••••••••••••••••••:••••••••••',
     lastValidatedAt: new Date().toISOString(),
   })
 })
 
-// POST /api/admin/bot/change – replace current bot with a new token
 router.post('/bot/change', botRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -686,7 +895,6 @@ router.post('/bot/change', botRateLimiter, async (request, response) => {
     return
   }
 
-  // Validate NEW token BEFORE touching existing config
   const botInfo = await validateBotToken(token)
   if (!botInfo) {
     sendError(response, 400, 'invalid_bot_token', 'Invalid Telegram bot token – existing bot unchanged')
@@ -695,7 +903,6 @@ router.post('/bot/change', botRateLimiter, async (request, response) => {
 
   const encryptedToken = encryptToken(token)
 
-  // Only now disable the existing config and store the new one
   await prisma.botConfig.updateMany({ where: { enabled: true }, data: { enabled: false } })
 
   await prisma.botConfig.create({
@@ -711,7 +918,7 @@ router.post('/bot/change', botRateLimiter, async (request, response) => {
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'bot_token_changed',
       entity: 'bot_config',
       meta: JSON.stringify({ botUsername: botInfo.username }),
@@ -721,11 +928,11 @@ router.post('/bot/change', botRateLimiter, async (request, response) => {
   response.json({
     connected: true,
     bot: { id: botInfo.id, username: botInfo.username, firstName: botInfo.firstName },
+    tokenMasked: '••••••••••••••••••••••••:••••••••••',
     lastValidatedAt: new Date().toISOString(),
   })
 })
 
-// POST /api/admin/bot/disconnect – disable the current bot
 router.post('/bot/disconnect', botRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -744,14 +951,14 @@ router.post('/bot/disconnect', botRateLimiter, async (request, response) => {
 
   await prisma.auditLog.create({
     data: {
-      userId: admin.id,
+      userId: admin.user.id,
       action: 'bot_disconnected',
       entity: 'bot_config',
       meta: JSON.stringify({ botUsername: config.botUsername }),
     },
   })
 
-  response.json({ connected: false, bot: null })
+  response.json({ connected: false, bot: null, tokenMasked: null })
 })
 
 export default router

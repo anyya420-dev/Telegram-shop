@@ -243,7 +243,7 @@ export default function ProductPage() {
               onClick={() => void toggleWishlist()}
               disabled={wishlistLoading}
             >
-              {inWishlist ? '❤️ ' + t('product.inWishlist') : '🤍 ' + t('product.addToWishlist')}
+              {inWishlist ? t('product.inWishlist') : t('product.addToWishlist')}
             </button>
           </>
         )}
@@ -254,7 +254,7 @@ export default function ProductPage() {
         <div className={styles.reviewsHeader}>
           <h3 className={styles.reviewsTitle}>{t('product.reviews')}</h3>
           {avgRating !== null && (
-            <span className={styles.avgRating}>{'⭐'.repeat(Math.round(avgRating))} {avgRating}/5 ({reviews.length})</span>
+            <span className={styles.avgRating}>{avgRating.toFixed(1)}/5 ({reviews.length})</span>
           )}
         </div>
 
@@ -268,7 +268,7 @@ export default function ProductPage() {
                 <div className={styles.starRow}>
                   {STARS.map((s) => (
                     <button key={s} className={`${styles.star} ${myRating >= s ? styles.starActive : ''}`} onClick={() => setMyRating(s)}>
-                      ⭐
+                      ★
                     </button>
                   ))}
                 </div>
@@ -296,7 +296,7 @@ export default function ProductPage() {
           <div key={review.id} className={styles.reviewCard}>
             <div className={styles.reviewTop}>
               <span className={styles.reviewAuthor}>{review.user.firstName}</span>
-              <span className={styles.reviewRating}>{'⭐'.repeat(review.rating)}</span>
+              <span className={styles.reviewRating}>{'★'.repeat(review.rating)}</span>
             </div>
             {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
             <span className={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US')}</span>

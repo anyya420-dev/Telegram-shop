@@ -206,5 +206,11 @@ export type BotInfo = {
 }
 
 export type BotStatusResponse =
-  | { connected: false; bot: null }
-  | { connected: true; bot: BotInfo; lastValidatedAt: string | null }
+  | { connected: false; bot: null; tokenMasked?: string | null }
+  | { connected: true; bot: BotInfo; lastValidatedAt: string | null; tokenMasked?: string | null }
+
+export type AdminSettingsResponse = {
+  administrators: string[]
+  passwordConfigured: boolean
+  bot: BotStatusResponse
+}
