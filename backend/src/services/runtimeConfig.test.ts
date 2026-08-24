@@ -110,3 +110,33 @@ test('runtime summary never exposes secret values', () => {
   assert.notEqual(String(summary.SESSION_SECRET), process.env.SESSION_SECRET)
   assert.notEqual(String(summary.BOT_TOKEN_ENCRYPTION_KEY), process.env.BOT_TOKEN_ENCRYPTION_KEY)
 })
+
+test('assertProductionRuntimeConfig fails when ALLOW_DEMO_MODE is missing in production', () => {
+  setProductionBaseline()
+  delete process.env.ALLOW_DEMO_MODE
+
+  assert.throws(() => assertProductionRuntimeConfig(), /ALLOW_DEMO_MODE/)
+})
+
+test('getAllowedCorsOrigins excludes localhost in production', () => {
+  setProductionBaseline()
+  const origins = getAllowedCorsOrigins()
+  const hasLocalhost = origins.some((o) => o.includes('localhost') || o.includes('127.0.0.1'))
+  assert.equal(hasLocalhost, false)
+})
+
+test('getAllowedCorsOrigins includes both FRONTEND_URL and WEB_APP_URL when distinct', () => {
+  setProductionBaseline()
+  process.env.FRONTEND_URL = 'https://frontend.example.com'
+  process.env.WEB_APP_URL = 'https://webapp.example.com'
+  const origins = getAllowedCorsOrigins()
+  assert.ok(origins.includes('https://frontend.example.com'))
+  assert.ok(origins.includes('https://webapp.example.com'))
+})
+
+test('assertProductionRuntimeConfig fails when OWNER_TELEGRAM_ID is numeric but invalid format', () => {
+  setProductionBaseline()
+  process.env.OWNER_TELEGRAM_ID = 'abc'
+
+  assert.throws(() => assertProductionRuntimeConfig(), /OWNER_TELEGRAM_ID/)
+})
