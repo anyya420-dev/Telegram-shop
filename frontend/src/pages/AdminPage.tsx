@@ -55,8 +55,7 @@ function BoxIcon() {
 
 // ── City Management ──────────────────────────────────────────────────────────
 
-function CitiesSection({ status, setStatus, loading, setLoading }: {
-  status: { tone: StatusTone; message: string } | null
+function CitiesSection({ setStatus, loading, setLoading }: {
   setStatus: (s: { tone: StatusTone; message: string } | null) => void
   loading: boolean
   setLoading: (v: boolean) => void
@@ -142,7 +141,6 @@ function CitiesSection({ status, setStatus, loading, setLoading }: {
     }
   }
 
-  void status // suppress unused warning
 
   return (
     <section className={styles.card}>
@@ -189,8 +187,7 @@ function CitiesSection({ status, setStatus, loading, setLoading }: {
 
 // ── Category Management ──────────────────────────────────────────────────────
 
-function CategoriesSection({ status, setStatus, loading, setLoading }: {
-  status: { tone: StatusTone; message: string } | null
+function CategoriesSection({ setStatus, loading, setLoading }: {
   setStatus: (s: { tone: StatusTone; message: string } | null) => void
   loading: boolean
   setLoading: (v: boolean) => void
@@ -276,7 +273,6 @@ function CategoriesSection({ status, setStatus, loading, setLoading }: {
     }
   }
 
-  void status
 
   return (
     <section className={styles.card}>
@@ -323,8 +319,7 @@ function CategoriesSection({ status, setStatus, loading, setLoading }: {
 
 // ── Product Management ───────────────────────────────────────────────────────
 
-function ProductsSection({ status, setStatus, loading, setLoading }: {
-  status: { tone: StatusTone; message: string } | null
+function ProductsSection({ setStatus, loading, setLoading }: {
   setStatus: (s: { tone: StatusTone; message: string } | null) => void
   loading: boolean
   setLoading: (v: boolean) => void
@@ -428,7 +423,6 @@ function ProductsSection({ status, setStatus, loading, setLoading }: {
     }
   }
 
-  void status
 
   return (
     <section className={styles.card}>
@@ -707,9 +701,9 @@ export default function AdminPage() {
 
       {canManage && (
         <>
-          <CitiesSection status={status} setStatus={setStatus} loading={loading} setLoading={setLoading} />
-          <CategoriesSection status={status} setStatus={setStatus} loading={loading} setLoading={setLoading} />
-          <ProductsSection status={status} setStatus={setStatus} loading={loading} setLoading={setLoading} />
+          <CitiesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
+          <CategoriesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
+          <ProductsSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
 
           <section className={styles.card}>
             <h2 className={styles.cardTitle}><ShieldIcon /> Security</h2>

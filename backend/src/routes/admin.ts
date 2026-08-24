@@ -1162,7 +1162,7 @@ router.post('/products', authRateLimiter, async (request, response) => {
     sendError(response, 400, 'invalid_price', 'Valid price is required')
     return
   }
-  const catId = parsePositiveInt(categoryId)
+  const catId = typeof categoryId === 'number' && Number.isInteger(categoryId) && categoryId > 0 ? categoryId : null
   if (!catId) {
     sendError(response, 400, 'invalid_category', 'Valid category id is required')
     return
