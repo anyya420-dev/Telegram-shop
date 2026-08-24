@@ -89,7 +89,7 @@ npm run build
 
 - Frontend first bootstraps user session via `POST /api/session/bootstrap` with Telegram `initData`.
 - Backend verifies Telegram signature server-side and creates `sessionToken`.
-- Frontend sends `Authorization: ****** on admin auth requests.
+- Frontend sends the Authorization header with the ****** token on admin auth requests.
 - Admin login request: `POST /api/admin/auth/login` with body `{ "password": "..." }`.
 - Backend identifies Telegram ID only from authenticated session token (not from request body).
 - On success backend returns `adminToken`; frontend must send it in `X-Admin-Token` for protected `/api/admin/*` routes.
