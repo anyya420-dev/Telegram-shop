@@ -101,8 +101,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         api.setSessionToken(null)
         const response = await api.bootstrap({
           initData: telegram.initData,
-          telegramUser: telegram.user,
-          isTelegramEnvironment: telegram.isTelegramEnvironment,
         })
 
         api.setSessionToken(response.sessionToken)

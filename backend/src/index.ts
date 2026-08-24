@@ -17,6 +17,7 @@ import sessionRouter from './routes/session.js'
 import supportRouter from './routes/support.js'
 import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
+import { initializeTelegramBot } from './services/telegramBotRuntime.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3001)
@@ -63,8 +64,21 @@ app.get('/api/health', (_request, response) => {
   response.json({ status: 'ok' })
 })
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`Backend running on http://0.0.0.0:${port}`)
-})
+async function start() {
+  try {
+    await initializeTelegramBot()
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`Backend running on http://0.0.0.0:${port}`)
+    })
+  } catch (error) {
+    console.error('Backend startup failed during Telegram bot initialization.')
+    if (error instanceof Error) {
+      console.error(error.message)
+    }
+    process.exit(1)
+  }
+}
+
+void start()
 
 export default app
