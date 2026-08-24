@@ -44,18 +44,18 @@ export async function initializeTelegramBot() {
     })
   })
 
-  await bot.launch({
-    dropPendingUpdates: true,
-  })
-
-  botInstance = bot
-
   process.once('SIGINT', () => {
     bot.stop('SIGINT')
   })
   process.once('SIGTERM', () => {
     bot.stop('SIGTERM')
   })
+
+  await bot.launch({
+    dropPendingUpdates: true,
+  })
+
+  botInstance = bot
 
   console.log('Telegram bot initialized successfully')
 
