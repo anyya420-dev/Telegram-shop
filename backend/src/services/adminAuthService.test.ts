@@ -8,6 +8,7 @@ import {
   hasAdminPasswordConfigured,
   hashAdminSessionToken,
   isOwnerTelegramId,
+  normalizeTelegramId,
   seedAdminConfigForFreshInstall,
   verifyAdminPassword,
 } from './adminAuthService.js'
@@ -64,6 +65,17 @@ test('isOwnerTelegramId: false when owner variable is missing', () => {
   assert.equal(isOwnerTelegramId('8405501187'), false)
 })
 
+test('normalizeTelegramId normalizes string/number/bigint consistently', () => {
+  assert.equal(normalizeTelegramId('8405501187'), '8405501187')
+  assert.equal(normalizeTelegramId(8405501187), '8405501187')
+  assert.equal(normalizeTelegramId(8405501187n), '8405501187')
+  assert.equal(normalizeTelegramId('0008405501187'), '8405501187')
+  assert.equal(normalizeTelegramId(' 8405501187 '), '8405501187')
+  assert.equal(normalizeTelegramId('0'), null)
+  assert.equal(normalizeTelegramId(-1), null)
+  assert.equal(normalizeTelegramId('owner'), null)
+})
+
 test('verifyAdminPassword returns configuration_error when ADMIN_PASSWORD is missing', async () => {
   delete process.env.ADMIN_PASSWORD
   prismaAny.adminSecurity.findFirst = async () => null
@@ -75,12 +87,30 @@ test('verifyAdminPassword returns configuration_error when ADMIN_PASSWORD is mis
 test('verifyAdminPassword validates against ADMIN_PASSWORD when no AdminSecurity row exists', async () => {
   process.env.ADMIN_PASSWORD = 'correct-pass'
   prismaAny.adminSecurity.findFirst = async () => null
+  prismaAny.adminSecurity.create = async () => ({ id: 1 })
 
   const ok = await verifyAdminPassword('correct-pass')
   const fail = await verifyAdminPassword('wrong-pass')
 
   assert.deepEqual(ok, { valid: true })
   assert.deepEqual(fail, { valid: false, reason: 'invalid_credentials' })
+})
+
+test('verifyAdminPassword creates AdminSecurity row when missing and env password is correct', async () => {
+  process.env.ADMIN_PASSWORD = 'correct-pass'
+  let created = false
+  prismaAny.adminSecurity.findFirst = async () => null
+  prismaAny.adminSecurity.create = async ({ data }: { data: { passwordHash: string; passwordSalt: string; passwordAlgo: string } }) => {
+    created = true
+    assert.equal(typeof data.passwordHash, 'string')
+    assert.equal(typeof data.passwordSalt, 'string')
+    assert.equal(data.passwordAlgo, 'scrypt')
+    return { id: 1 }
+  }
+
+  const result = await verifyAdminPassword('correct-pass')
+  assert.deepEqual(result, { valid: true })
+  assert.equal(created, true)
 })
 
 test('verifyAdminPassword re-syncs stale AdminSecurity hash when env password matches', async () => {
@@ -184,4 +214,44 @@ test('getAuthorizedAdminSession rejects expired session', async () => {
 
   const session = await getAuthorizedAdminSession('token')
   assert.equal(session, null)
+})
+
+test('getAuthorizedAdminSession rejects revoked session', async () => {
+  prismaAny.adminSession.findUnique = async () => ({
+      id: 1,
+      adminId: 1,
+      tokenHash: 'x',
+      expiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(),
+      lastActivityAt: new Date(),
+      revokedAt: new Date(),
+      admin: { id: 1, telegramId: '8405501187', createdAt: new Date(), updatedAt: new Date() },
+    })
+
+  const session = await getAuthorizedAdminSession('token')
+  assert.equal(session, null)
+})
+
+test('getAuthorizedAdminSession returns active session and updates activity timestamp', async () => {
+  let updateCalled = false
+  prismaAny.adminSession.findUnique = async () => ({
+      id: 7,
+      adminId: 1,
+      tokenHash: 'x',
+      expiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(),
+      lastActivityAt: new Date(),
+      revokedAt: null,
+      admin: { id: 1, telegramId: '8405501187', createdAt: new Date(), updatedAt: new Date() },
+    })
+  prismaAny.adminSession.update = async ({ where, data }: { where: { id: number }; data: { lastActivityAt: Date } }) => {
+    updateCalled = true
+    assert.equal(where.id, 7)
+    assert.ok(data.lastActivityAt instanceof Date)
+    return {}
+  }
+
+  const session = await getAuthorizedAdminSession('token')
+  assert.equal(session?.admin.telegramId, '8405501187')
+  assert.equal(updateCalled, true)
 })

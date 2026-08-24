@@ -29,7 +29,12 @@ export function normalizeTelegramId(value: unknown) {
     return null
   }
 
-  return normalized
+  try {
+    const asBigInt = BigInt(normalized)
+    return asBigInt > 0n ? asBigInt.toString() : null
+  } catch {
+    return null
+  }
 }
 
 export function getOwnerTelegramId() {
@@ -252,6 +257,15 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
     })
     return { valid: true }
   }
+
+  const bootstrapSalt = randomBytes(16).toString('hex')
+  await prisma.adminSecurity.create({
+    data: {
+      passwordHash: derivePasswordHash(envPassword, bootstrapSalt),
+      passwordSalt: bootstrapSalt,
+      passwordAlgo: 'scrypt',
+    },
+  })
 
   return { valid: true }
 }
