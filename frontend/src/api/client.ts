@@ -13,7 +13,6 @@ import type {
   ProductSummary,
   Review,
   SupportTicket,
-  TelegramIdentity,
   UserProfile,
   WishlistItem,
 } from '../types'
@@ -66,7 +65,7 @@ export const api = {
   setAdminToken(token: string | null) {
     adminToken = token
   },
-  bootstrap(payload: { initData: string; telegramUser: TelegramIdentity; isTelegramEnvironment: boolean }) {
+  bootstrap(payload: { initData: string }) {
     return request<BootstrapResponse>('/session/bootstrap', {
       method: 'POST',
       body: JSON.stringify(payload),

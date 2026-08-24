@@ -1,11 +1,11 @@
-import type { TelegramIdentity } from '../types'
-
 type TelegramWebApp = {
   ready: () => void
   expand: () => void
   initData: string
   initDataUnsafe?: {
-    user?: TelegramIdentity
+    user?: {
+      photo_url?: string
+    }
   }
   setHeaderColor?: (color: string) => void
   setBackgroundColor?: (color: string) => void
@@ -17,12 +17,6 @@ declare global {
       WebApp?: TelegramWebApp
     }
   }
-}
-
-const demoUser: TelegramIdentity = {
-  id: '900000001',
-  username: 'demo_customer',
-  first_name: 'Demo',
 }
 
 export function getTelegramContext() {
@@ -37,7 +31,6 @@ export function getTelegramContext() {
 
   return {
     initData: webApp?.initData ?? '',
-    user: webApp?.initDataUnsafe?.user ?? demoUser,
     isTelegramEnvironment: Boolean(webApp),
   }
 }
