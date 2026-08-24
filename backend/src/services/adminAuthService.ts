@@ -3,7 +3,9 @@ import { prisma } from '../lib.js'
 
 const ADMIN_SESSION_TTL_HOURS = 12
 const TELEGRAM_ID_PATTERN = /^\d{5,20}$/
-const ENV_PASSWORD_FALLBACK_SALT = 'admin-env-fallback-v1'
+// Fixed salt used only for timing-safe equality comparison of plain-text env passwords.
+// Never used for persistent storage – actual stored hashes always use a random per-record salt.
+const ENV_COMPARE_SALT = 'admin-env-compare-v1'
 let ownerValidationWarningShown = false
 
 function normalizeTelegramId(value: unknown) {
@@ -64,6 +66,18 @@ function getEnvAdminPassword() {
 
 function derivePasswordHash(password: string, salt: string) {
   return scryptSync(password, salt, 64).toString('hex')
+}
+
+/**
+ * Timing-safe equality check for two plain-text passwords.
+ * Both values are hashed with scrypt and the same fixed salt so the
+ * resulting buffers have equal length, enabling timingSafeEqual.
+ * This function is used ONLY for comparison – the result is never stored.
+ */
+function envPasswordMatchesSubmitted(envPassword: string, submittedPassword: string): boolean {
+  const a = Buffer.from(derivePasswordHash(envPassword, ENV_COMPARE_SALT), 'hex')
+  const b = Buffer.from(derivePasswordHash(submittedPassword, ENV_COMPARE_SALT), 'hex')
+  return timingSafeEqual(a, b)
 }
 
 export function hashAdminSessionToken(token: string) {
@@ -226,23 +240,19 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
     // path so that changing ADMIN_PASSWORD in the deployment environment
     // (e.g. Render) re-syncs access without requiring direct DB access.
     const envPassword = getEnvAdminPassword()
-    if (envPassword) {
-      const envExpectedHash = Buffer.from(derivePasswordHash(envPassword, ENV_PASSWORD_FALLBACK_SALT), 'hex')
-      const envReceivedHash = Buffer.from(derivePasswordHash(password, ENV_PASSWORD_FALLBACK_SALT), 'hex')
-      if (envExpectedHash.length === envReceivedHash.length && timingSafeEqual(envExpectedHash, envReceivedHash)) {
-        // Env password matches: re-sync DB record so future logins use the
-        // new hash and the env var is no longer needed as a recovery path.
-        const newSalt = randomBytes(16).toString('hex')
-        await prisma.adminSecurity.update({
-          where: { id: security.id },
-          data: {
-            passwordHash: derivePasswordHash(password, newSalt),
-            passwordSalt: newSalt,
-            passwordAlgo: 'scrypt',
-          },
-        })
-        return { valid: true }
-      }
+    if (envPassword && envPasswordMatchesSubmitted(envPassword, password)) {
+      // Env password matches: re-sync DB record so future logins use the
+      // new hash and the env var is no longer needed as a recovery path.
+      const newSalt = randomBytes(16).toString('hex')
+      await prisma.adminSecurity.update({
+        where: { id: security.id },
+        data: {
+          passwordHash: derivePasswordHash(envPassword, newSalt),
+          passwordSalt: newSalt,
+          passwordAlgo: 'scrypt',
+        },
+      })
+      return { valid: true }
     }
 
     return { valid: false, reason: 'invalid_credentials' }
@@ -251,15 +261,12 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
   // No DB record yet: compare against ADMIN_PASSWORD env var.
   // This handles the scenario where ADMIN_PASSWORD was added to Render
   // after the initial seed ran, so no adminSecurity row was ever created.
-  // A fixed salt makes the comparison timing-safe.
   const envPassword = getEnvAdminPassword()
   if (!envPassword) {
     return { valid: false, reason: 'configuration_error' }
   }
 
-  const envExpectedHash = Buffer.from(derivePasswordHash(envPassword, ENV_PASSWORD_FALLBACK_SALT), 'hex')
-  const envReceivedHash = Buffer.from(derivePasswordHash(password, ENV_PASSWORD_FALLBACK_SALT), 'hex')
-  if (envExpectedHash.length === envReceivedHash.length && timingSafeEqual(envExpectedHash, envReceivedHash)) {
+  if (envPasswordMatchesSubmitted(envPassword, password)) {
     return { valid: true }
   }
 
