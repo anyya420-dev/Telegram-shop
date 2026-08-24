@@ -10,7 +10,6 @@ export const DEMO_TELEGRAM_USER = {
   id: '900000001',
   username: 'demo_customer',
   first_name: 'Demo',
-  last_name: undefined as string | undefined,
 }
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
