@@ -60,20 +60,22 @@ npm run build
 
 Обязательные backend-переменные:
 
+- `NODE_ENV` (`production`)
 - `DATABASE_URL`
 - `SESSION_SECRET`
 - `OWNER_TELEGRAM_ID`
 - `ADMIN_PASSWORD`
 - `BOT_TOKEN_ENCRYPTION_KEY`
+- `FRONTEND_URL`
+- `WEB_APP_URL`
+- `ALLOW_DEMO_MODE` (`false` в production)
 
 Дополнительно:
 
 - `PORT`
-- `FRONTEND_URL`
-- `ALLOW_DEMO_MODE`
-- `TELEGRAM_BOT_TOKEN` (fallback, если токен не задан через Admin UI)
-- `WEB_APP_URL`
+- `TELEGRAM_BOT_TOKEN` (обязателен для первой production-настройки, либо активный токен должен уже храниться в БД через Admin UI)
 - `ADMIN_TELEGRAM_IDS`
+- `PORT`
 
 `ADMIN_PASSWORD`, `OWNER_TELEGRAM_ID`, `DATABASE_URL`, `BOT_TOKEN_ENCRYPTION_KEY` используются **только backend runtime** и не должны попадать во frontend.
 
@@ -82,6 +84,8 @@ npm run build
 - `VITE_API_URL` (например, `https://telegram-shop-backend.onrender.com/api`)
 
 Во frontend запрещено передавать backend-секреты (`ADMIN_PASSWORD`, `BOT_TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`).
+
+Backend выполняет production startup validation и аварийно завершает запуск при отсутствии обязательных переменных или при неверной конфигурации (`OWNER_TELEGRAM_ID` invalid, `ALLOW_DEMO_MODE` не `false`).
 
 ⚠️ Никогда не коммитьте реальные секреты в репозиторий.
 

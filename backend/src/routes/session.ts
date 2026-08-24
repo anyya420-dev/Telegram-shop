@@ -14,13 +14,14 @@ import {
 import { seedAdminConfigForFreshInstall, isAdminTelegramId, isOwnerTelegramId, getOwnerTelegramId } from '../services/adminAuthService.js'
 import { getActiveBotToken } from '../services/botService.js'
 import { maskTelegramId } from '../services/logging.js'
+import { isDemoModeEnabled } from '../services/runtimeConfig.js'
 
 const router = Router()
 
 router.post('/bootstrap', authRateLimiter, async (request, response) => {
   let telegramUser: { id: string; username?: string; first_name: string; last_name?: string } | null = null
   const initData = String(request.body.initData ?? '')
-  const allowDemoMode = process.env.ALLOW_DEMO_MODE === 'true' || process.env.NODE_ENV !== 'production'
+  const allowDemoMode = isDemoModeEnabled() || process.env.NODE_ENV !== 'production'
 
   if (initData) {
     const botToken = await getActiveBotToken()

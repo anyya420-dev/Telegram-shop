@@ -190,6 +190,7 @@ router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
     ownerMatch,
     administratorRecordExists: Boolean(admin.administrator?.id),
     adminPasswordConfigured: runtime.adminPasswordConfigured,
+    sessionSecretConfigured: runtime.sessionSecretConfigured,
     databaseConfigured: runtime.databaseConfigured,
     botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
     runtimeConfigSummary: getRuntimeConfigSummary(),
@@ -210,6 +211,7 @@ router.get('/diagnostics/runtime', authRateLimiter, async (request, response) =>
   response.json({
     ownerConfigured: runtime.ownerTelegramIdConfigured,
     adminPasswordConfigured: runtime.adminPasswordConfigured,
+    sessionSecretConfigured: runtime.sessionSecretConfigured,
     databaseConfigured: runtime.databaseConfigured,
     botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
     runtimeConfigSummary: getRuntimeConfigSummary(),

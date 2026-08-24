@@ -5,19 +5,17 @@
  * The raw token is NEVER logged, returned to the frontend, or stored as plaintext.
  *
  * Encryption: AES-256-GCM
- * Key: derived from BOT_TOKEN_ENCRYPTION_KEY env var (falls back to SESSION_SECRET)
+ * Key: derived from BOT_TOKEN_ENCRYPTION_KEY env var (dev fallback: SESSION_SECRET)
  */
 
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto'
 import { prisma } from '../lib.js'
+import { getBotTokenEncryptionSecret } from './runtimeConfig.js'
 
 // ── Key derivation ──────────────────────────────────────────────────────────
 
 function getEncryptionKey(): Buffer {
-  const raw =
-    process.env.BOT_TOKEN_ENCRYPTION_KEY ??
-    process.env.SESSION_SECRET ??
-    'dev-bot-encryption-key'
+  const raw = getBotTokenEncryptionSecret()
   // Derive a fixed 32-byte key from the secret
   return createHmac('sha256', 'bot-token-encryption-v1').update(raw).digest()
 }
