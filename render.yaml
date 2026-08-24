@@ -46,7 +46,7 @@ services:
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_URL
-        sync: false
+        value: https://narcos-shop.onrender.com/api
     routes:
       - type: rewrite
         source: /*

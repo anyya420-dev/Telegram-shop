@@ -21,12 +21,19 @@ import type {
 } from '../types'
 
 // In production VITE_API_URL is baked in by Vite at build time (set in render.yaml).
-// In local dev without the env var, fall back to '' so Vite's proxy forwards /api/* to localhost:3001.
-const API_URL: string = import.meta.env.VITE_API_URL ?? ''
+// It must include the /api path segment, e.g. https://narcos-shop.onrender.com/api.
+// In local dev without the env var the Vite proxy forwards /api/* to localhost:3001,
+// so we default to '/api' to keep the proxy mapping intact.
+const API_URL: string = import.meta.env.VITE_API_URL ?? '/api'
 const LOCALHOST_API_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i
 
-if (import.meta.env.PROD && LOCALHOST_API_PATTERN.test(API_URL)) {
-  throw new Error('Invalid production API configuration: VITE_API_URL must not target localhost')
+if (import.meta.env.PROD) {
+  if (!import.meta.env.VITE_API_URL) {
+    throw new Error('Invalid production API configuration: VITE_API_URL must be set at build time')
+  }
+  if (LOCALHOST_API_PATTERN.test(API_URL)) {
+    throw new Error('Invalid production API configuration: VITE_API_URL must not target localhost')
+  }
 }
 let sessionToken: string | null = null
 let adminToken: string | null = null
@@ -68,6 +75,7 @@ async function request<T>(path: string, init?: RequestInit) {
       },
     })
   } catch {
+    console.error('[api] Network error – failed to reach', API_URL)
     throw new ApiError('Network error', 'network_error')
   }
 

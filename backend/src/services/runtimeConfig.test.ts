@@ -140,3 +140,12 @@ test('assertProductionRuntimeConfig fails when OWNER_TELEGRAM_ID is numeric but 
 
   assert.throws(() => assertProductionRuntimeConfig(), /OWNER_TELEGRAM_ID/)
 })
+
+test('getAllowedCorsOrigins returns empty array when neither FRONTEND_URL nor WEB_APP_URL is set in production', () => {
+  setProductionBaseline()
+  delete process.env.FRONTEND_URL
+  delete process.env.WEB_APP_URL
+
+  const origins = getAllowedCorsOrigins()
+  assert.equal(origins.length, 0)
+})
