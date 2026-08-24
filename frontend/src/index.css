@@ -1,8 +1,8 @@
 :root {
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #06090f;
-  color: #eff4ff;
+  background: #08070D;
+  color: #F0EEF8;
   line-height: 1.5;
   font-weight: 400;
 }
@@ -15,9 +15,9 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at top, rgba(51, 97, 255, 0.18), transparent 28%),
-    linear-gradient(180deg, #06090f 0%, #0b1020 100%);
-  color: #eff4ff;
+    radial-gradient(circle at top, rgba(124, 58, 237, 0.14), transparent 28%),
+    linear-gradient(180deg, #08070D 0%, #0F0D18 100%);
+  color: #F0EEF8;
 }
 
 button,
@@ -60,8 +60,8 @@ button {
 .product-card,
 .product-hero,
 .empty-state {
-  background: rgba(10, 15, 28, 0.9);
-  border: 1px solid rgba(118, 148, 255, 0.14);
+  background: rgba(12, 10, 20, 0.9);
+  border: 1px solid rgba(124, 58, 237, 0.14);
   border-radius: 24px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.26);
 }
@@ -99,7 +99,7 @@ button {
 .subtle-text,
 .stock-chip,
 .tag {
-  color: #9eaac6;
+  color: #8A84A8;
   font-size: 0.85rem;
 }
 
@@ -118,7 +118,7 @@ button {
 .cart-card p,
 .subtle-text {
   margin: 0;
-  color: #b9c4dd;
+  color: #B0A8CC;
 }
 
 .primary-button,
@@ -146,7 +146,7 @@ button {
 }
 
 .primary-button {
-  background: linear-gradient(135deg, #2952ff, #4d79ff);
+  background: linear-gradient(135deg, #6D28D9, #A855F7);
   color: white;
 }
 
@@ -156,8 +156,8 @@ button {
 .category-pill,
 .ghost-button {
   background: rgba(255, 255, 255, 0.03);
-  color: #eff4ff;
-  border: 1px solid rgba(118, 148, 255, 0.16);
+  color: #F0EEF8;
+  border: 1px solid rgba(124, 58, 237, 0.18);
 }
 
 .ghost-button {
@@ -173,12 +173,12 @@ button {
   padding: 0 14px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(118, 148, 255, 0.16);
+  border: 1px solid rgba(124, 58, 237, 0.18);
 }
 
 .search-field input {
   width: 100%;
-  color: #eff4ff;
+  color: #F0EEF8;
   background: transparent;
   border: 0;
   outline: none;
@@ -204,8 +204,8 @@ button {
 .category-pill--active,
 .quantity-pill--active,
 .bottom-nav__item--active {
-  background: rgba(77, 121, 255, 0.18);
-  border-color: rgba(118, 148, 255, 0.4);
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(168, 85, 247, 0.5);
   color: white;
 }
 
@@ -265,7 +265,7 @@ button {
 }
 
 .tag--accent {
-  color: #c8d7ff;
+  color: #C4B5FD;
 }
 
 .stock-chip {
@@ -294,7 +294,7 @@ button {
 }
 
 .profile-grid dt {
-  color: #9eaac6;
+  color: #8A84A8;
   font-size: 0.85rem;
 }
 
@@ -321,11 +321,11 @@ button {
 .summary-row--total {
   padding-top: 12px;
   margin-top: 12px;
-  border-top: 1px solid rgba(118, 148, 255, 0.12);
+  border-top: 1px solid rgba(124, 58, 237, 0.14);
 }
 
 .muted {
-  color: #9eaac6;
+  color: #8A84A8;
 }
 
 .bottom-nav {
@@ -337,8 +337,8 @@ button {
   grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   padding: 10px;
-  background: rgba(10, 15, 28, 0.94);
-  border: 1px solid rgba(118, 148, 255, 0.18);
+  background: rgba(8, 7, 13, 0.94);
+  border: 1px solid rgba(124, 58, 237, 0.2);
   border-radius: 24px;
   backdrop-filter: blur(18px);
 }
@@ -350,7 +350,7 @@ button {
   gap: 6px;
   padding: 10px 6px;
   border-radius: 18px;
-  color: #9eaac6;
+  color: #8A84A8;
   font-size: 0.72rem;
 }
 
@@ -381,7 +381,7 @@ button {
 .back-link {
   display: inline-flex;
   width: fit-content;
-  color: #c8d7ff;
+  color: #C4B5FD;
 }
 
 .error-banner,

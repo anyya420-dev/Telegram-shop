@@ -3,11 +3,11 @@
 .back { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--tg-theme-text-color, #000); padding: 0; }
 .title { font-size: 20px; font-weight: 700; color: var(--tg-theme-text-color, #000); }
 .loading { display: flex; justify-content: center; padding: 40px; }
-.spinner { width: 32px; height: 32px; border: 3px solid var(--tg-theme-hint-color, #ccc); border-top-color: var(--tg-theme-button-color, #3e86f5); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--tg-theme-hint-color, #ccc); border-top-color: var(--tg-theme-button-color, #7C3AED); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .empty { text-align: center; padding: 40px 20px; color: var(--tg-theme-hint-color, #888); }
 .emptyIcon { font-size: 48px; margin-bottom: 12px; }
-.shopBtn { margin-top: 16px; padding: 12px 24px; background: var(--tg-theme-button-color, #3e86f5); color: var(--tg-theme-button-text-color, #fff); border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.shopBtn { margin-top: 16px; padding: 12px 24px; background: var(--tg-theme-button-color, #7C3AED); color: var(--tg-theme-button-text-color, #fff); border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
 .list { display: flex; flex-direction: column; gap: 10px; }
 .card { display: flex; align-items: center; gap: 12px; background: var(--tg-theme-secondary-bg-color, #f0f0f0); border-radius: 12px; padding: 12px; cursor: pointer; }
 .img { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #eee; font-size: 24px; flex-shrink: 0; }

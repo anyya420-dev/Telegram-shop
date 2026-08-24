@@ -107,7 +107,7 @@
 .catBtn.catActive {
   background: var(--accent);
   border-color: var(--accent);
-  color: #080810;
+  color: #ffffff;
   font-weight: 700;
 }
 
