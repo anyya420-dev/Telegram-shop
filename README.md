@@ -56,7 +56,7 @@ npm run build
 
 Скопируйте `.env.example` в `.env` и заполните значения локально.
 
-- `DATABASE_URL` — путь к SQLite базе данных
+- `DATABASE_URL` — строка подключения к PostgreSQL
 - `PORT` — порт backend сервера
 - `FRONTEND_URL` — origin frontend для CORS
 - `ALLOW_DEMO_MODE` — локальный demo-режим вне Telegram

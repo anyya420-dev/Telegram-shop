@@ -1,14 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useApp } from '../context/AppContext'
 import { getLocalizedCityName } from '../lib/localized'
 import type { Language } from '../types'
 
 export function CityPicker() {
-  const { cities, cityPickerOpen, closeCityPicker, selectCity, user } = useApp()
+  const { cities, cityPickerOpen, closeCityPicker, refreshCities, selectCity, user } = useApp()
   const [pendingCityId, setPendingCityId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { t, i18n } = useTranslation()
   const language = i18n.language as Language
+
+  async function loadCities() {
+    try {
+      setLoading(true)
+      setError(null)
+      await refreshCities()
+    } catch (cityError) {
+      setError(cityError instanceof Error ? cityError.message : t('errors.request_failed'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!cityPickerOpen) {
+      return
+    }
+
+    void loadCities()
+  }, [cityPickerOpen])
 
   if (!cityPickerOpen) {
     return null
@@ -28,27 +50,40 @@ export function CityPicker() {
             </button>
           ) : null}
         </div>
-        <div className="city-list city-list--stacked">
-          {cities.map((city) => (
-            <button
-              key={city.id}
-              type="button"
-              className="city-button"
-              disabled={pendingCityId === city.id}
-              onClick={async () => {
-                setPendingCityId(city.id)
-                try {
-                  await selectCity(city.id)
-                } finally {
-                  setPendingCityId(null)
-                }
-              }}
-            >
-              <span>{getLocalizedCityName(city, language)}</span>
-              <span>→</span>
+        {loading ? (
+          <p className="subtle-text">{t('common.loading')}</p>
+        ) : error ? (
+          <>
+            <p className="subtle-text">{error}</p>
+            <button className="ghost-button" type="button" onClick={() => void loadCities()}>
+              {t('common.retry')}
             </button>
-          ))}
-        </div>
+          </>
+        ) : cities.length === 0 ? (
+          <p className="subtle-text">{t('city.empty')}</p>
+        ) : (
+          <div className="city-list city-list--stacked">
+            {cities.map((city) => (
+              <button
+                key={city.id}
+                type="button"
+                className="city-button"
+                disabled={pendingCityId === city.id}
+                onClick={async () => {
+                  setPendingCityId(city.id)
+                  try {
+                    await selectCity(city.id)
+                  } finally {
+                    setPendingCityId(null)
+                  }
+                }}
+              >
+                <span>{getLocalizedCityName(city, language)}</span>
+                <span>→</span>
+              </button>
+            ))}
+          </div>
+        )}
         <p className="subtle-text">{t('cityPicker.helper')}</p>
       </div>
     </div>

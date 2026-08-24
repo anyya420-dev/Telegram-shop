@@ -72,6 +72,22 @@
   padding: 0 12px;
 }
 
+.checkboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  background: rgba(255, 255, 255, 0.03);
+  color: #f0eef8;
+}
+
+.checkboxLabel input {
+  margin: 0;
+}
+
 .textarea {
   flex: 1;
   min-width: 170px;

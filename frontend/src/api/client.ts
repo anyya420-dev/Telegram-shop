@@ -293,7 +293,7 @@ export const api = {
   getAdminCities() {
     return request<{ cities: AdminCity[] }>('/admin/cities')
   },
-  createAdminCity(data: { name: string; nameEn?: string; sortOrder?: number }) {
+  createAdminCity(data: { name: string; nameEn?: string; sortOrder?: number; isActive?: boolean }) {
     return request<{ city: AdminCity }>('/admin/cities', { method: 'POST', body: JSON.stringify(data) })
   },
   updateAdminCity(id: number, data: Partial<{ name: string; nameEn: string; isActive: boolean; sortOrder: number }>) {

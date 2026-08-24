@@ -5,11 +5,10 @@ import { getLocalizedCityName } from '../lib/localized';
 import styles from './CitySelectPage.module.css';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
-import { api } from '../api/client';
 import type { City } from '../types';
 
 export default function CitySelectPage() {
-  const { cities, selectCity, user } = useApp();
+  const { cities, refreshCities, selectCity, user } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [selecting, setSelecting] = useState<number | null>(null);
@@ -27,7 +26,7 @@ export default function CitySelectPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.getCities();
+      const response = await refreshCities();
       setCityList(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errors.request_failed'));
