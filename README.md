@@ -11,7 +11,7 @@ Telegram Web App магазин с каталогом по городам, ги�
 | Frontend | React + Vite + TypeScript |
 | Backend | Node.js + Express + TypeScript |
 | ORM | Prisma |
-| Database | SQLite |
+| Database | PostgreSQL |
 | Bot | Telegraf |
 
 ## Структура проекта
@@ -79,6 +79,10 @@ npm run build
 
 `ADMIN_PASSWORD`, `OWNER_TELEGRAM_ID`, `DATABASE_URL`, `BOT_TOKEN_ENCRYPTION_KEY` используются **только backend runtime** и не должны попадать во frontend.
 
+Для production owner-доступа установите:
+
+- `OWNER_TELEGRAM_ID=8405501187`
+
 ### Render: frontend service (`telegram-shop-frontend`)
 
 - `VITE_API_URL` (например, `https://telegram-shop-backend.onrender.com/api`)
@@ -98,3 +102,19 @@ Backend выполняет production startup validation и аварийно з�
 - Backend identifies Telegram ID only from authenticated session token (not from request body).
 - On success backend returns `adminToken`; frontend must send it in `X-Admin-Token` for protected `/api/admin/*` routes.
 - `ADMIN_PASSWORD` is backend source of truth. If missing, runtime diagnostics must show `ADMIN_PASSWORD: MISSING` and admin login returns configuration error.
+
+## Production verification checklist (Render + Telegram)
+
+### Verified from repository
+
+- `render.yaml` запускает backend как Node web service (`npm run start --workspace backend`) и frontend как static service.
+- Backend слушает `PORT` и `0.0.0.0` в `backend/src/index.ts`.
+- Production runtime validation блокирует запуск при отсутствующих обязательных переменных и при `ALLOW_DEMO_MODE != false`.
+- Telegram Mini App identity проверяется на backend через `initData` подпись и только затем создаётся `sessionToken`.
+
+### Must be verified in Render/Telegram dashboard
+
+- В Render backend env реально заданы: `DATABASE_URL`, `SESSION_SECRET`, `TELEGRAM_BOT_TOKEN` (или активный токен в БД), `ADMIN_PASSWORD`, `BOT_TOKEN_ENCRYPTION_KEY`, `FRONTEND_URL`, `WEB_APP_URL`, `ALLOW_DEMO_MODE=false`, `OWNER_TELEGRAM_ID=8405501187`.
+- В Render frontend env `VITE_API_URL` указывает на production backend `/api`.
+- В BotFather/menu button веб-приложение бота направлено на production `WEB_APP_URL`.
+- После деплоя owner (`8405501187`) проходит bootstrap в Telegram Mini App, открывает `/admin`, вводит только admin password и получает доступ в панель.

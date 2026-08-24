@@ -11,7 +11,7 @@ import {
   sendError,
   verifyTelegramInitData,
 } from '../lib.js'
-import { seedAdminConfigForFreshInstall, isAdminTelegramId, isOwnerTelegramId, getOwnerTelegramId } from '../services/adminAuthService.js'
+import { seedAdminConfigForFreshInstall, isAdminTelegramId, isOwnerTelegramId, getOwnerTelegramId, normalizeTelegramId } from '../services/adminAuthService.js'
 import { getActiveBotToken } from '../services/botService.js'
 import { maskTelegramId } from '../services/logging.js'
 import { isDemoModeEnabled } from '../services/runtimeConfig.js'
@@ -44,12 +44,18 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
     return
   }
 
-  await seedAdminConfigForFreshInstall(String(telegramUser.id))
+  const normalizedTelegramId = normalizeTelegramId(telegramUser.id)
+  if (!normalizedTelegramId) {
+    sendError(response, 401, 'telegram_verification_failed', 'Telegram init data verification failed')
+    return
+  }
+
+  await seedAdminConfigForFreshInstall(normalizedTelegramId)
 
   const user = await prisma.user.upsert({
-    where: { telegramId: String(telegramUser.id) },
+    where: { telegramId: normalizedTelegramId },
     create: {
-      telegramId: String(telegramUser.id),
+      telegramId: normalizedTelegramId,
       username: telegramUser.username ?? null,
       firstName: telegramUser.first_name,
       lastName: telegramUser.last_name ?? null,

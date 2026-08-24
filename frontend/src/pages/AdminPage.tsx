@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../api/client'
+import { ApiError, api } from '../api/client'
 import { useApp } from '../context/AppContext'
+import { resolveApiErrorMessage } from '../lib/errors'
 import type { AdminCategory, AdminCity, AdminProduct, AdminSettingsResponse, AdminStats } from '../types'
 import styles from './AdminPage.module.css'
 
@@ -585,6 +586,7 @@ export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [authActionLoading, setAuthActionLoading] = useState(false)
   const [settings, setSettings] = useState<AdminSettingsResponse | null>(null)
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [status, setStatus] = useState<{ tone: StatusTone; message: string } | null>(null)
@@ -683,8 +685,8 @@ export default function AdminPage() {
   }, [authStatus, isAdmin])
 
   async function handleLogin() {
-    if (!password) return
-    setLoading(true)
+    if (!password || authActionLoading) return
+    setAuthActionLoading(true)
     setStatus(null)
     try {
       const response = await api.adminLogin({ password })
@@ -696,9 +698,21 @@ export default function AdminPage() {
       setStats(statsResponse)
       setStatus({ tone: 'success', message: 'Administrator session started.' })
     } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Login failed' })
+      if (error instanceof ApiError) {
+        if (error.code === 'configuration_error') {
+          setStatus({ tone: 'error', message: 'Server admin configuration is incomplete. Contact support.' })
+        } else if (error.code === 'invalid_credentials') {
+          setStatus({ tone: 'error', message: 'Invalid administrator password.' })
+        } else if (error.code === 'invalid_session_token') {
+          setStatus({ tone: 'error', message: 'Telegram session expired. Reopen the Mini App and try again.' })
+        } else {
+          setStatus({ tone: 'error', message: resolveApiErrorMessage(error, t, 'request_failed') })
+        }
+      } else {
+        setStatus({ tone: 'error', message: 'Login failed' })
+      }
     } finally {
-      setLoading(false)
+      setAuthActionLoading(false)
     }
   }
 
@@ -891,10 +905,13 @@ export default function AdminPage() {
           <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
           <p className={styles.help}>Administrator access for Telegram ID {user?.telegramId ?? '—'}.</p>
           <div className={styles.formRow}>
+            <input className={styles.input} value={user?.telegramId ?? ''} readOnly aria-label="Authenticated Telegram ID" />
+          </div>
+          <div className={styles.formRow}>
             <input className={styles.input} type="password" placeholder="Administrator password" value={password} onChange={(event) => setPassword(event.target.value)} />
           </div>
-          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={loading || !password}>
-            {loading ? t('common.loading') : 'Login to administration'}
+          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={authActionLoading || !password}>
+            {authActionLoading ? t('common.loading') : 'Login to administration'}
           </button>
         </section>
       )}

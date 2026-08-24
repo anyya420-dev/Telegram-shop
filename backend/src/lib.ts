@@ -24,6 +24,10 @@ type TelegramUserPayload = {
   last_name?: string
 }
 
+const TELEGRAM_ID_PATTERN = /^\d{1,20}$/
+const DEFAULT_TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = 60 * 60 * 24
+const MAX_TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS = 300
+
 type TranslationShape = {
   name: string
   nameEn: string | null
@@ -105,6 +109,26 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
     return null
   }
 
+  const authDateRaw = params.get('auth_date')
+  const authDate = Number(authDateRaw)
+  if (!authDateRaw || !Number.isInteger(authDate) || authDate <= 0) {
+    return null
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const maxAge = Number(process.env.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS ?? DEFAULT_TELEGRAM_INIT_DATA_MAX_AGE_SECONDS)
+  if (!Number.isFinite(maxAge) || maxAge <= 0) {
+    return null
+  }
+
+  if ((nowSeconds - authDate) > maxAge) {
+    return null
+  }
+
+  if (authDate - nowSeconds > MAX_TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS) {
+    return null
+  }
+
   const rawUser = params.get('user')
 
   if (!rawUser) {
@@ -113,17 +137,43 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
 
   try {
     const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string; last_name?: string }
+    const normalizedTelegramId = normalizeTelegramUserId(parsedUser.id)
 
-    if (!parsedUser.id || !parsedUser.first_name) {
+    if (!normalizedTelegramId || !parsedUser.first_name) {
       return null
     }
 
     return {
-      id: String(parsedUser.id),
+      id: normalizedTelegramId,
       username: parsedUser.username,
       first_name: parsedUser.first_name,
       last_name: parsedUser.last_name,
     } satisfies TelegramUserPayload
+  } catch {
+    return null
+  }
+}
+
+function normalizeTelegramUserId(value: unknown) {
+  if (typeof value === 'bigint') {
+    return value > 0n ? value.toString() : null
+  }
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      return null
+    }
+    return value.toString()
+  }
+  if (typeof value !== 'string') {
+    return null
+  }
+  const normalized = value.trim()
+  if (!TELEGRAM_ID_PATTERN.test(normalized)) {
+    return null
+  }
+  try {
+    const asBigInt = BigInt(normalized)
+    return asBigInt > 0n ? asBigInt.toString() : null
   } catch {
     return null
   }
