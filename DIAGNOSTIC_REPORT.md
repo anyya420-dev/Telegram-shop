@@ -4,7 +4,7 @@ Date: 2026-08-24
 Repository: `anyya420-dev/Telegram-shop`  
 Report file: `/home/runner/work/Telegram-shop/Telegram-shop/DIAGNOSTIC_REPORT.md`  
 Current branch: `copilot/complete-production-audit-repair-verification`  
-Current commit: `821ef3c2b0a368dd94f4b990b5b03f1d2784927d`  
+Current commit: `see final task response for exact pushed HEAD; embedding the commit hash inside this file would change the hash again`  
 PR number: `none found for current branch`  
 Fix deployed to Render: `UNKNOWN / NOT VERIFIED`  
 Production actually verified: `NO`  
