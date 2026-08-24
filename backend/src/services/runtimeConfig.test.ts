@@ -130,8 +130,8 @@ test('getAllowedCorsOrigins includes both FRONTEND_URL and WEB_APP_URL when dist
   process.env.FRONTEND_URL = 'https://frontend.example.com'
   process.env.WEB_APP_URL = 'https://webapp.example.com'
   const origins = getAllowedCorsOrigins()
-  assert.ok(origins.includes('https://frontend.example.com'))
-  assert.ok(origins.includes('https://webapp.example.com'))
+  assert.ok(origins.some((o) => o === 'https://frontend.example.com'), 'FRONTEND_URL should be in CORS origins')
+  assert.ok(origins.some((o) => o === 'https://webapp.example.com'), 'WEB_APP_URL should be in CORS origins')
 })
 
 test('assertProductionRuntimeConfig fails when OWNER_TELEGRAM_ID is numeric but invalid format', () => {
