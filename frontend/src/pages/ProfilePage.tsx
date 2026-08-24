@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import styles from './ProfilePage.module.css';
@@ -6,16 +7,43 @@ import { saveLanguage } from '../lib/i18n';
 import i18n from '../lib/i18n';
 import { getLocalizedCityName } from '../lib/localized';
 import type { Language } from '../types';
+import { resolveApiErrorMessage } from '../lib/errors';
 
 export default function ProfilePage() {
-  const { user: profile, telegramEnvironment, openCityPicker, updateLanguagePreference, orders, isAdmin } = useApp();
+  const { user: profile, authStatus, telegramEnvironment, openCityPicker, updateLanguagePreference, orders, isAdmin } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [languageSaving, setLanguageSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   function handleLanguageChange(lang: Language) {
+    if (languageSaving) {
+      return;
+    }
+
+    setProfileError(null);
+    setLanguageSaving(true);
     void i18n.changeLanguage(lang);
     saveLanguage(lang);
-    void updateLanguagePreference(lang);
+    void updateLanguagePreference(lang)
+      .catch((error) => {
+        setProfileError(resolveApiErrorMessage(error, t, 'language_update_failed'));
+      })
+      .finally(() => {
+        setLanguageSaving(false);
+      });
+  }
+
+  if (authStatus === 'AUTH_LOADING') {
+    return (
+      <div className={styles.page}>
+        <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
+        <div className={styles.placeholder}>
+          <p>{t('common.loading')}</p>
+        </div>
+      </div>
+    );
   }
 
   if (!profile) {
@@ -54,9 +82,15 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {profileError && (
+        <div className={styles.placeholder} style={{ marginBottom: 16 }}>
+          <p>{profileError}</p>
+        </div>
+      )}
+
       <div className={styles.avatar}>
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={displayName} className={styles.avatarImage} />
+        {avatarUrl && !avatarFailed ? (
+          <img src={avatarUrl} alt={displayName} className={styles.avatarImage} onError={() => setAvatarFailed(true)} />
         ) : (
           <div className={styles.avatarCircle}>
             {displayName.charAt(0).toUpperCase()}
@@ -100,16 +134,20 @@ export default function ProfilePage() {
             <button
               className={`${styles.langBtn} ${i18n.language === 'ru' ? styles.langActive : ''}`}
               onClick={() => handleLanguageChange('ru')}
+              disabled={languageSaving}
               aria-label={t('profile.languageRu')}
               title={t('profile.languageRu')}
+              type="button"
             >
               RU
             </button>
             <button
               className={`${styles.langBtn} ${i18n.language === 'en' ? styles.langActive : ''}`}
               onClick={() => handleLanguageChange('en')}
+              disabled={languageSaving}
               aria-label={t('profile.languageEn')}
               title={t('profile.languageEn')}
+              type="button"
             >
               EN
             </button>

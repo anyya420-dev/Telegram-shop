@@ -23,17 +23,34 @@ import type {
 // In production VITE_API_URL is baked in by Vite at build time (set in render.yaml).
 // In local dev without the env var, fall back to '' so Vite's proxy forwards /api/* to localhost:3001.
 const API_URL: string = import.meta.env.VITE_API_URL ?? ''
+const LOCALHOST_API_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i
+
+if (import.meta.env.PROD && LOCALHOST_API_PATTERN.test(API_URL)) {
+  throw new Error('Invalid production API configuration: VITE_API_URL must not target localhost')
+}
 let sessionToken: string | null = null
 let adminToken: string | null = null
 
 export class ApiError extends Error {
   code?: string
+  status?: number
 
-  constructor(message: string, code?: string) {
+  constructor(message: string, code?: string, status?: number) {
     super(message)
     this.name = 'ApiError'
     this.code = code
+    this.status = status
   }
+}
+
+const FALLBACK_CODE_BY_STATUS: Record<number, string> = {
+  401: 'unauthorized',
+  403: 'forbidden',
+  404: 'not_found',
+  409: 'conflict',
+  422: 'validation_failed',
+  500: 'server_error',
+  503: 'service_unavailable',
 }
 
 async function request<T>(path: string, init?: RequestInit) {
@@ -42,6 +59,7 @@ async function request<T>(path: string, init?: RequestInit) {
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
@@ -55,7 +73,13 @@ async function request<T>(path: string, init?: RequestInit) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed', code: 'request_failed' })) as { message?: string; code?: string }
-    throw new ApiError(error.message ?? 'Request failed', error.code ?? 'request_failed')
+    let code = error.code ?? FALLBACK_CODE_BY_STATUS[response.status] ?? 'request_failed'
+
+    if (response.status === 401) {
+      code = path.startsWith('/admin') ? 'invalid_admin_session' : 'invalid_session_token'
+    }
+
+    throw new ApiError(error.message ?? 'Request failed', code, response.status)
   }
 
   return (await response.json()) as T
@@ -186,7 +210,7 @@ export const api = {
 
 
   // Admin auth/settings
-  adminLogin(data: { telegramId: string; password: string }) {
+  adminLogin(data: { password: string }) {
     return request<{ adminToken: string; expiresAt: string; settings: AdminSettingsResponse }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),

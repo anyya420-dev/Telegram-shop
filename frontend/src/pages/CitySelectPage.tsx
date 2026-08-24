@@ -6,6 +6,7 @@ import styles from './CitySelectPage.module.css';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
 import type { City } from '../types';
+import { resolveApiErrorMessage } from '../lib/errors';
 
 export default function CitySelectPage() {
   const { authStatus, cities, refreshCities, selectCity, skipCitySelection, user } = useApp();
@@ -22,6 +23,10 @@ export default function CitySelectPage() {
     }
   }, [navigate, user]);
 
+  useEffect(() => {
+    setCityList(cities);
+  }, [cities]);
+
   const loadCities = useCallback(async () => {
     try {
       setLoading(true);
@@ -29,7 +34,7 @@ export default function CitySelectPage() {
       const response = await refreshCities();
       setCityList(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('errors.request_failed'));
+      setError(resolveApiErrorMessage(err, t, 'request_failed'));
     } finally {
       setLoading(false);
     }
@@ -40,10 +45,13 @@ export default function CitySelectPage() {
   }, [loadCities]);
 
   async function handleSelect(cityId: number) {
+    setError(null);
     setSelecting(cityId);
     try {
       await selectCity(cityId);
       navigate('/shop', { replace: true });
+    } catch (err) {
+      setError(resolveApiErrorMessage(err, t, 'city_not_found'));
     } finally {
       setSelecting(null);
     }

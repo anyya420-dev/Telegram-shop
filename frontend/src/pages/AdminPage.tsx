@@ -6,6 +6,7 @@ import type { AdminCategory, AdminCity, AdminProduct, AdminSettingsResponse, Adm
 import styles from './AdminPage.module.css'
 
 type StatusTone = 'success' | 'error' | 'info'
+type AdminTab = 'dashboard' | 'cities' | 'categories' | 'products' | 'security' | 'administrators' | 'bot'
 type AdminRestoreState = {
   authenticated: boolean
   settings: AdminSettingsResponse | null
@@ -13,15 +14,6 @@ type AdminRestoreState = {
 }
 
 let adminRestoreInFlight: Promise<AdminRestoreState> | null = null
-let cachedAdminToken: string | null = null
-
-function readStoredAdminToken() {
-  return cachedAdminToken
-}
-
-function storeAdminToken(token: string | null) {
-  cachedAdminToken = token?.trim() || null
-}
 
 function ShieldIcon() {
   return (
@@ -77,7 +69,10 @@ function CitiesSection({ setStatus, loading, setLoading }: {
   loading: boolean
   setLoading: (v: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [cities, setCities] = useState<AdminCity[]>([])
+  const [sectionLoading, setSectionLoading] = useState(true)
+  const [sectionError, setSectionError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [newNameEn, setNewNameEn] = useState('')
   const [newIsActive, setNewIsActive] = useState(true)
@@ -86,14 +81,22 @@ function CitiesSection({ setStatus, loading, setLoading }: {
   const [editNameEn, setEditNameEn] = useState('')
   const [editIsActive, setEditIsActive] = useState(true)
 
-  useEffect(() => {
-    void api.getAdminCities().then((r) => setCities(r.cities)).catch(() => null)
-  }, [])
-
   async function refresh() {
-    const r = await api.getAdminCities()
-    setCities(r.cities)
+    setSectionLoading(true)
+    setSectionError(null)
+    try {
+      const r = await api.getAdminCities()
+      setCities(r.cities)
+    } catch (error) {
+      setSectionError(error instanceof Error ? error.message : 'Failed to load cities')
+    } finally {
+      setSectionLoading(false)
+    }
   }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
 
   async function handleCreate() {
     if (!newName.trim()) return
@@ -173,6 +176,15 @@ function CitiesSection({ setStatus, loading, setLoading }: {
   return (
     <section className={styles.card}>
       <h2 className={styles.cardTitle}><MapPinIcon /> Cities / Города</h2>
+      {sectionLoading && <p className={styles.help}>{t('common.loading')}</p>}
+      {sectionError && (
+        <div className={styles.actions}>
+          <p className={styles.help}>{sectionError}</p>
+          <button className={styles.ghostButton} onClick={() => void refresh()} type="button">Retry</button>
+        </div>
+      )}
+      {!sectionLoading && !sectionError && (
+        <>
       <ul className={styles.adminList}>
         {cities.length === 0 && <li className={styles.help}>No cities yet.</li>}
         {cities.map((city) => (
@@ -217,6 +229,8 @@ function CitiesSection({ setStatus, loading, setLoading }: {
         </label>
         <button className={styles.primaryButton} onClick={() => void handleCreate()} disabled={loading || !newName.trim()}>Add city</button>
       </div>
+        </>
+      )}
     </section>
   )
 }
@@ -229,20 +243,30 @@ function CategoriesSection({ setStatus, loading, setLoading }: {
   setLoading: (v: boolean) => void
 }) {
   const [categories, setCategories] = useState<AdminCategory[]>([])
+  const [sectionLoading, setSectionLoading] = useState(true)
+  const [sectionError, setSectionError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [newNameEn, setNewNameEn] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editNameEn, setEditNameEn] = useState('')
 
-  useEffect(() => {
-    void api.getAdminCategories().then((r) => setCategories(r.categories)).catch(() => null)
-  }, [])
-
   async function refresh() {
-    const r = await api.getAdminCategories()
-    setCategories(r.categories)
+    setSectionLoading(true)
+    setSectionError(null)
+    try {
+      const r = await api.getAdminCategories()
+      setCategories(r.categories)
+    } catch (error) {
+      setSectionError(error instanceof Error ? error.message : 'Failed to load categories')
+    } finally {
+      setSectionLoading(false)
+    }
   }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
 
   async function handleCreate() {
     if (!newName.trim()) return
@@ -313,6 +337,15 @@ function CategoriesSection({ setStatus, loading, setLoading }: {
   return (
     <section className={styles.card}>
       <h2 className={styles.cardTitle}><TagIcon /> Categories</h2>
+      {sectionLoading && <p className={styles.help}>Loading…</p>}
+      {sectionError && (
+        <div className={styles.actions}>
+          <p className={styles.help}>{sectionError}</p>
+          <button className={styles.ghostButton} onClick={() => void refresh()} type="button">Retry</button>
+        </div>
+      )}
+      {!sectionLoading && !sectionError && (
+        <>
       <ul className={styles.adminList}>
         {categories.length === 0 && <li className={styles.help}>No categories yet.</li>}
         {categories.map((cat) => (
@@ -349,6 +382,8 @@ function CategoriesSection({ setStatus, loading, setLoading }: {
         <input className={styles.input} placeholder="Category name (EN)" value={newNameEn} onChange={(e) => setNewNameEn(e.target.value)} />
         <button className={styles.primaryButton} onClick={() => void handleCreate()} disabled={loading || !newName.trim()}>Add category</button>
       </div>
+        </>
+      )}
     </section>
   )
 }
@@ -362,6 +397,8 @@ function ProductsSection({ setStatus, loading, setLoading }: {
 }) {
   const [products, setProducts] = useState<AdminProduct[]>([])
   const [categories, setCategories] = useState<AdminCategory[]>([])
+  const [sectionLoading, setSectionLoading] = useState(true)
+  const [sectionError, setSectionError] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
 
   // new product form
@@ -377,18 +414,23 @@ function ProductsSection({ setStatus, loading, setLoading }: {
   const [editPrice, setEditPrice] = useState('')
   const [editImage, setEditImage] = useState('')
 
-  useEffect(() => {
-    void Promise.all([
-      api.getAdminProducts().then((r) => setProducts(r.products)),
-      api.getAdminCategories().then((r) => setCategories(r.categories)),
-    ]).catch(() => null)
-  }, [])
-
   async function refresh() {
-    const [pr, cr] = await Promise.all([api.getAdminProducts(), api.getAdminCategories()])
-    setProducts(pr.products)
-    setCategories(cr.categories)
+    setSectionLoading(true)
+    setSectionError(null)
+    try {
+      const [pr, cr] = await Promise.all([api.getAdminProducts(), api.getAdminCategories()])
+      setProducts(pr.products)
+      setCategories(cr.categories)
+    } catch (error) {
+      setSectionError(error instanceof Error ? error.message : 'Failed to load products')
+    } finally {
+      setSectionLoading(false)
+    }
   }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
 
   async function handleCreate() {
     const price = parseFloat(newPrice)
@@ -463,6 +505,15 @@ function ProductsSection({ setStatus, loading, setLoading }: {
   return (
     <section className={styles.card}>
       <h2 className={styles.cardTitle}><BoxIcon /> Products</h2>
+      {sectionLoading && <p className={styles.help}>Loading…</p>}
+      {sectionError && (
+        <div className={styles.actions}>
+          <p className={styles.help}>{sectionError}</p>
+          <button className={styles.ghostButton} onClick={() => void refresh()} type="button">Retry</button>
+        </div>
+      )}
+      {!sectionLoading && !sectionError && (
+        <>
       <ul className={styles.adminList}>
         {products.length === 0 && <li className={styles.help}>No products yet.</li>}
         {products.map((p) => (
@@ -519,6 +570,8 @@ function ProductsSection({ setStatus, loading, setLoading }: {
       >
         Add product
       </button>
+        </>
+      )}
     </section>
   )
 }
@@ -542,6 +595,7 @@ export default function AdminPage() {
   const [changeFromId, setChangeFromId] = useState('')
   const [changeToId, setChangeToId] = useState('')
   const [botToken, setBotToken] = useState('')
+  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard')
 
   const canManage = authenticated && settings
 
@@ -565,7 +619,6 @@ export default function AdminPage() {
 
     if (!isAdmin) {
       api.setAdminToken(null)
-      storeAdminToken(null)
       setAuthLoading(false)
       setAuthenticated(false)
       setSettings(null)
@@ -575,21 +628,12 @@ export default function AdminPage() {
       }
     }
 
-    const hasToken = Boolean(readStoredAdminToken())
-    setAuthLoading(hasToken)
+    setAuthLoading(true)
 
     async function restoreAdminSession() {
       let activeRestore = adminRestoreInFlight
       if (!activeRestore) {
         const restorePromise = (async () => {
-          const savedToken = readStoredAdminToken()
-          if (!savedToken) {
-            api.setAdminToken(null)
-            return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
-          }
-
-          api.setAdminToken(savedToken)
-
           try {
             const { settingsResponse, statsResponse } = await loadProtectedData()
             return {
@@ -599,7 +643,6 @@ export default function AdminPage() {
             } satisfies AdminRestoreState
           } catch {
             api.setAdminToken(null)
-            storeAdminToken(null)
             return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
           }
         })()
@@ -623,7 +666,6 @@ export default function AdminPage() {
       } catch {
         if (cancelled) return
         api.setAdminToken(null)
-        storeAdminToken(null)
         setAuthenticated(false)
         setSettings(null)
         setStats(null)
@@ -641,14 +683,12 @@ export default function AdminPage() {
   }, [authStatus, isAdmin])
 
   async function handleLogin() {
-    const sessionTelegramId = user?.telegramId?.trim()
-    if (!sessionTelegramId || !password) return
+    if (!user?.telegramId || !password) return
     setLoading(true)
     setStatus(null)
     try {
-      const response = await api.adminLogin({ telegramId: sessionTelegramId, password })
+      const response = await api.adminLogin({ password })
       api.setAdminToken(response.adminToken)
-      storeAdminToken(response.adminToken)
       setSettings(response.settings)
       setAuthenticated(true)
       setPassword('')
@@ -670,7 +710,6 @@ export default function AdminPage() {
       // no-op
     } finally {
       api.setAdminToken(null)
-      storeAdminToken(null)
       setAuthenticated(false)
       setSettings(null)
       setLoading(false)
@@ -691,7 +730,6 @@ export default function AdminPage() {
     try {
       const response = await api.updateAdminPassword({ currentPassword, newPassword })
       api.setAdminToken(response.adminToken)
-      storeAdminToken(response.adminToken)
       setCurrentPassword('')
       setNewPassword('')
       await refreshSettings('Password saved successfully.')
@@ -703,7 +741,10 @@ export default function AdminPage() {
   }
 
   async function handleAddAdmin() {
-    if (!addAdminId.trim()) return
+    if (!/^\d+$/.test(addAdminId.trim())) {
+      setStatus({ tone: 'error', message: 'Telegram ID must contain only digits.' })
+      return
+    }
     setLoading(true)
     setStatus(null)
     try {
@@ -718,7 +759,10 @@ export default function AdminPage() {
   }
 
   async function handleChangeAdmin() {
-    if (!changeFromId.trim() || !changeToId.trim()) return
+    if (!/^\d+$/.test(changeFromId.trim()) || !/^\d+$/.test(changeToId.trim())) {
+      setStatus({ tone: 'error', message: 'Telegram IDs must contain only digits.' })
+      return
+    }
     setLoading(true)
     setStatus(null)
     try {
@@ -734,6 +778,7 @@ export default function AdminPage() {
   }
 
   async function handleRemoveAdmin(id: string) {
+    if (!confirm(`Remove administrator ${id}?`)) return
     setLoading(true)
     setStatus(null)
     try {
@@ -804,6 +849,29 @@ export default function AdminPage() {
 
       {status && <div className={`${styles.alert} ${styles[status.tone]}`}>{status.message}</div>}
 
+      {!authLoading && canManage && (
+        <div className={styles.tabBar}>
+          {[
+            ['dashboard', 'Dashboard'],
+            ['products', 'Products'],
+            ['cities', 'Cities'],
+            ['categories', 'Categories'],
+            ['administrators', 'Admins'],
+            ['bot', 'Bot'],
+            ['security', 'Security'],
+          ].map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              className={`${styles.tabButton} ${activeTab === tab ? styles.tabButtonActive : ''}`}
+              onClick={() => setActiveTab(tab as AdminTab)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {authLoading && (
         <section className={styles.card}>
           <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
@@ -833,11 +901,17 @@ export default function AdminPage() {
 
       {!authLoading && canManage && (
         <>
-          <CitiesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
-          <CategoriesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
-          <ProductsSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
+          {(activeTab === 'cities') && (
+            <CitiesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
+          )}
+          {(activeTab === 'categories') && (
+            <CategoriesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
+          )}
+          {(activeTab === 'products') && (
+            <ProductsSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
+          )}
 
-          <section className={styles.card}>
+          {(activeTab === 'security') && <section className={styles.card}>
             <h2 className={styles.cardTitle}><ShieldIcon /> Security</h2>
             <p className={styles.help}>Use a strong administrator password and rotate it regularly.</p>
             <div className={styles.formRow}>
@@ -852,9 +926,9 @@ export default function AdminPage() {
                 Logout
               </button>
             </div>
-          </section>
+          </section>}
 
-          <section className={styles.card}>
+          {(activeTab === 'administrators') && <section className={styles.card}>
             <h2 className={styles.cardTitle}><ShieldIcon /> Administrators</h2>
             <p className={styles.help}>Current authorized Telegram IDs.</p>
             <ul className={styles.adminList}>
@@ -874,9 +948,9 @@ export default function AdminPage() {
               <input className={styles.input} placeholder="New Telegram ID" value={changeToId} onChange={(event) => setChangeToId(event.target.value)} />
               <button className={styles.primaryButton} onClick={() => void handleChangeAdmin()} disabled={loading || !changeFromId.trim() || !changeToId.trim()}>Change</button>
             </div>
-          </section>
+          </section>}
 
-          <section className={styles.card}>
+          {(activeTab === 'bot') && <section className={styles.card}>
             <h2 className={styles.cardTitle}><BotIcon /> Telegram bot</h2>
             <p className={styles.help}>Status: <strong>{botStatusLabel}</strong></p>
             {settings.bot.connected && (
@@ -893,16 +967,25 @@ export default function AdminPage() {
               <button className={styles.ghostButton} onClick={() => void handleTestBot()} disabled={loading || !settings.bot.connected}>Test connection</button>
               <button className={styles.removeButton} onClick={() => void handleDisconnectBot()} disabled={loading || !settings.bot.connected}>Disconnect</button>
             </div>
-          </section>
+          </section>}
 
-          {stats && (
+          {(activeTab === 'dashboard') && (
             <section className={styles.card}>
               <h2 className={styles.cardTitle}>Shop statistics</h2>
-              <div className={styles.statsGrid}>
-                <article className={styles.statCard}><span>Total orders</span><strong>{stats.totalOrders}</strong></article>
-                <article className={styles.statCard}><span>Pending orders</span><strong>{stats.pendingOrders}</strong></article>
-                <article className={styles.statCard}><span>Total users</span><strong>{stats.totalUsers}</strong></article>
-                <article className={styles.statCard}><span>Revenue</span><strong>{stats.totalRevenue.toFixed(2)}</strong></article>
+              {stats ? (
+                <div className={styles.statsGrid}>
+                  <article className={styles.statCard}><span>Total orders</span><strong>{stats.totalOrders}</strong></article>
+                  <article className={styles.statCard}><span>Pending orders</span><strong>{stats.pendingOrders}</strong></article>
+                  <article className={styles.statCard}><span>Total users</span><strong>{stats.totalUsers}</strong></article>
+                  <article className={styles.statCard}><span>Revenue</span><strong>{stats.totalRevenue.toFixed(2)}</strong></article>
+                </div>
+              ) : (
+                <p className={styles.help}>Statistics are unavailable. Re-authenticate and retry.</p>
+              )}
+              <div className={styles.actions}>
+                <button className={styles.ghostButton} onClick={() => void handleLogout()} disabled={loading}>
+                  Logout
+                </button>
               </div>
             </section>
           )}

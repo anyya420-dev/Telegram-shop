@@ -5,6 +5,7 @@
 }
 
 :root {
+  --app-height: 100dvh;
   /* Backgrounds */
   --bg-primary: #08070D;
   --bg-secondary: #0F0D18;
@@ -61,6 +62,7 @@
 
 html, body {
   height: 100%;
+  min-height: var(--app-height);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', sans-serif;
@@ -76,7 +78,9 @@ body {
 }
 
 #root {
-  height: 100%;
+  height: var(--app-height);
+  min-height: var(--app-height);
+  width: 100%;
   max-width: 480px;
   margin: 0 auto;
   position: relative;
@@ -89,6 +93,18 @@ button {
   background: none;
   font-family: inherit;
   font-size: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 1px;
 }
 
 input, textarea {

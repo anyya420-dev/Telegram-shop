@@ -13,13 +13,16 @@ import {
   isAdminTelegramId,
   isOwnerTelegramId,
   listAdministratorIds,
+  normalizeTelegramId,
   revokeAdminSession,
   setAdminPassword,
   verifyAdminPassword,
 } from '../services/adminAuthService.js'
+import { getRuntimeConfigStatus, getRuntimeConfigSummary, getRuntimeEnvironmentLabel } from '../services/runtimeConfig.js'
 import rateLimit from 'express-rate-limit'
 
 const router = Router()
+const ADMIN_SESSION_COOKIE_NAME = 'tg_shop_admin_session'
 
 const botRateLimiter = rateLimit({
   windowMs: 60_000,
@@ -30,7 +33,44 @@ const botRateLimiter = rateLimit({
 })
 
 function getAdminSessionToken(request: Request) {
-  return request.header('x-admin-token') ?? request.header('x-admin-session') ?? ''
+  const headerToken = request.header('x-admin-token') ?? request.header('x-admin-session') ?? ''
+  if (headerToken) {
+    return headerToken
+  }
+
+  const rawCookie = request.header('cookie') ?? ''
+  if (!rawCookie) {
+    return ''
+  }
+
+  const cookies = rawCookie.split(';')
+  for (const cookie of cookies) {
+    const [key, ...valueParts] = cookie.trim().split('=')
+    if (key === ADMIN_SESSION_COOKIE_NAME) {
+      return decodeURIComponent(valueParts.join('=') || '')
+    }
+  }
+
+  return ''
+}
+
+function writeAdminSessionCookie(response: Response, token: string, expiresAt: Date) {
+  response.cookie(ADMIN_SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    expires: expiresAt,
+    path: '/api/admin',
+  })
+}
+
+function clearAdminSessionCookie(response: Response) {
+  response.clearCookie(ADMIN_SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/api/admin',
+  })
 }
 
 type AdminContext = {
@@ -91,15 +131,6 @@ async function getAdminUser(request: Request, response: Response, options?: { re
   return { user, administrator: resolvedAdministrator }
 }
 
-function normalizeTelegramId(value: unknown) {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim()
-  if (!/^\d{5,20}$/.test(normalized)) {
-    return null
-  }
-  return normalized
-}
-
 function meetsMinimumPasswordLength(password: string) {
   return password.length >= 8
 }
@@ -150,6 +181,7 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   console.info('[admin-auth] admin session created', {
     isOwner: isOwnerTelegramId(admin.user.telegramId),
   })
+  writeAdminSessionCookie(response, session.token, session.expiresAt)
 
   response.json({
     adminToken: session.token,
@@ -166,6 +198,7 @@ router.post('/auth/logout', authRateLimiter, async (request, response) => {
   if (token) {
     await revokeAdminSession(token)
   }
+  clearAdminSessionCookie(response)
 
   response.json({ ok: true })
 })
@@ -175,6 +208,55 @@ router.get('/auth/status', authRateLimiter, async (request, response) => {
   if (!admin) return
 
   response.json({ authenticated: true })
+})
+
+router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const ownerMatch = isOwnerTelegramId(admin.user.telegramId)
+  if (!ownerMatch) {
+    sendError(response, 403, 'forbidden', 'Owner diagnostics only')
+    return
+  }
+
+  const runtime = getRuntimeConfigStatus()
+  const telegramIdRecognized = await isAdminTelegramId(admin.user.telegramId)
+
+  response.json({
+    telegramSessionValid: true,
+    telegramIdRecognized,
+    ownerConfigured: runtime.ownerTelegramIdConfigured,
+    ownerMatch,
+    administratorRecordExists: Boolean(admin.administrator?.id),
+    adminPasswordConfigured: runtime.adminPasswordConfigured,
+    sessionSecretConfigured: runtime.sessionSecretConfigured,
+    databaseConfigured: runtime.databaseConfigured,
+    botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
+    runtimeConfigSummary: getRuntimeConfigSummary(),
+    adminSessionValid: true,
+    environment: getRuntimeEnvironmentLabel(),
+  })
+})
+
+router.get('/diagnostics/runtime', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+  if (!isOwnerTelegramId(admin.user.telegramId)) {
+    sendError(response, 403, 'forbidden', 'Owner diagnostics only')
+    return
+  }
+
+  const runtime = getRuntimeConfigStatus()
+  response.json({
+    ownerConfigured: runtime.ownerTelegramIdConfigured,
+    adminPasswordConfigured: runtime.adminPasswordConfigured,
+    sessionSecretConfigured: runtime.sessionSecretConfigured,
+    databaseConfigured: runtime.databaseConfigured,
+    botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
+    runtimeConfigSummary: getRuntimeConfigSummary(),
+    environment: getRuntimeEnvironmentLabel(),
+  })
 })
 
 router.get('/settings', authRateLimiter, async (request, response) => {
@@ -213,6 +295,7 @@ router.post('/settings/password', authRateLimiter, async (request, response) => 
   })
 
   const newSession = await createAdminSession(admin.administrator.id)
+  writeAdminSessionCookie(response, newSession.token, newSession.expiresAt)
 
   response.json({
     saved: true,

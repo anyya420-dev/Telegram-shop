@@ -2,8 +2,11 @@ import { PrismaClient } from '@prisma/client'
 import type { Request, Response } from 'express'
 import rateLimit from 'express-rate-limit'
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { getSessionSecret } from './services/runtimeConfig.js'
 
-process.env.DATABASE_URL ??= 'postgresql://localhost/dev'
+if (!process.env.DATABASE_URL && process.env.NODE_ENV !== 'production') {
+  process.env.DATABASE_URL = 'postgresql://localhost/dev'
+}
 
 export const prisma = new PrismaClient()
 export const DEMO_TELEGRAM_USER = {
@@ -11,8 +14,6 @@ export const DEMO_TELEGRAM_USER = {
   username: 'demo_customer',
   first_name: 'Demo',
 }
-
-const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
 
 export type AppLanguage = 'ru' | 'en'
 
@@ -54,7 +55,7 @@ export const authRateLimiter = rateLimit({
 })
 
 export function createSessionToken(telegramId: string) {
-  const signature = createHmac('sha256', SESSION_SECRET).update(telegramId).digest('hex')
+  const signature = createHmac('sha256', getSessionSecret()).update(telegramId).digest('hex')
   return `${telegramId}.${signature}`
 }
 
@@ -69,7 +70,7 @@ export function verifySessionToken(token: string | undefined) {
     return null
   }
 
-  const expectedSignature = createHmac('sha256', SESSION_SECRET).update(telegramId).digest('hex')
+  const expectedSignature = createHmac('sha256', getSessionSecret()).update(telegramId).digest('hex')
   const received = Buffer.from(signature)
   const expected = Buffer.from(expectedSignature)
 

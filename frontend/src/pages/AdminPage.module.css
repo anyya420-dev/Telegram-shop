@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding-bottom: 20px;
 }
 
 .title {
@@ -32,6 +33,30 @@
 .help {
   margin: 0;
   color: #b0a8cc;
+  line-height: 1.45;
+}
+
+.tabBar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.tabButton {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  color: #c4b5fd;
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.tabButtonActive {
+  border-color: #a855f7;
+  background: rgba(124, 58, 237, 0.28);
+  color: #f0eef8;
 }
 
 .alert {
@@ -118,6 +143,15 @@
   color: #f0eef8;
 }
 
+.primaryButton:disabled,
+.ghostButton:disabled,
+.removeButton:disabled,
+.warnButton:disabled,
+.input:disabled,
+.textarea:disabled {
+  opacity: 0.55;
+}
+
 .primaryButton {
   background: linear-gradient(135deg, #6d28d9, #a855f7);
 }
@@ -155,6 +189,7 @@
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.03);
+  flex-wrap: wrap;
 }
 
 .itemActions {
@@ -218,5 +253,15 @@
 @media (max-width: 720px) {
   .statsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .itemActions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .input {
+    min-width: 100%;
   }
 }

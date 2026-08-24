@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
+import { resolveApiErrorMessage } from '../lib/errors'
 import i18n from '../lib/i18n'
 import { getTelegramContext } from '../lib/telegram'
 import type { BootstrapResponse, Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
@@ -94,11 +95,7 @@ function emptyCart(): Cart {
 }
 
 function translateError(error: unknown, fallbackKey: string) {
-  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
-    return i18n.t(`errors.${error.code}`)
-  }
-
-  return i18n.t(`errors.${fallbackKey}`)
+  return resolveApiErrorMessage(error, i18n.t.bind(i18n), fallbackKey)
 }
 
 async function bootstrapSession(initData: string) {

@@ -90,7 +90,7 @@ export default function OrderDetailPage() {
     return (
       <div className={styles.notFound}>
         <p>{t('orders.notFound')}</p>
-        <button onClick={() => navigate('/orders')}>{t('orders.back')}</button>
+        <button onClick={() => navigate('/orders')} type="button">{t('orders.back')}</button>
       </div>
     );
   }
@@ -101,7 +101,7 @@ export default function OrderDetailPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button className={styles.back} onClick={() => navigate('/orders')}>
+        <button className={styles.back} onClick={() => navigate('/orders')} type="button">
           {t('common.back')}
         </button>
         <h1 className={styles.title}>{t('orders.orderTitle', { id: order.id })}</h1>
@@ -197,12 +197,12 @@ export default function OrderDetailPage() {
 
       {/* Action buttons */}
       {canCancel && (
-        <button className={styles.cancelBtn} onClick={() => void handleCancel()} disabled={cancelling}>
+        <button className={styles.cancelBtn} onClick={() => void handleCancel()} disabled={cancelling} type="button">
           {cancelling ? t('orders.cancelling') : t('orders.cancelOrder')}
         </button>
       )}
       {canRefund && (
-        <button className={styles.refundBtn} onClick={() => void handleRefundRequest()} disabled={refunding}>
+        <button className={styles.refundBtn} onClick={() => void handleRefundRequest()} disabled={refunding} type="button">
           {refunding ? t('orders.requesting') : t('orders.requestRefund')}
         </button>
       )}

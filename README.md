@@ -56,12 +56,45 @@ npm run build
 
 Скопируйте `.env.example` в `.env` и заполните значения локально.
 
-- `DATABASE_URL` — строка подключения к PostgreSQL
-- `PORT` — порт backend сервера
-- `FRONTEND_URL` — origin frontend для CORS
-- `ALLOW_DEMO_MODE` — локальный demo-режим вне Telegram
-- `SESSION_SECRET` — секрет подписи пользовательской сессии
-- `TELEGRAM_BOT_TOKEN` — токен Telegram бота
-- `WEB_APP_URL` — публичный URL Web App
+### Render: backend service (`telegram-shop-backend`)
+
+Обязательные backend-переменные:
+
+- `NODE_ENV` (`production`)
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `OWNER_TELEGRAM_ID`
+- `ADMIN_PASSWORD`
+- `BOT_TOKEN_ENCRYPTION_KEY`
+- `FRONTEND_URL`
+- `WEB_APP_URL`
+- `ALLOW_DEMO_MODE` (`false` в production)
+
+Дополнительно:
+
+- `PORT`
+- `TELEGRAM_BOT_TOKEN` (обязателен для первой production-настройки, либо активный токен должен уже храниться в БД через Admin UI)
+- `ADMIN_TELEGRAM_IDS`
+- `PORT`
+
+`ADMIN_PASSWORD`, `OWNER_TELEGRAM_ID`, `DATABASE_URL`, `BOT_TOKEN_ENCRYPTION_KEY` используются **только backend runtime** и не должны попадать во frontend.
+
+### Render: frontend service (`telegram-shop-frontend`)
+
+- `VITE_API_URL` (например, `https://telegram-shop-backend.onrender.com/api`)
+
+Во frontend запрещено передавать backend-секреты (`ADMIN_PASSWORD`, `BOT_TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`).
+
+Backend выполняет production startup validation и аварийно завершает запуск при отсутствии обязательных переменных или при неверной конфигурации (`OWNER_TELEGRAM_ID` invalid, `ALLOW_DEMO_MODE` не `false`).
 
 ⚠️ Никогда не коммитьте реальные секреты в репозиторий.
+
+## Admin authentication contract
+
+- Frontend first bootstraps user session via `POST /api/session/bootstrap` with Telegram `initData`.
+- Backend verifies Telegram signature server-side and creates `sessionToken`.
+- Frontend sends the Authorization header with the ****** token on admin auth requests.
+- Admin login request: `POST /api/admin/auth/login` with body `{ "password": "..." }`.
+- Backend identifies Telegram ID only from authenticated session token (not from request body).
+- On success backend returns `adminToken`; frontend must send it in `X-Admin-Token` for protected `/api/admin/*` routes.
+- `ADMIN_PASSWORD` is backend source of truth. If missing, runtime diagnostics must show `ADMIN_PASSWORD: MISSING` and admin login returns configuration error.

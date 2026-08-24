@@ -8,6 +8,7 @@ import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
 import type { Language, ProductDetail, Review } from '../types';
 import ProductCard from '../components/ProductCard/ProductCard';
+import { resolveApiErrorMessage } from '../lib/errors';
 
 const STARS = [1, 2, 3, 4, 5];
 
@@ -19,9 +20,11 @@ export default function ProductPage() {
   const language = i18n.language as Language;
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   // Wishlist
   const [inWishlist, setInWishlist] = useState(false);
@@ -34,35 +37,59 @@ export default function ProductPage() {
   const [myComment, setMyComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  function goBack() {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate('/catalog', { replace: true });
+  }
 
   useEffect(() => {
     async function load() {
-      if (!id || !user?.selectedCityId) {
+      const productId = Number(id);
+      if (!id || Number.isNaN(productId) || !user?.selectedCityId) {
         setLoading(false);
         return;
       }
       setLoading(true);
+      setLoadError(null);
       try {
-        const { product: data } = await api.getProduct(Number(id), user.selectedCityId);
+        const { product: data } = await api.getProduct(productId, user.selectedCityId);
         setProduct(data);
         setQuantity(data.minimumQuantity || 1);
+        setImageError(false);
+        setReviews([]);
+        setAvgRating(null);
+        setInWishlist(false);
 
-        // Load reviews and wishlist in parallel
-        const [reviewsRes, wishlistRes] = await Promise.all([
-          api.getReviews(Number(id)),
+        const [reviewsResult, wishlistResult] = await Promise.allSettled([
+          api.getReviews(productId),
           api.getWishlist(),
         ]);
-        setReviews(reviewsRes.reviews);
-        setAvgRating(reviewsRes.avgRating);
-        const myRev = reviewsRes.reviews.find((r) => r.userId === user.id);
-        if (myRev) { setMyRating(myRev.rating); setMyComment(myRev.comment ?? ''); }
-        setInWishlist(wishlistRes.items.some((item) => item.product.id === Number(id)));
+        if (reviewsResult.status === 'fulfilled') {
+          setReviews(reviewsResult.value.reviews);
+          setAvgRating(reviewsResult.value.avgRating);
+          const myRev = reviewsResult.value.reviews.find((review) => review.userId === user.id);
+          if (myRev) {
+            setMyRating(myRev.rating);
+            setMyComment(myRev.comment ?? '');
+          }
+        }
+        if (wishlistResult.status === 'fulfilled') {
+          setInWishlist(wishlistResult.value.items.some((item) => item.product.id === productId));
+        }
+      } catch (error) {
+        setLoadError(resolveApiErrorMessage(error, t, 'product_load_failed'));
       } finally {
         setLoading(false);
       }
     }
     void load();
-  }, [id, user?.selectedCityId]);
+  }, [id, reloadToken, t, user?.selectedCityId, user?.id]);
 
   async function toggleWishlist() {
     if (!product || wishlistLoading) return;
@@ -107,7 +134,7 @@ export default function ProductPage() {
   }
 
   async function handleAddToCart() {
-    if (!product) return;
+    if (!product || adding) return;
     setAdding(true);
     try {
       await addToCart(product.productCityId, quantity);
@@ -138,8 +165,13 @@ export default function ProductPage() {
   if (!product) {
     return (
       <div className={styles.error}>
-        <p>{t('product.notFound')}</p>
-        <button onClick={() => navigate(-1)}>{t('product.back')}</button>
+        <p>{loadError ?? t('product.notFound')}</p>
+        <div className={styles.errorActions}>
+          {loadError && (
+            <button onClick={() => setReloadToken((value) => value + 1)} type="button">{t('common.retry')}</button>
+          )}
+          <button onClick={() => navigate('/catalog')} type="button">{t('product.back')}</button>
+        </div>
       </div>
     );
   }
@@ -151,13 +183,13 @@ export default function ProductPage() {
 
   return (
     <div className={styles.page}>
-      <button className={styles.back} onClick={() => navigate(-1)}>
+      <button className={styles.back} onClick={goBack} type="button">
         {t('product.back')}
       </button>
 
       <div className={styles.imageWrap}>
-        {product.image ? (
-          <img src={product.image} alt={product.name} className={styles.image} />
+        {product.image && !imageError ? (
+          <img src={product.image} alt={product.name} className={styles.image} onError={() => setImageError(true)} />
         ) : (
           <div className={styles.noImage}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
@@ -276,7 +308,7 @@ export default function ProductPage() {
               <div className={styles.reviewForm}>
                 <div className={styles.starRow}>
                   {STARS.map((s) => (
-                    <button key={s} className={`${styles.star} ${myRating >= s ? styles.starActive : ''}`} onClick={() => setMyRating(s)}>
+                    <button key={s} className={`${styles.star} ${myRating >= s ? styles.starActive : ''}`} onClick={() => setMyRating(s)} type="button">
                       ★
                     </button>
                   ))}

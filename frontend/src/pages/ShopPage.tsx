@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { getLocalizedCategoryName } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
+import { resolveApiErrorMessage } from '../lib/errors';
 
 export default function ShopPage() {
   const { user, categories, products, cart, refreshCatalog, openCityPicker } = useApp();
@@ -15,17 +16,32 @@ export default function ShopPage() {
   const language = i18n.language as Language;
   const [activeCategoryId, setActiveCategoryId] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [shopError, setShopError] = useState<string | null>(null);
+
+  const trimmedSearch = useMemo(() => search.trim(), [search]);
 
   useEffect(() => {
     if (!user?.selectedCityId) {
       return;
     }
-    void refreshCatalog(search, activeCategoryId);
-  }, [activeCategoryId, refreshCatalog, search, user?.selectedCityId]);
 
-  const handleSearch = useCallback(() => {
-    void refreshCatalog(search, activeCategoryId);
-  }, [search, activeCategoryId, refreshCatalog]);
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        setLoading(true);
+        setShopError(null);
+        try {
+          await refreshCatalog(trimmedSearch, activeCategoryId);
+        } catch (error) {
+          setShopError(resolveApiErrorMessage(error, t, 'catalog_refresh_failed'));
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }, 300);
+
+    return () => window.clearTimeout(handle);
+  }, [activeCategoryId, refreshCatalog, t, trimmedSearch, user?.selectedCityId]);
 
   const cartCount = cart?.items.length ?? 0;
 
@@ -83,7 +99,11 @@ export default function ShopPage() {
               placeholder={t('shop.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur();
+                }
+              }}
             />
           </div>
 
@@ -92,8 +112,8 @@ export default function ShopPage() {
               className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
               onClick={() => {
                 setActiveCategoryId('all');
-                void refreshCatalog(search, 'all');
               }}
+              type="button"
             >
               {t('shop.allCategories')}
             </button>
@@ -103,15 +123,42 @@ export default function ShopPage() {
                 className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
                 onClick={() => {
                   setActiveCategoryId(cat.id);
-                  void refreshCatalog(search, cat.id);
                 }}
+                type="button"
               >
                 {getLocalizedCategoryName(cat, language)}
               </button>
             ))}
           </div>
 
-          {products.length === 0 ? (
+          {shopError ? (
+            <div className={styles.errorState}>
+              <p>{shopError}</p>
+              <button
+                className={styles.retryBtn}
+                onClick={() => {
+                  void (async () => {
+                    setLoading(true);
+                    setShopError(null);
+                    try {
+                      await refreshCatalog(trimmedSearch, activeCategoryId);
+                    } catch (error) {
+                      setShopError(resolveApiErrorMessage(error, t, 'catalog_refresh_failed'));
+                    } finally {
+                      setLoading(false);
+                    }
+                  })();
+                }}
+                type="button"
+              >
+                {t('common.retry')}
+              </button>
+            </div>
+          ) : loading ? (
+            <div className={styles.loadingState}>
+              <div className={styles.spinner} aria-hidden="true" />
+            </div>
+          ) : products.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIcon}>
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

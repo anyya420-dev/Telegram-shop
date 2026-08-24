@@ -7,6 +7,7 @@ import styles from './CatalogPage.module.css';
 import { getLocalizedCategoryName } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
+import { resolveApiErrorMessage } from '../lib/errors';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'popular';
 
@@ -28,7 +29,11 @@ export default function CatalogPage() {
   const language = i18n.language as Language;
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const initCategory = searchParams.get('categoryId') ? Number(searchParams.get('categoryId')) : null;
+  const rawCategoryId = searchParams.get('categoryId');
+  const parsedCategoryId = rawCategoryId ? Number(rawCategoryId) : null;
+  const initCategory = typeof parsedCategoryId === 'number' && Number.isFinite(parsedCategoryId) && parsedCategoryId > 0
+    ? parsedCategoryId
+    : null;
   const initSearch = searchParams.get('search') || '';
   const initSort = (searchParams.get('sort') as SortOption) || 'newest';
 
@@ -46,7 +51,7 @@ export default function CatalogPage() {
     try {
       await refreshCatalog(s, cat);
     } catch (err) {
-      setCatalogError(err instanceof Error ? err.message : t('errors.catalog_refresh_failed'));
+      setCatalogError(resolveApiErrorMessage(err, t, 'catalog_refresh_failed'));
     } finally {
       setLoading(false);
     }
@@ -55,6 +60,16 @@ export default function CatalogPage() {
   useEffect(() => {
     void doRefresh(initSearch, initCategory ?? 'all');
   }, []);
+
+  useEffect(() => {
+    if (activeCategoryId === 'all') {
+      return;
+    }
+
+    if (!categories.some((category) => category.id === activeCategoryId)) {
+      setActiveCategoryId('all');
+    }
+  }, [activeCategoryId, categories]);
 
   useEffect(() => {
     if (!user?.selectedCityId) return;
@@ -137,7 +152,8 @@ export default function CatalogPage() {
       <div className={styles.catScroll}>
         <button
           className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
-          onClick={() => { setActiveCategoryId('all'); void doRefresh(search, 'all'); }}
+          onClick={() => setActiveCategoryId('all')}
+          type="button"
         >
           {t('catalog.allCategories')}
         </button>
@@ -145,7 +161,8 @@ export default function CatalogPage() {
           <button
             key={cat.id}
             className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
-            onClick={() => { setActiveCategoryId(cat.id); void doRefresh(search, cat.id); }}
+            onClick={() => setActiveCategoryId(cat.id)}
+            type="button"
           >
             {getLocalizedCategoryName(cat, language)}
           </button>
@@ -159,9 +176,9 @@ export default function CatalogPage() {
             setSearch('');
             setSort('newest');
             setActiveCategoryId('all');
-            void doRefresh('', 'all');
           }}
           type="button"
+          disabled={loading}
         >
           {t('catalog.resetFilters')}
         </button>

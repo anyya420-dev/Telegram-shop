@@ -1,13 +1,8 @@
 import { Markup, Telegraf } from 'telegraf'
 import { getActiveBotToken, validateBotToken } from './botService.js'
-
-const PRODUCTION_WEB_APP_URL = 'https://telegram-shop-378j.onrender.com'
+import { getWebAppUrl } from './runtimeConfig.js'
 
 let botInstance: Telegraf | null = null
-
-function getWebAppUrl() {
-  return process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? PRODUCTION_WEB_APP_URL
-}
 
 export async function initializeTelegramBot() {
   if (botInstance) {
