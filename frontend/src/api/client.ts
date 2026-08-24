@@ -101,8 +101,8 @@ function classifyFetchFailure(error: unknown): { code: string; message: string }
 
   if (isCrossOrigin) {
     return {
-      code: 'cors_or_network_error',
-      message: 'Request was blocked before a response was received (CORS or network)',
+      code: 'cors_blocked',
+      message: 'Request was blocked by the browser before a response was received',
     }
   }
 

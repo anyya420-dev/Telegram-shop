@@ -43,6 +43,18 @@ test('production build refuses a relative API URL', () => {
   assert.match(result.error ?? '', /absolute/)
 })
 
+test('production build requires HTTPS and the /api path', () => {
+  for (const [value, expectedPattern] of [
+    ['http://narcos-shop.onrender.com/api', /HTTPS/],
+    ['https://narcos-shop.onrender.com', /\/api/],
+    ['https://narcos-shop.onrender.com/api/v1', /\/api/],
+  ] as const) {
+    const result = resolveApiBaseUrl(value, true)
+    assert.equal(result.baseUrl, '')
+    assert.match(result.error ?? '', expectedPattern)
+  }
+})
+
 test('development falls back to the Vite proxy path', () => {
   assert.deepEqual(resolveApiBaseUrl(undefined, false), { baseUrl: '/api', error: null })
   assert.deepEqual(resolveApiBaseUrl('', false), { baseUrl: '/api', error: null })
