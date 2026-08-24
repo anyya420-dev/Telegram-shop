@@ -7,6 +7,7 @@ import {
   getAuthorizedAdminSession,
   hasAdminPasswordConfigured,
   hashAdminSessionToken,
+  isAdminTelegramId,
   isOwnerTelegramId,
   normalizeTelegramId,
   seedAdminConfigForFreshInstall,
@@ -34,6 +35,8 @@ const originalSessionCreate = prismaAny.adminSession.create.bind(prisma.adminSes
 const originalSessionFindUnique = prismaAny.adminSession.findUnique.bind(prisma.adminSession)
 const originalSessionUpdate = prismaAny.adminSession.update.bind(prisma.adminSession)
 
+const originalAdminFindUnique = prismaAny.administrator.findUnique.bind(prisma.administrator)
+
 function restorePrisma() {
   prismaAny.adminSecurity.findFirst = originalFindFirst
   prismaAny.adminSecurity.update = originalUpdate
@@ -41,6 +44,7 @@ function restorePrisma() {
   prismaAny.administrator.count = originalAdminCount
   prismaAny.administrator.upsert = originalAdminUpsert
   prismaAny.administrator.createMany = originalAdminCreateMany
+  prismaAny.administrator.findUnique = originalAdminFindUnique
   prismaAny.adminSession.create = originalSessionCreate
   prismaAny.adminSession.findUnique = originalSessionFindUnique
   prismaAny.adminSession.update = originalSessionUpdate
@@ -255,3 +259,99 @@ test('getAuthorizedAdminSession returns active session and updates activity time
   assert.equal(session?.admin.telegramId, '8405501187')
   assert.equal(updateCalled, true)
 })
+
+// ── isAdminTelegramId ─────────────────────────────────────────────────────────
+
+test('isAdminTelegramId: OWNER_TELEGRAM_ID is always admin regardless of DB', async () => {
+  process.env.OWNER_TELEGRAM_ID = '8405501187'
+  // No DB lookup needed – owner bypasses DB
+  const result = await isAdminTelegramId('8405501187')
+  assert.equal(result, true)
+})
+
+test('isAdminTelegramId: returns false for invalid/empty telegramId', async () => {
+  const result = await isAdminTelegramId('')
+  assert.equal(result, false)
+  const result2 = await isAdminTelegramId(null)
+  assert.equal(result2, false)
+})
+
+test('isAdminTelegramId: returns true for ID found in administrator table', async () => {
+  delete process.env.OWNER_TELEGRAM_ID
+  prismaAny.administrator.findUnique = async ({ where }: { where: { telegramId: string } }) => {
+    if (where.telegramId === '8405501187') return { id: 1, telegramId: '8405501187', createdAt: new Date(), updatedAt: new Date() }
+    return null
+  }
+  prismaAny.administrator.count = async () => 1
+  const result = await isAdminTelegramId('8405501187')
+  assert.equal(result, true)
+})
+
+test('isAdminTelegramId: returns false for unknown ID when admins exist in DB', async () => {
+  delete process.env.OWNER_TELEGRAM_ID
+  prismaAny.administrator.findUnique = async () => null
+  prismaAny.administrator.count = async () => 1
+  const result = await isAdminTelegramId('9999999999')
+  assert.equal(result, false)
+})
+
+test('isAdminTelegramId: normalizes numeric and bigint telegram ID input', async () => {
+  process.env.OWNER_TELEGRAM_ID = '8405501187'
+  const byNumber = await isAdminTelegramId(8405501187)
+  const byBigint = await isAdminTelegramId(8405501187n)
+  assert.equal(byNumber, true)
+  assert.equal(byBigint, true)
+})
+
+// ── Verify admin password success (owner auth) ────────────────────────────────
+
+test('verifyAdminPassword succeeds for owner when env password matches DB hash', async () => {
+  process.env.ADMIN_PASSWORD = 'owner-secret'
+  const salt = randomBytes(16).toString('hex')
+  const hash = scryptSync('owner-secret', salt, 64).toString('hex')
+  prismaAny.adminSecurity.findFirst = async () =>
+    ({ id: 1, passwordHash: hash, passwordSalt: salt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null })
+
+  const result = await verifyAdminPassword('owner-secret')
+  assert.deepEqual(result, { valid: true })
+})
+
+test('verifyAdminPassword rejects a password not matching ADMIN_PASSWORD even if DB hash would match', async () => {
+  // This verifies the env password is authoritative: even if someone forges a DB hash,
+  // the submitted password must still match ADMIN_PASSWORD.
+  process.env.ADMIN_PASSWORD = 'correct-env-pass'
+  const salt = randomBytes(16).toString('hex')
+  // DB hash is for 'wrong-pass' (simulating a compromised/tampered DB row)
+  const hash = scryptSync('wrong-pass', salt, 64).toString('hex')
+  prismaAny.adminSecurity.findFirst = async () =>
+    ({ id: 1, passwordHash: hash, passwordSalt: salt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null })
+  prismaAny.adminSecurity.update = async () => ({})
+
+  // Even though the DB hash matches 'wrong-pass', the env password is 'correct-env-pass'.
+  // Submitting 'wrong-pass' must fail the env-password check first.
+  const result = await verifyAdminPassword('wrong-pass')
+  assert.deepEqual(result, { valid: false, reason: 'invalid_credentials' })
+})
+
+// ── Admin session token contract ──────────────────────────────────────────────
+
+test('createAdminSession token is not stored in plain text', async () => {
+  let storedTokenHash: string | undefined
+  prismaAny.adminSession.create = async ({ data }: { data: { tokenHash: string; adminId: number; expiresAt: Date } }) => {
+    storedTokenHash = data.tokenHash
+    return {}
+  }
+
+  const session = await createAdminSession(42)
+  assert.ok(storedTokenHash)
+  // The stored value must be the hash of the token, not the token itself
+  assert.equal(storedTokenHash, hashAdminSessionToken(session.token))
+  assert.notEqual(storedTokenHash, session.token)
+})
+
+test('createAdminSession produces a token with sufficient entropy (length > 30)', async () => {
+  prismaAny.adminSession.create = async () => ({})
+  const session = await createAdminSession(1)
+  assert.ok(session.token.length > 30, 'token should have sufficient length')
+})
+

@@ -683,7 +683,7 @@ export default function AdminPage() {
   }, [authStatus, isAdmin])
 
   async function handleLogin() {
-    if (!user?.telegramId || !password) return
+    if (!password) return
     setLoading(true)
     setStatus(null)
     try {
@@ -893,7 +893,7 @@ export default function AdminPage() {
           <div className={styles.formRow}>
             <input className={styles.input} type="password" placeholder="Administrator password" value={password} onChange={(event) => setPassword(event.target.value)} />
           </div>
-          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={loading || !user?.telegramId || !password}>
+          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={loading || !password}>
             {loading ? t('common.loading') : 'Login to administration'}
           </button>
         </section>
