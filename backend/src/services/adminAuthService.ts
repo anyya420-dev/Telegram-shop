@@ -2,16 +2,53 @@ import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypt
 import { prisma } from '../lib.js'
 
 const ADMIN_SESSION_TTL_HOURS = 12
+const TELEGRAM_ID_PATTERN = /^\d{5,20}$/
+let ownerValidationWarningShown = false
+
+function normalizeTelegramId(value: unknown) {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      return null
+    }
+    return String(value)
+  }
+
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim()
+  if (!TELEGRAM_ID_PATTERN.test(normalized)) {
+    return null
+  }
+
+  return normalized
+}
 
 export function getOwnerTelegramId() {
-  return (process.env.OWNER_TELEGRAM_ID ?? '').trim() || null
+  const rawOwnerId = process.env.OWNER_TELEGRAM_ID
+  if (!rawOwnerId) {
+    return null
+  }
+
+  const ownerId = normalizeTelegramId(rawOwnerId)
+  if (!ownerId) {
+    if (!ownerValidationWarningShown) {
+      ownerValidationWarningShown = true
+      console.warn('[admin-auth] OWNER_TELEGRAM_ID is set but invalid; expected numeric Telegram ID')
+    }
+    return null
+  }
+
+  return ownerId
 }
 
 function getEnvAdminIds() {
   const ids = (process.env.ADMIN_TELEGRAM_IDS ?? '')
     .split(',')
     .map((value) => value.trim())
-    .filter(Boolean)
+    .map((value) => normalizeTelegramId(value))
+    .filter((value): value is string => Boolean(value))
   const owner = getOwnerTelegramId()
   if (owner && !ids.includes(owner)) {
     ids.unshift(owner)
@@ -80,13 +117,18 @@ export async function seedAdminConfigForFreshInstall(currentTelegramId?: string)
 }
 
 export async function isAdminTelegramId(telegramId: string) {
+  const normalizedTelegramId = normalizeTelegramId(telegramId)
+  if (!normalizedTelegramId) {
+    return false
+  }
+
   // OWNER_TELEGRAM_ID always has admin access regardless of db state
   const owner = getOwnerTelegramId()
-  if (owner && telegramId === owner) {
+  if (owner && normalizedTelegramId === owner) {
     return true
   }
 
-  const admin = await prisma.administrator.findUnique({ where: { telegramId } })
+  const admin = await prisma.administrator.findUnique({ where: { telegramId: normalizedTelegramId } })
   if (admin) {
     return true
   }
@@ -97,12 +139,26 @@ export async function isAdminTelegramId(telegramId: string) {
   }
 
   const envIds = getEnvAdminIds()
-  return envIds.length === 0 || envIds.includes(telegramId)
+  return envIds.length === 0 || envIds.includes(normalizedTelegramId)
 }
 
 export function isOwnerTelegramId(telegramId: string) {
   const owner = getOwnerTelegramId()
-  return Boolean(owner && telegramId === owner)
+  const normalizedTelegramId = normalizeTelegramId(telegramId)
+  return Boolean(owner && normalizedTelegramId && normalizedTelegramId === owner)
+}
+
+export async function ensureOwnerAdministratorRecord(telegramId: string) {
+  const normalizedTelegramId = normalizeTelegramId(telegramId)
+  if (!normalizedTelegramId || !isOwnerTelegramId(normalizedTelegramId)) {
+    return null
+  }
+
+  return prisma.administrator.upsert({
+    where: { telegramId: normalizedTelegramId },
+    create: { telegramId: normalizedTelegramId },
+    update: {},
+  })
 }
 
 export async function listAdministratorIds() {

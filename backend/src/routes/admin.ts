@@ -4,11 +4,14 @@ import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError, verif
 import type { Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import { encryptToken, decryptToken, validateBotToken, getBotStatus } from '../services/botService.js'
+import { maskTelegramId } from '../services/logging.js'
 import {
   createAdminSession,
+  ensureOwnerAdministratorRecord,
   getAuthorizedAdminSession,
   hasAdminPasswordConfigured,
   isAdminTelegramId,
+  isOwnerTelegramId,
   listAdministratorIds,
   revokeAdminSession,
   setAdminPassword,
@@ -55,7 +58,23 @@ async function getAdminUser(request: Request, response: Response, options?: { re
     prisma.user.findUnique({ where: { telegramId } }),
     prisma.administrator.findUnique({ where: { telegramId } }),
   ])
-  if (!user || !administrator) {
+
+  if (!user) {
+    sendError(response, 403, 'forbidden', 'Admin access required')
+    return null
+  }
+
+  let resolvedAdministrator = administrator
+  if (!resolvedAdministrator && isOwnerTelegramId(telegramId)) {
+    resolvedAdministrator = await ensureOwnerAdministratorRecord(telegramId)
+    if (resolvedAdministrator) {
+      console.info('[admin-auth] restored missing OWNER administrator record', {
+        telegramIdMasked: maskTelegramId(telegramId),
+      })
+    }
+  }
+
+  if (!resolvedAdministrator) {
     sendError(response, 403, 'forbidden', 'Admin access required')
     return null
   }
@@ -69,7 +88,7 @@ async function getAdminUser(request: Request, response: Response, options?: { re
     }
   }
 
-  return { user, administrator }
+  return { user, administrator: resolvedAdministrator }
 }
 
 function normalizeTelegramId(value: unknown) {
@@ -131,6 +150,9 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   }
 
   const session = await createAdminSession(admin.administrator.id)
+  console.info('[admin-auth] admin session created', {
+    isOwner: isOwnerTelegramId(admin.user.telegramId),
+  })
 
   response.json({
     adminToken: session.token,

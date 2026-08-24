@@ -11,8 +11,9 @@ import {
   sendError,
   verifyTelegramInitData,
 } from '../lib.js'
-import { seedAdminConfigForFreshInstall, isAdminTelegramId } from '../services/adminAuthService.js'
+import { seedAdminConfigForFreshInstall, isAdminTelegramId, isOwnerTelegramId, getOwnerTelegramId } from '../services/adminAuthService.js'
 import { getActiveBotToken } from '../services/botService.js'
+import { maskTelegramId } from '../services/logging.js'
 
 const router = Router()
 
@@ -70,11 +71,32 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
     prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
     isAdminTelegramId(user.telegramId),
   ])
+  const isOwner = isOwnerTelegramId(user.telegramId)
+  const ownerTelegramIdConfigured = Boolean(getOwnerTelegramId())
+
+  if (isAdmin || isOwner) {
+    console.info('[session/bootstrap] admin-capable user authenticated', {
+      telegramIdMasked: maskTelegramId(user.telegramId),
+      telegramEnvironment: Boolean(initData),
+      ownerTelegramIdConfigured,
+      isOwner,
+      isAdmin,
+    })
+  } else {
+    console.info('[session/bootstrap] user authenticated', {
+      telegramIdMasked: maskTelegramId(user.telegramId),
+      telegramEnvironment: Boolean(initData),
+      ownerTelegramIdConfigured,
+      isOwner: false,
+      isAdmin: false,
+    })
+  }
 
   response.json({
     telegramEnvironment: Boolean(initData),
     sessionToken: createSessionToken(user.telegramId),
     isAdmin,
+    isOwner,
     user: mapUser(user),
     cities: cities.map(mapCity),
     categories: categories.map(mapCategory),

@@ -5,6 +5,22 @@ import type { AdminCategory, AdminCity, AdminProduct, AdminSettingsResponse, Adm
 import styles from './AdminPage.module.css'
 
 type StatusTone = 'success' | 'error' | 'info'
+type AdminRestoreState = {
+  authenticated: boolean
+  settings: AdminSettingsResponse | null
+  stats: AdminStats | null
+}
+
+let adminRestoreInFlight: Promise<AdminRestoreState> | null = null
+let cachedAdminToken: string | null = null
+
+function readStoredAdminToken() {
+  return cachedAdminToken
+}
+
+function storeAdminToken(token: string | null) {
+  cachedAdminToken = token?.trim() || null
+}
 
 function ShieldIcon() {
   return (
@@ -513,6 +529,7 @@ export default function AdminPage() {
   const [telegramId, setTelegramId] = useState('')
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
+  const [authLoading, setAuthLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [settings, setSettings] = useState<AdminSettingsResponse | null>(null)
   const [stats, setStats] = useState<AdminStats | null>(null)
@@ -529,19 +546,73 @@ export default function AdminPage() {
 
   async function loadProtectedData() {
     const [settingsResponse, statsResponse] = await Promise.all([api.getAdminSettings(), api.getAdminStats()])
-    setSettings(settingsResponse)
-    setStats(statsResponse)
+    return { settingsResponse, statsResponse }
   }
 
   useEffect(() => {
-    void (async () => {
-      try {
-        await loadProtectedData()
-        setAuthenticated(true)
-      } catch {
-        setAuthenticated(false)
+    let cancelled = false
+    setAuthLoading(true)
+
+    async function restoreAdminSession() {
+      let activeRestore = adminRestoreInFlight
+      if (!activeRestore) {
+        const restorePromise = (async () => {
+          const savedToken = readStoredAdminToken()
+          if (!savedToken) {
+            api.setAdminToken(null)
+            return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
+          }
+
+          api.setAdminToken(savedToken)
+
+          try {
+            const { settingsResponse, statsResponse } = await loadProtectedData()
+            return {
+              authenticated: true,
+              settings: settingsResponse,
+              stats: statsResponse,
+            } satisfies AdminRestoreState
+          } catch {
+            api.setAdminToken(null)
+            storeAdminToken(null)
+            return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
+          }
+        })()
+
+        adminRestoreInFlight = restorePromise
+        void restorePromise.finally(() => {
+          if (adminRestoreInFlight === restorePromise) {
+            adminRestoreInFlight = null
+          }
+        })
+        activeRestore = restorePromise
       }
-    })()
+
+      try {
+        const state = await activeRestore
+        if (cancelled) return
+
+        setAuthenticated(state.authenticated)
+        setSettings(state.settings)
+        setStats(state.stats)
+      } catch {
+        if (cancelled) return
+        api.setAdminToken(null)
+        storeAdminToken(null)
+        setAuthenticated(false)
+        setSettings(null)
+        setStats(null)
+      } finally {
+        if (!cancelled) {
+          setAuthLoading(false)
+        }
+      }
+    }
+
+    void restoreAdminSession()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function handleLogin() {
@@ -551,6 +622,7 @@ export default function AdminPage() {
     try {
       const response = await api.adminLogin({ telegramId: telegramId.trim(), password })
       api.setAdminToken(response.adminToken)
+      storeAdminToken(response.adminToken)
       setSettings(response.settings)
       setAuthenticated(true)
       setPassword('')
@@ -572,6 +644,7 @@ export default function AdminPage() {
       // no-op
     } finally {
       api.setAdminToken(null)
+      storeAdminToken(null)
       setAuthenticated(false)
       setSettings(null)
       setLoading(false)
@@ -592,6 +665,7 @@ export default function AdminPage() {
     try {
       const response = await api.updateAdminPassword({ currentPassword, newPassword })
       api.setAdminToken(response.adminToken)
+      storeAdminToken(response.adminToken)
       setCurrentPassword('')
       setNewPassword('')
       await refreshSettings('Password saved successfully.')
@@ -704,7 +778,14 @@ export default function AdminPage() {
 
       {status && <div className={`${styles.alert} ${styles[status.tone]}`}>{status.message}</div>}
 
-      {!authenticated && (
+      {authLoading && (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
+          <p className={styles.help}>{t('common.loading')}</p>
+        </section>
+      )}
+
+      {!authLoading && !authenticated && (
         <section className={styles.card}>
           <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
           <p className={styles.help}>Enter your Telegram ID and administrator password.</p>
@@ -718,7 +799,7 @@ export default function AdminPage() {
         </section>
       )}
 
-      {canManage && (
+      {!authLoading && canManage && (
         <>
           <CitiesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
           <CategoriesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
