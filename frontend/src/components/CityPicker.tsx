@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useApp } from '../context/AppContext'
 import { getLocalizedCityName } from '../lib/localized'
@@ -12,7 +12,7 @@ export function CityPicker() {
   const { t, i18n } = useTranslation()
   const language = i18n.language as Language
 
-  async function loadCities() {
+  const loadCities = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -22,7 +22,7 @@ export function CityPicker() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [refreshCities, t])
 
   useEffect(() => {
     if (!cityPickerOpen) {
@@ -30,7 +30,7 @@ export function CityPicker() {
     }
 
     void loadCities()
-  }, [cityPickerOpen])
+  }, [cityPickerOpen, loadCities])
 
   if (!cityPickerOpen) {
     return null

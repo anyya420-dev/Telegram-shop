@@ -89,20 +89,6 @@ function isWholeNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value)
 }
 
-async function getCityUsageCounts(cityId: number) {
-  const [orderCount, productCityCount, selectedUserCount] = await Promise.all([
-    prisma.order.count({ where: { cityId } }),
-    prisma.productCity.count({ where: { cityId } }),
-    prisma.user.count({ where: { selectedCityId: cityId } }),
-  ])
-
-  return {
-    orderCount,
-    productCityCount,
-    selectedUserCount,
-  }
-}
-
 async function getAdminSettingsPayload() {
   const [administrators, botStatus, passwordConfigured] = await Promise.all([
     listAdministratorIds(),
@@ -1091,30 +1077,57 @@ router.delete('/cities/:id', authRateLimiter, async (request, response) => {
     return
   }
 
-  const city = await prisma.city.findUnique({ where: { id: cityId } })
-  if (!city) {
-    sendError(response, 404, 'city_not_found', 'City not found')
-    return
-  }
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const city = await tx.city.findUnique({ where: { id: cityId } })
+      if (!city) {
+        return { kind: 'missing' } as const
+      }
 
-  const usage = await getCityUsageCounts(cityId)
-  const hasReferences = usage.orderCount > 0 || usage.productCityCount > 0 || usage.selectedUserCount > 0
+      const [orderCount, productCityCount, selectedUserCount] = await Promise.all([
+        tx.order.count({ where: { cityId } }),
+        tx.productCity.count({ where: { cityId } }),
+        tx.user.count({ where: { selectedCityId: cityId } }),
+      ])
 
-  if (hasReferences) {
-    const updatedCity = await prisma.city.update({ where: { id: cityId }, data: { isActive: false } })
-    await prisma.auditLog.create({
-      data: { userId: admin.user.id, action: 'city_deactivated', entity: 'city', entityId: cityId, meta: JSON.stringify({ reason: 'has_references', ...usage }) },
+      const usage = { orderCount, productCityCount, selectedUserCount }
+      const hasReferences = usage.orderCount > 0 || usage.productCityCount > 0 || usage.selectedUserCount > 0
+
+      if (hasReferences) {
+        const updatedCity = await tx.city.update({ where: { id: cityId }, data: { isActive: false } })
+        return { kind: 'deactivated', city: updatedCity, usage } as const
+      }
+
+      await tx.city.delete({ where: { id: cityId } })
+      return { kind: 'deleted' } as const
     })
-    response.json({ city: updatedCity, deactivated: true, usage })
-    return
+
+    if (result.kind === 'missing') {
+      sendError(response, 404, 'city_not_found', 'City not found')
+      return
+    }
+
+    if (result.kind === 'deactivated') {
+      await prisma.auditLog.create({
+        data: { userId: admin.user.id, action: 'city_deactivated', entity: 'city', entityId: cityId, meta: JSON.stringify({ reason: 'has_references', ...result.usage }) },
+      })
+      response.json({ city: result.city, deactivated: true, usage: result.usage })
+      return
+    }
+
+    await prisma.auditLog.create({
+      data: { userId: admin.user.id, action: 'city_deleted', entity: 'city', entityId: cityId },
+    })
+
+    response.json({ ok: true })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      sendError(response, 404, 'city_not_found', 'City not found')
+      return
+    }
+
+    throw error
   }
-
-  await prisma.city.delete({ where: { id: cityId } })
-  await prisma.auditLog.create({
-    data: { userId: admin.user.id, action: 'city_deleted', entity: 'city', entityId: cityId },
-  })
-
-  response.json({ ok: true })
 })
 
 // ── Categories ───────────────────────────────────────────────────────────────

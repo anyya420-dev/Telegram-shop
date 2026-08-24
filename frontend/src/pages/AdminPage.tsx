@@ -130,6 +130,13 @@ function CitiesSection({ setStatus, loading, setLoading }: {
     }
   }
 
+  function handleStartEdit(city: AdminCity) {
+    setEditingId(city.id)
+    setEditName(city.name)
+    setEditNameEn(city.nameEn ?? '')
+    setEditIsActive(city.isActive ?? true)
+  }
+
   async function handleDelete(city: AdminCity) {
     if (!confirm(`Delete city "${city.name}"?`)) return
     setLoading(true)
@@ -175,7 +182,7 @@ function CitiesSection({ setStatus, loading, setLoading }: {
                   {' '}<span className={city.isActive ? styles.badge : styles.badgeOff}>{city.isActive ? 'active' : 'inactive'}</span>
                 </span>
                 <div className={styles.itemActions}>
-                  <button className={styles.ghostButton} onClick={() => { setEditingId(city.id); setEditName(city.name); setEditNameEn(city.nameEn ?? ''); setEditIsActive(city.isActive) }} disabled={loading}>Edit</button>
+                  <button className={styles.ghostButton} onClick={() => handleStartEdit(city)} disabled={loading}>Edit</button>
                   <button className={city.isActive ? styles.warnButton : styles.ghostButton} onClick={() => void handleToggleActive(city)} disabled={loading}>{city.isActive ? 'Deactivate' : 'Activate'}</button>
                   <button className={styles.removeButton} onClick={() => void handleDelete(city)} disabled={loading}>Delete</button>
                 </div>

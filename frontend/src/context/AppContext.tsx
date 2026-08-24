@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
@@ -77,11 +77,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void i18n.changeLanguage(lang)
   }
 
-  async function refreshCities() {
+  const refreshCities = useCallback(async () => {
     const nextCities = await api.getCities()
     setCities(nextCities)
     return nextCities
-  }
+  }, [])
 
   async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
     if (!user?.selectedCityId) {
