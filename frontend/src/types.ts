@@ -82,6 +82,7 @@ export type Cart = {
 export type BootstrapResponse = {
   telegramEnvironment: boolean
   sessionToken: string
+  isAdmin: boolean
   user: UserProfile
   cities: City[]
   categories: Category[]
@@ -197,3 +198,13 @@ export type AdminStats = {
   totalUsers: number
   totalRevenue: number
 }
+
+export type BotInfo = {
+  id: number
+  username: string
+  firstName: string
+}
+
+export type BotStatusResponse =
+  | { connected: false; bot: null }
+  | { connected: true; bot: BotInfo; lastValidatedAt: string | null }

@@ -1,14 +1,19 @@
 import { Router } from 'express'
-import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError, verifySessionToken } from '../lib.js'
+import { authRateLimiter, isAdminTelegramId, mapProduct, parsePositiveInt, prisma, sendError, verifySessionToken } from '../lib.js'
 import type { Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
+import { encryptToken, decryptToken, validateBotToken, getBotStatus } from '../services/botService.js'
+import rateLimit from 'express-rate-limit'
 
 const router = Router()
 
-const ADMIN_TELEGRAM_IDS = (process.env.ADMIN_TELEGRAM_IDS ?? '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
+const botRateLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { code: 'too_many_requests', message: 'Too many requests, please try again later' },
+})
 
 async function getAdminUser(request: Request, response: Response) {
   const authorization = request.header('authorization') ?? request.header('x-session-token') ?? ''
@@ -20,11 +25,7 @@ async function getAdminUser(request: Request, response: Response) {
     return null
   }
 
-  // If no ADMIN_TELEGRAM_IDS are configured, allow first registered user as admin
-  const isAdmin =
-    ADMIN_TELEGRAM_IDS.length === 0 || ADMIN_TELEGRAM_IDS.includes(telegramId)
-
-  if (!isAdmin) {
+  if (!isAdminTelegramId(telegramId)) {
     sendError(response, 403, 'forbidden', 'Admin access required')
     return null
   }
@@ -538,6 +539,219 @@ router.get('/stats', authRateLimiter, async (request, response) => {
     totalUsers,
     totalRevenue: totalRevenue._sum.total ?? 0,
   })
+})
+
+// ──── Bot Configuration ──────────────────────────────────────────────────────
+
+// GET /api/admin/bot – returns safe bot status (no token)
+router.get('/bot', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const status = await getBotStatus()
+  response.json(status)
+})
+
+// POST /api/admin/bot/connect – validate token and store it
+router.post('/bot/connect', botRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const token = typeof request.body.token === 'string' ? request.body.token.trim() : ''
+
+  if (!token) {
+    sendError(response, 400, 'token_required', 'Bot token is required')
+    return
+  }
+
+  // Basic format check: <digits>:<alphanumeric_string>
+  if (!/^\d+:[A-Za-z0-9_-]{30,}$/.test(token)) {
+    sendError(response, 400, 'invalid_token_format', 'Invalid Telegram bot token format')
+    return
+  }
+
+  const botInfo = await validateBotToken(token)
+  if (!botInfo) {
+    sendError(response, 400, 'invalid_bot_token', 'Invalid Telegram bot token')
+    return
+  }
+
+  const encryptedToken = encryptToken(token)
+
+  // Disable any existing enabled configs
+  await prisma.botConfig.updateMany({ where: { enabled: true }, data: { enabled: false } })
+
+  // Create new config
+  await prisma.botConfig.create({
+    data: {
+      botId: String(botInfo.id),
+      botUsername: botInfo.username,
+      botFirstName: botInfo.firstName,
+      encryptedToken,
+      enabled: true,
+      lastValidatedAt: new Date(),
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'bot_connected',
+      entity: 'bot_config',
+      meta: JSON.stringify({ botUsername: botInfo.username }),
+    },
+  })
+
+  response.json({
+    connected: true,
+    bot: { id: botInfo.id, username: botInfo.username, firstName: botInfo.firstName },
+    lastValidatedAt: new Date().toISOString(),
+  })
+})
+
+// POST /api/admin/bot/test – test the current bot connection
+router.post('/bot/test', botRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const config = await prisma.botConfig.findFirst({
+    where: { enabled: true },
+    orderBy: { id: 'desc' },
+  })
+
+  if (!config) {
+    sendError(response, 400, 'no_bot_configured', 'No bot is currently configured')
+    return
+  }
+
+  let token: string
+  try {
+    token = decryptToken(config.encryptedToken)
+  } catch {
+    sendError(response, 500, 'decryption_error', 'Unable to read bot configuration')
+    return
+  }
+
+  const botInfo = await validateBotToken(token)
+
+  if (!botInfo) {
+    await prisma.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'bot_test_failed',
+        entity: 'bot_config',
+        meta: JSON.stringify({ botUsername: config.botUsername }),
+      },
+    })
+    sendError(response, 502, 'connection_failed', 'Unable to connect to Telegram bot')
+    return
+  }
+
+  // Update last validated timestamp
+  await prisma.botConfig.update({
+    where: { id: config.id },
+    data: { lastValidatedAt: new Date() },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'bot_test_success',
+      entity: 'bot_config',
+      meta: JSON.stringify({ botUsername: botInfo.username }),
+    },
+  })
+
+  response.json({
+    connected: true,
+    bot: { id: botInfo.id, username: botInfo.username, firstName: botInfo.firstName },
+    lastValidatedAt: new Date().toISOString(),
+  })
+})
+
+// POST /api/admin/bot/change – replace current bot with a new token
+router.post('/bot/change', botRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const token = typeof request.body.token === 'string' ? request.body.token.trim() : ''
+
+  if (!token) {
+    sendError(response, 400, 'token_required', 'Bot token is required')
+    return
+  }
+
+  if (!/^\d+:[A-Za-z0-9_-]{30,}$/.test(token)) {
+    sendError(response, 400, 'invalid_token_format', 'Invalid Telegram bot token format')
+    return
+  }
+
+  // Validate NEW token BEFORE touching existing config
+  const botInfo = await validateBotToken(token)
+  if (!botInfo) {
+    sendError(response, 400, 'invalid_bot_token', 'Invalid Telegram bot token – existing bot unchanged')
+    return
+  }
+
+  const encryptedToken = encryptToken(token)
+
+  // Only now disable the existing config and store the new one
+  await prisma.botConfig.updateMany({ where: { enabled: true }, data: { enabled: false } })
+
+  await prisma.botConfig.create({
+    data: {
+      botId: String(botInfo.id),
+      botUsername: botInfo.username,
+      botFirstName: botInfo.firstName,
+      encryptedToken,
+      enabled: true,
+      lastValidatedAt: new Date(),
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'bot_token_changed',
+      entity: 'bot_config',
+      meta: JSON.stringify({ botUsername: botInfo.username }),
+    },
+  })
+
+  response.json({
+    connected: true,
+    bot: { id: botInfo.id, username: botInfo.username, firstName: botInfo.firstName },
+    lastValidatedAt: new Date().toISOString(),
+  })
+})
+
+// POST /api/admin/bot/disconnect – disable the current bot
+router.post('/bot/disconnect', botRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const config = await prisma.botConfig.findFirst({
+    where: { enabled: true },
+    orderBy: { id: 'desc' },
+  })
+
+  if (!config) {
+    sendError(response, 400, 'no_bot_configured', 'No bot is currently configured')
+    return
+  }
+
+  await prisma.botConfig.update({ where: { id: config.id }, data: { enabled: false } })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'bot_disconnected',
+      entity: 'bot_config',
+      meta: JSON.stringify({ botUsername: config.botUsername }),
+    },
+  })
+
+  response.json({ connected: false, bot: null })
 })
 
 export default router

@@ -14,6 +14,22 @@ export const DEMO_TELEGRAM_USER = {
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
 
+// ── Admin authorization ──────────────────────────────────────────────────────
+
+const ADMIN_TELEGRAM_IDS = (process.env.ADMIN_TELEGRAM_IDS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
+/**
+ * Returns true if the given telegramId has admin access.
+ * When ADMIN_TELEGRAM_IDS is empty (fresh deployment / not configured),
+ * ALL users are treated as admins — set ADMIN_TELEGRAM_IDS in production.
+ */
+export function isAdminTelegramId(telegramId: string): boolean {
+  return ADMIN_TELEGRAM_IDS.length === 0 || ADMIN_TELEGRAM_IDS.includes(telegramId)
+}
+
 export type AppLanguage = 'ru' | 'en'
 
 type TelegramUserPayload = {

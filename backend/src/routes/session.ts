@@ -4,6 +4,7 @@ import {
   createSessionToken,
   DEMO_TELEGRAM_USER,
   getOrCreateCart,
+  isAdminTelegramId,
   mapCategory,
   mapCity,
   mapUser,
@@ -67,6 +68,7 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
   response.json({
     telegramEnvironment: Boolean(initData),
     sessionToken: createSessionToken(user.telegramId),
+    isAdmin: isAdminTelegramId(user.telegramId),
     user: mapUser(user),
     cities: cities.map(mapCity),
     categories: categories.map(mapCategory),
