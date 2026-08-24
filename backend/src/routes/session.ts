@@ -17,7 +17,7 @@ import { getActiveBotToken } from '../services/botService.js'
 const router = Router()
 
 router.post('/bootstrap', authRateLimiter, async (request, response) => {
-  let telegramUser: { id: string; username?: string; first_name: string } | null = null
+  let telegramUser: { id: string; username?: string; first_name: string; last_name?: string } | null = null
   const initData = String(request.body.initData ?? '')
   const allowDemoMode = process.env.ALLOW_DEMO_MODE === 'true' || process.env.NODE_ENV !== 'production'
 
@@ -50,11 +50,13 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
       telegramId: String(telegramUser.id),
       username: telegramUser.username ?? null,
       firstName: telegramUser.first_name,
+      lastName: telegramUser.last_name ?? null,
       language: 'ru',
     },
     update: {
       username: telegramUser.username ?? null,
       firstName: telegramUser.first_name,
+      lastName: telegramUser.last_name ?? null,
     },
     include: {
       selectedCity: true,

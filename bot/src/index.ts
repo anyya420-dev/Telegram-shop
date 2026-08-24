@@ -13,8 +13,8 @@ const bot = new Telegraf(token)
 
 bot.start(async (context) => {
   await context.reply(
-    'Добро пожаловать в Telegram Shop. Откройте Web App, чтобы выбрать город и начать покупки.',
-    Markup.keyboard([[Markup.button.webApp('Открыть магазин', webAppUrl)]]).resize(),
+    '🛒 Добро пожаловать в NARCOS SHOP!\n\nОткройте магазин, чтобы выбрать товар и сделать заказ.',
+    Markup.keyboard([[Markup.button.webApp('🛍 Открыть магазин', webAppUrl)]]).resize(),
   )
 })
 

@@ -10,6 +10,7 @@ export const DEMO_TELEGRAM_USER = {
   id: '900000001',
   username: 'demo_customer',
   first_name: 'Demo',
+  last_name: undefined as string | undefined,
 }
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
@@ -20,6 +21,7 @@ type TelegramUserPayload = {
   id: string
   username?: string
   first_name: string
+  last_name?: string
 }
 
 type TranslationShape = {
@@ -110,7 +112,7 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
   }
 
   try {
-    const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string }
+    const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string; last_name?: string }
 
     if (!parsedUser.id || !parsedUser.first_name) {
       return null
@@ -120,6 +122,7 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
       id: String(parsedUser.id),
       username: parsedUser.username,
       first_name: parsedUser.first_name,
+      last_name: parsedUser.last_name,
     } satisfies TelegramUserPayload
   } catch {
     return null

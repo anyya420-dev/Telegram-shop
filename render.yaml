@@ -53,5 +53,4 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: WEB_APP_URL
-        # Set to your frontend static site URL
-        sync: false
+        value: https://telegram-shop-378j.onrender.com
