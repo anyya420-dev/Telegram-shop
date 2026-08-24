@@ -81,10 +81,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      setError(null)
       const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
       setProducts(response.products)
     } catch (catalogError) {
       setError(translateError(catalogError, t, 'catalog_refresh_failed'))
+      throw catalogError
     }
   }
 

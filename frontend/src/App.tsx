@@ -6,6 +6,7 @@ import CatalogPage from './pages/CatalogPage';
 import ShopPage from './pages/ShopPage';
 import ProductPage from './pages/ProductPage';
 import CartPage from './pages/CartPage';
+import CheckoutPage from './pages/CheckoutPage';
 import CasinoPage from './pages/CasinoPage';
 import BalancePage from './pages/BalancePage';
 import ProfilePage from './pages/ProfilePage';
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="shop" element={<ShopPage />} />
             <Route path="shop/product/:id" element={<ProductPage />} />
             <Route path="shop/cart" element={<CartPage />} />
+            <Route path="checkout" element={<CheckoutPage />} />
             <Route path="casino" element={<CasinoPage />} />
             <Route path="balance" element={<BalancePage />} />
             <Route path="profile" element={<ProfilePage />} />

@@ -10,7 +10,7 @@ import { getLocalizedCityName } from '../lib/localized';
 import type { Language, UserProfile } from '../types';
 
 export default function ProfilePage() {
-  const { user: bootstrapUser, openCityPicker, updateLanguagePreference, orders, fetchOrders } = useApp();
+  const { user: bootstrapUser, telegramEnvironment, openCityPicker, updateLanguagePreference, orders, fetchOrders } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -94,6 +94,7 @@ export default function ProfilePage() {
   }
 
   const displayName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.username || t('profile.defaultName');
+  const avatarUrl = telegramEnvironment ? window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url : undefined;
 
   const cityName = profile.selectedCity
     ? getLocalizedCityName(profile.selectedCity, i18n.language as Language)
@@ -103,6 +104,12 @@ export default function ProfilePage() {
     <div className={styles.page}>
       <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
 
+      {!telegramEnvironment && (
+        <div className={styles.placeholder} style={{ marginBottom: 16 }}>
+          <p>{t('profile.telegramWebAppOnly')}</p>
+        </div>
+      )}
+
       {profileError && (
         <div className="error-banner" role="alert" style={{ marginBottom: 12 }}>
           <span>{profileError}</span>
@@ -110,9 +117,13 @@ export default function ProfilePage() {
       )}
 
       <div className={styles.avatar}>
-        <div className={styles.avatarCircle}>
-          {displayName.charAt(0).toUpperCase()}
-        </div>
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={displayName} className={styles.avatarImage} />
+        ) : (
+          <div className={styles.avatarCircle}>
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+        )}
         <div className={styles.userInfo}>
           <p className={styles.displayName}>{displayName}</p>
           {profile.username && (

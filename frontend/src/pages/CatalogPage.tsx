@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
@@ -13,6 +13,7 @@ type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'popular';
 function sortProducts(products: ReturnType<typeof useApp>['products'], sort: SortOption) {
   const copy = [...products];
   switch (sort) {
+    case 'newest': return copy.sort((a, b) => b.id - a.id);
     case 'price_asc': return copy.sort((a, b) => a.price - b.price);
     case 'price_desc': return copy.sort((a, b) => b.price - a.price);
     case 'popular': return copy.sort((a, b) => (b.isRecommended ? 1 : 0) - (a.isRecommended ? 1 : 0));
@@ -36,19 +37,36 @@ export default function CatalogPage() {
   const [sort, setSort] = useState<SortOption>(initSort);
   const [showSort, setShowSort] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const mountedRef = useRef(false);
 
   const doRefresh = useCallback(async (s: string, cat: number | 'all') => {
     setLoading(true);
+    setCatalogError(null);
     try {
       await refreshCatalog(s, cat);
+    } catch (err) {
+      setCatalogError(err instanceof Error ? err.message : t('errors.catalog_refresh_failed'));
     } finally {
       setLoading(false);
     }
-  }, [refreshCatalog]);
+  }, [refreshCatalog, t]);
 
   useEffect(() => {
     void doRefresh(initSearch, initCategory ?? 'all');
   }, []);
+
+  useEffect(() => {
+    if (!user?.selectedCityId) return;
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void doRefresh(search.trim(), activeCategoryId);
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [search, activeCategoryId, user?.selectedCityId, doRefresh]);
 
   // Sync URL params
   useEffect(() => {
@@ -87,16 +105,25 @@ export default function CatalogPage() {
       </div>
 
       <div className={styles.searchWrap}>
-        <input
-          className={styles.searchInput}
-          type="text"
-          placeholder={t('catalog.searchPlaceholder')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void doRefresh(search, activeCategoryId);
-          }}
-        />
+        <div className={styles.searchInputWrap}>
+          <input
+            className={styles.searchInput}
+            type="text"
+            placeholder={t('catalog.searchPlaceholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search.length > 0 && (
+            <button
+              className={styles.clearSearch}
+              onClick={() => setSearch('')}
+              aria-label={t('catalog.clearSearch')}
+              type="button"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={styles.catScroll}>
@@ -117,14 +144,44 @@ export default function CatalogPage() {
         ))}
       </div>
 
+      <div className={styles.actionsRow}>
+        <button
+          className={styles.resetBtn}
+          onClick={() => {
+            setSearch('');
+            setSort('newest');
+            setActiveCategoryId('all');
+            void doRefresh('', 'all');
+          }}
+          type="button"
+        >
+          {t('catalog.resetFilters')}
+        </button>
+      </div>
+
+      {catalogError && (
+        <div className={styles.errorState}>
+          <p>{catalogError}</p>
+          <button className={styles.retryBtn} onClick={() => void doRefresh(search, activeCategoryId)} type="button">
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
+
       {loading ? (
-        <div className={styles.loadingWrap}>
-          <div className={styles.spinner} />
+        <div className={styles.grid}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className={styles.skeletonCard}>
+              <div className={styles.skeletonImage} />
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonLineShort} />
+            </div>
+          ))}
         </div>
       ) : sortedProducts.length === 0 ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>🔍</div>
-          <p>{t('catalog.empty')}</p>
+          <p>{search ? t('catalog.nothingFound') : t('catalog.empty')}</p>
         </div>
       ) : (
         <div className={styles.grid}>
@@ -154,5 +211,3 @@ export default function CatalogPage() {
     </div>
   );
 }
-
-

@@ -34,6 +34,7 @@ export type TelegramIdentity = {
   id: string
   username?: string
   first_name?: string
+  photo_url?: string
 }
 
 export type ProductSummary = {
@@ -196,4 +197,3 @@ export type AdminStats = {
   totalUsers: number
   totalRevenue: number
 }
-

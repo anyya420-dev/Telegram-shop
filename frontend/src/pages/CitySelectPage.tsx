@@ -5,18 +5,40 @@ import { getLocalizedCityName } from '../lib/localized';
 import styles from './CitySelectPage.module.css';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
+import { api } from '../api/client';
+import type { City } from '../types';
 
 export default function CitySelectPage() {
-  const { cities, loading, selectCity, user } = useApp();
+  const { cities, selectCity, user } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [selecting, setSelecting] = useState<number | null>(null);
+  const [cityList, setCityList] = useState<City[]>(cities);
+  const [loading, setLoading] = useState(cities.length === 0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.selectedCityId) {
       navigate('/shop', { replace: true });
     }
   }, [navigate, user]);
+
+  async function loadCities() {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.getCities();
+      setCityList(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('errors.request_failed'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadCities();
+  }, []);
 
   async function handleSelect(cityId: number) {
     setSelecting(cityId);
@@ -45,9 +67,20 @@ export default function CitySelectPage() {
         <div className={styles.loadingState}>
           <div className={styles.spinner} aria-hidden="true" />
         </div>
+      ) : error ? (
+        <div className={styles.stateCard}>
+          <p>{error}</p>
+          <button className={styles.retryBtn} onClick={() => void loadCities()} type="button">
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : cityList.length === 0 ? (
+        <div className={styles.stateCard}>
+          <p>{t('city.empty')}</p>
+        </div>
       ) : (
         <div className={styles.list}>
-          {cities.map((city) => (
+          {cityList.map((city) => (
             <button
               key={city.id}
               className={`${styles.cityBtn} ${selecting === city.id ? styles.selected : ''}`}
