@@ -9,6 +9,10 @@ if (!token) {
   process.exit(0)
 }
 
+// NOTE: In production the Telegram bot runs inside the backend service (backend/src/services/telegramBotRuntime.ts).
+// This standalone bot worker is only for local development. Do NOT deploy it as a separate service
+// alongside the backend, as two pollers on the same token will conflict.
+
 const bot = new Telegraf(token)
 
 bot.start(async (context) => {
