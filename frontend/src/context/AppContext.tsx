@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
@@ -21,6 +21,7 @@ type AppState = {
   cityPickerOpen: boolean
   openCityPicker: () => void
   closeCityPicker: () => void
+  refreshCities: () => Promise<City[]>
   refreshCatalog: (search?: string, categoryId?: number | 'all') => Promise<void>
   selectCity: (cityId: number) => Promise<void>
   updateLanguagePreference: (language: Language) => Promise<void>
@@ -75,6 +76,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   function setLanguage(lang: Language) {
     void i18n.changeLanguage(lang)
   }
+
+  const refreshCities = useCallback(async () => {
+    const nextCities = await api.getCities()
+    setCities(nextCities)
+    return nextCities
+  }, [])
 
   async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
     if (!user?.selectedCityId) {
@@ -271,6 +278,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     cityPickerOpen,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
+    refreshCities,
     refreshCatalog,
     selectCity,
     updateLanguagePreference,

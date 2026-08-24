@@ -63,9 +63,11 @@ function CitiesSection({ setStatus, loading, setLoading }: {
   const [cities, setCities] = useState<AdminCity[]>([])
   const [newName, setNewName] = useState('')
   const [newNameEn, setNewNameEn] = useState('')
+  const [newIsActive, setNewIsActive] = useState(true)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editNameEn, setEditNameEn] = useState('')
+  const [editIsActive, setEditIsActive] = useState(true)
 
   useEffect(() => {
     void api.getAdminCities().then((r) => setCities(r.cities)).catch(() => null)
@@ -81,9 +83,10 @@ function CitiesSection({ setStatus, loading, setLoading }: {
     setLoading(true)
     setStatus(null)
     try {
-      await api.createAdminCity({ name: newName.trim(), nameEn: newNameEn.trim() || undefined })
+      await api.createAdminCity({ name: newName.trim(), nameEn: newNameEn.trim() || undefined, isActive: newIsActive })
       setNewName('')
       setNewNameEn('')
+      setNewIsActive(true)
       await refresh()
       setStatus({ tone: 'success', message: 'City created.' })
     } catch (error) {
@@ -112,9 +115,10 @@ function CitiesSection({ setStatus, loading, setLoading }: {
     setLoading(true)
     setStatus(null)
     try {
-      const data: { name?: string; nameEn?: string } = {}
+      const data: { name?: string; nameEn?: string; isActive?: boolean } = {}
       if (editName.trim()) data.name = editName.trim()
       data.nameEn = editNameEn.trim() || ''
+      data.isActive = editIsActive
       await api.updateAdminCity(editingId, data)
       setEditingId(null)
       await refresh()
@@ -124,6 +128,13 @@ function CitiesSection({ setStatus, loading, setLoading }: {
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleStartEdit(city: AdminCity) {
+    setEditingId(city.id)
+    setEditName(city.name)
+    setEditNameEn(city.nameEn ?? '')
+    setEditIsActive(city.isActive ?? true)
   }
 
   async function handleDelete(city: AdminCity) {
@@ -144,7 +155,7 @@ function CitiesSection({ setStatus, loading, setLoading }: {
 
   return (
     <section className={styles.card}>
-      <h2 className={styles.cardTitle}><MapPinIcon /> Cities</h2>
+      <h2 className={styles.cardTitle}><MapPinIcon /> Cities / Города</h2>
       <ul className={styles.adminList}>
         {cities.length === 0 && <li className={styles.help}>No cities yet.</li>}
         {cities.map((city) => (
@@ -154,6 +165,10 @@ function CitiesSection({ setStatus, loading, setLoading }: {
                 <div className={styles.formRow}>
                   <input className={styles.input} placeholder="Name (RU)" value={editName} onChange={(e) => setEditName(e.target.value)} />
                   <input className={styles.input} placeholder="Name (EN)" value={editNameEn} onChange={(e) => setEditNameEn(e.target.value)} />
+                  <label className={styles.checkboxLabel}>
+                    <input type="checkbox" checked={editIsActive} onChange={(e) => setEditIsActive(e.target.checked)} />
+                    <span>Active</span>
+                  </label>
                 </div>
                 <div className={styles.actions}>
                   <button className={styles.primaryButton} onClick={() => void handleSaveEdit()} disabled={loading}>Save</button>
@@ -167,7 +182,7 @@ function CitiesSection({ setStatus, loading, setLoading }: {
                   {' '}<span className={city.isActive ? styles.badge : styles.badgeOff}>{city.isActive ? 'active' : 'inactive'}</span>
                 </span>
                 <div className={styles.itemActions}>
-                  <button className={styles.ghostButton} onClick={() => { setEditingId(city.id); setEditName(city.name); setEditNameEn(city.nameEn ?? '') }} disabled={loading}>Edit</button>
+                  <button className={styles.ghostButton} onClick={() => handleStartEdit(city)} disabled={loading}>Edit</button>
                   <button className={city.isActive ? styles.warnButton : styles.ghostButton} onClick={() => void handleToggleActive(city)} disabled={loading}>{city.isActive ? 'Deactivate' : 'Activate'}</button>
                   <button className={styles.removeButton} onClick={() => void handleDelete(city)} disabled={loading}>Delete</button>
                 </div>
@@ -179,6 +194,10 @@ function CitiesSection({ setStatus, loading, setLoading }: {
       <div className={styles.formRow}>
         <input className={styles.input} placeholder="City name (RU) *" value={newName} onChange={(e) => setNewName(e.target.value)} />
         <input className={styles.input} placeholder="City name (EN)" value={newNameEn} onChange={(e) => setNewNameEn(e.target.value)} />
+        <label className={styles.checkboxLabel}>
+          <input type="checkbox" checked={newIsActive} onChange={(e) => setNewIsActive(e.target.checked)} />
+          <span>Active</span>
+        </label>
         <button className={styles.primaryButton} onClick={() => void handleCreate()} disabled={loading || !newName.trim()}>Add city</button>
       </div>
     </section>
