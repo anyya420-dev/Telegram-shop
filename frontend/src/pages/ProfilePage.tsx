@@ -1,87 +1,21 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { api } from '../api/client';
 import styles from './ProfilePage.module.css';
 import { useTranslation } from 'react-i18next';
 import { saveLanguage } from '../lib/i18n';
 import i18n from '../lib/i18n';
 import { getLocalizedCityName } from '../lib/localized';
-import type { Language, UserProfile } from '../types';
+import type { Language } from '../types';
 
 export default function ProfilePage() {
-  const { user: bootstrapUser, telegramEnvironment, openCityPicker, updateLanguagePreference, orders, fetchOrders, isAdmin } = useApp();
+  const { user: profile, telegramEnvironment, openCityPicker, updateLanguagePreference, orders, isAdmin } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  const [profile, setProfile] = useState<UserProfile | null>(bootstrapUser);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileError, setProfileError] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function loadProfile() {
-      if (!bootstrapUser) {
-        setProfileLoading(false);
-        setProfile(null);
-        return;
-      }
-
-      try {
-        setProfileLoading(true);
-        setProfileError(null);
-        const response = await api.getProfile();
-        setProfile(response.user);
-      } catch (err) {
-        setProfileError(err instanceof Error ? err.message : t('errors.request_failed'));
-      } finally {
-        setProfileLoading(false);
-      }
-    }
-    void loadProfile();
-    if (bootstrapUser) {
-      void fetchOrders();
-    }
-  }, [bootstrapUser, fetchOrders, t]);
 
   function handleLanguageChange(lang: Language) {
     void i18n.changeLanguage(lang);
     saveLanguage(lang);
     void updateLanguagePreference(lang);
-  }
-
-  if (profileLoading) {
-    return (
-      <div className={styles.page}>
-        <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
-        <div className={styles.placeholder}>
-          <span className={styles.placeholderIcon}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </span>
-          <p>{t('common.loading', 'Loading...')}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (profileError && !profile) {
-    return (
-      <div className={styles.page}>
-        <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
-        <div className={styles.placeholder}>
-          <span className={styles.placeholderIcon}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-          </span>
-          <p>{profileError}</p>
-        </div>
-      </div>
-    );
   }
 
   if (!profile) {
@@ -108,6 +42,8 @@ export default function ProfilePage() {
     ? getLocalizedCityName(profile.selectedCity, i18n.language as Language)
     : t('profile.cityNotSelected');
 
+  const orderCount = profile.orderCount ?? orders.length;
+
   return (
     <div className={styles.page}>
       <h1 className={styles.pageTitle}>{t('profile.title')}</h1>
@@ -115,12 +51,6 @@ export default function ProfilePage() {
       {!telegramEnvironment && (
         <div className={styles.placeholder} style={{ marginBottom: 16 }}>
           <p>{t('profile.telegramWebAppOnly')}</p>
-        </div>
-      )}
-
-      {profileError && (
-        <div className="error-banner" role="alert" style={{ marginBottom: 12 }}>
-          <span>{profileError}</span>
         </div>
       )}
 
@@ -200,26 +130,7 @@ export default function ProfilePage() {
 
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>{t('profile.orders')}</h3>
-        {profile.orderCount != null ? (
-          profile.orderCount === 0 ? (
-            <div className={styles.placeholder}>
-              <span className={styles.placeholderIcon}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                </svg>
-              </span>
-              <p>{t('profile.ordersEmpty')}</p>
-            </div>
-          ) : (
-            <div
-              className={styles.ordersLink}
-              onClick={() => navigate('/orders')}
-            >
-              <span>{t('profile.ordersCount', { count: profile.orderCount })}</span>
-              <span className={styles.cardArrow}>›</span>
-            </div>
-          )
-        ) : orders.length === 0 ? (
+        {orderCount === 0 ? (
           <div className={styles.placeholder}>
             <span className={styles.placeholderIcon}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -233,7 +144,7 @@ export default function ProfilePage() {
             className={styles.ordersLink}
             onClick={() => navigate('/orders')}
           >
-            <span>{t('profile.ordersCount', { count: orders.length })}</span>
+            <span>{t('profile.ordersCount', { count: orderCount })}</span>
             <span className={styles.cardArrow}>›</span>
           </div>
         )}

@@ -5,7 +5,7 @@ import { getLocalizedCityName } from '../lib/localized'
 import type { Language } from '../types'
 
 export function CityPicker() {
-  const { cities, cityPickerOpen, closeCityPicker, refreshCities, selectCity, user } = useApp()
+  const { cities, cityPickerOpen, closeCityPicker, refreshCities, selectCity, skipCitySelection, user } = useApp()
   const [pendingCityId, setPendingCityId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,8 +44,8 @@ export function CityPicker() {
             <span className="eyebrow">{t('cityPicker.badge')}</span>
             <h2>{t('cityPicker.title')}</h2>
           </div>
-          <button className="ghost-button" type="button" onClick={closeCityPicker}>
-            {user?.selectedCityId ? t('common.later') : t('common.close')}
+          <button className="ghost-button" type="button" onClick={user?.selectedCityId ? closeCityPicker : skipCitySelection}>
+            {user?.selectedCityId ? t('common.close') : t('city.chooseLater')}
           </button>
         </div>
         {loading ? (
@@ -58,7 +58,14 @@ export function CityPicker() {
             </button>
           </>
         ) : cities.length === 0 ? (
-          <p className="subtle-text">{t('city.empty')}</p>
+          <>
+            <p className="subtle-text">{t('city.empty')}</p>
+            {!user?.selectedCityId && (
+              <button className="ghost-button" type="button" onClick={skipCitySelection}>
+                {t('city.chooseLater')}
+              </button>
+            )}
+          </>
         ) : (
           <div className="city-list city-list--stacked">
             {cities.map((city) => (
@@ -81,6 +88,11 @@ export function CityPicker() {
               </button>
             ))}
           </div>
+        )}
+        {!user?.selectedCityId && !loading && !error && cities.length > 0 && (
+          <button className="ghost-button" type="button" onClick={skipCitySelection}>
+            {t('city.chooseLater')}
+          </button>
         )}
         <p className="subtle-text">{t('cityPicker.helper')}</p>
       </div>

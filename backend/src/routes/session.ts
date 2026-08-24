@@ -61,6 +61,8 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
     },
     include: {
       selectedCity: true,
+      balance: true,
+      _count: { select: { orders: true } },
     },
   })
 
@@ -97,7 +99,11 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
     sessionToken: createSessionToken(user.telegramId),
     isAdmin,
     isOwner,
-    user: mapUser(user),
+    user: {
+      ...mapUser(user),
+      balance: user.balance ? user.balance.amount : 0,
+      orderCount: user._count.orders,
+    },
     cities: cities.map(mapCity),
     categories: categories.map(mapCategory),
   })

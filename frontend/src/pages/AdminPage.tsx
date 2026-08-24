@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import { useApp } from '../context/AppContext'
 import type { AdminCategory, AdminCity, AdminProduct, AdminSettingsResponse, AdminStats } from '../types'
 import styles from './AdminPage.module.css'
 
@@ -526,7 +527,7 @@ function ProductsSection({ setStatus, loading, setLoading }: {
 
 export default function AdminPage() {
   const { t } = useTranslation()
-  const [telegramId, setTelegramId] = useState('')
+  const { authStatus, isAdmin, user } = useApp()
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [authLoading, setAuthLoading] = useState(true)
@@ -551,7 +552,31 @@ export default function AdminPage() {
 
   useEffect(() => {
     let cancelled = false
-    setAuthLoading(true)
+
+    if (authStatus !== 'AUTHENTICATED') {
+      setAuthLoading(authStatus === 'AUTH_LOADING')
+      setAuthenticated(false)
+      setSettings(null)
+      setStats(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    if (!isAdmin) {
+      api.setAdminToken(null)
+      storeAdminToken(null)
+      setAuthLoading(false)
+      setAuthenticated(false)
+      setSettings(null)
+      setStats(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    const hasToken = Boolean(readStoredAdminToken())
+    setAuthLoading(hasToken)
 
     async function restoreAdminSession() {
       let activeRestore = adminRestoreInFlight
@@ -613,14 +638,15 @@ export default function AdminPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [authStatus, isAdmin])
 
   async function handleLogin() {
-    if (!telegramId.trim() || !password) return
+    const sessionTelegramId = user?.telegramId?.trim()
+    if (!sessionTelegramId || !password) return
     setLoading(true)
     setStatus(null)
     try {
-      const response = await api.adminLogin({ telegramId: telegramId.trim(), password })
+      const response = await api.adminLogin({ telegramId: sessionTelegramId, password })
       api.setAdminToken(response.adminToken)
       storeAdminToken(response.adminToken)
       setSettings(response.settings)
@@ -785,15 +811,21 @@ export default function AdminPage() {
         </section>
       )}
 
-      {!authLoading && !authenticated && (
+      {!authLoading && authStatus === 'AUTHENTICATED' && !isAdmin && (
         <section className={styles.card}>
           <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
-          <p className={styles.help}>Enter your Telegram ID and administrator password.</p>
+          <p className={styles.help}>This Telegram account does not have administrator access.</p>
+        </section>
+      )}
+
+      {!authLoading && isAdmin && !authenticated && (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
+          <p className={styles.help}>Administrator access for Telegram ID {user?.telegramId ?? '—'}.</p>
           <div className={styles.formRow}>
-            <input className={styles.input} placeholder="Telegram ID" value={telegramId} onChange={(event) => setTelegramId(event.target.value)} />
             <input className={styles.input} type="password" placeholder="Administrator password" value={password} onChange={(event) => setPassword(event.target.value)} />
           </div>
-          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={loading || !telegramId.trim() || !password}>
+          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={loading || !user?.telegramId || !password}>
             {loading ? t('common.loading') : 'Login to administration'}
           </button>
         </section>
