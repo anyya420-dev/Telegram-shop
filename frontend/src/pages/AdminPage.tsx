@@ -5,8 +5,6 @@ import type { AdminCategory, AdminCity, AdminProduct, AdminSettingsResponse, Adm
 import styles from './AdminPage.module.css'
 
 type StatusTone = 'success' | 'error' | 'info'
-const ADMIN_TOKEN_STORAGE_KEY = 'telegram-shop-admin-token'
-
 type AdminRestoreState = {
   authenticated: boolean
   settings: AdminSettingsResponse | null
@@ -14,24 +12,14 @@ type AdminRestoreState = {
 }
 
 let adminRestoreInFlight: Promise<AdminRestoreState> | null = null
+let cachedAdminToken: string | null = null
 
 function readStoredAdminToken() {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  const token = window.sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)
-  return token?.trim() || null
+  return cachedAdminToken
 }
 
 function storeAdminToken(token: string | null) {
-  if (typeof window === 'undefined') {
-    return
-  }
-  if (!token) {
-    window.sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY)
-    return
-  }
-  window.sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token)
+  cachedAdminToken = token?.trim() || null
 }
 
 function ShieldIcon() {
@@ -563,10 +551,12 @@ export default function AdminPage() {
 
   useEffect(() => {
     let cancelled = false
+    setAuthLoading(true)
 
     async function restoreAdminSession() {
-      if (!adminRestoreInFlight) {
-        adminRestoreInFlight = (async () => {
+      let activeRestore = adminRestoreInFlight
+      if (!activeRestore) {
+        const restorePromise = (async () => {
           const savedToken = readStoredAdminToken()
           if (!savedToken) {
             api.setAdminToken(null)
@@ -587,18 +577,36 @@ export default function AdminPage() {
             storeAdminToken(null)
             return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
           }
-        })().finally(() => {
-          adminRestoreInFlight = null
+        })()
+
+        adminRestoreInFlight = restorePromise
+        void restorePromise.finally(() => {
+          if (adminRestoreInFlight === restorePromise) {
+            adminRestoreInFlight = null
+          }
         })
+        activeRestore = restorePromise
       }
 
-      const state = await adminRestoreInFlight
-      if (cancelled) return
+      try {
+        const state = await activeRestore
+        if (cancelled) return
 
-      setAuthenticated(state.authenticated)
-      setSettings(state.settings)
-      setStats(state.stats)
-      setAuthLoading(false)
+        setAuthenticated(state.authenticated)
+        setSettings(state.settings)
+        setStats(state.stats)
+      } catch {
+        if (cancelled) return
+        api.setAdminToken(null)
+        storeAdminToken(null)
+        setAuthenticated(false)
+        setSettings(null)
+        setStats(null)
+      } finally {
+        if (!cancelled) {
+          setAuthLoading(false)
+        }
+      }
     }
 
     void restoreAdminSession()

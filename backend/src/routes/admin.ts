@@ -4,6 +4,7 @@ import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError, verif
 import type { Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import { encryptToken, decryptToken, validateBotToken, getBotStatus } from '../services/botService.js'
+import { maskTelegramId } from '../services/logging.js'
 import {
   createAdminSession,
   ensureOwnerAdministratorRecord,
@@ -67,7 +68,9 @@ async function getAdminUser(request: Request, response: Response, options?: { re
   if (!resolvedAdministrator && isOwnerTelegramId(telegramId)) {
     resolvedAdministrator = await ensureOwnerAdministratorRecord(telegramId)
     if (resolvedAdministrator) {
-      console.info('[admin-auth] restored missing OWNER administrator record', { telegramId })
+      console.info('[admin-auth] restored missing OWNER administrator record', {
+        telegramIdMasked: maskTelegramId(telegramId),
+      })
     }
   }
 
@@ -148,9 +151,7 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
 
   const session = await createAdminSession(admin.administrator.id)
   console.info('[admin-auth] admin session created', {
-    telegramId: admin.user.telegramId,
     isOwner: isOwnerTelegramId(admin.user.telegramId),
-    adminId: admin.administrator.id,
   })
 
   response.json({
