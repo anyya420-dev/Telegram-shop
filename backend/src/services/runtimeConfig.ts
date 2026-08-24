@@ -26,13 +26,13 @@ export function getRuntimeConfigSummary() {
     DATABASE_URL: status.databaseConfigured ? 'configured' : 'missing',
     BOT_TOKEN_ENCRYPTION_KEY: status.botTokenEncryptionKeyConfigured ? 'configured' : 'missing',
   }
+}
 
-  export function getMissingRequiredRuntimeConfigKeys() {
-    const summary = getRuntimeConfigSummary()
-    return Object.entries(summary)
-      .filter(([, value]) => value === 'missing')
-      .map(([key]) => key)
-  }
+export function getMissingRequiredRuntimeConfigKeys() {
+  const summary = getRuntimeConfigSummary()
+  return Object.entries(summary)
+    .filter(([, value]) => value === 'missing')
+    .map(([key]) => key)
 }
 
 export function getRuntimeEnvironmentLabel() {

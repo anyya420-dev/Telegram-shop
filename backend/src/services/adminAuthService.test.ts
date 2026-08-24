@@ -20,18 +20,19 @@ const envSnapshot: EnvSnapshot = {
   OWNER_TELEGRAM_ID: process.env.OWNER_TELEGRAM_ID,
 }
 
-const originalFindFirst = prisma.adminSecurity.findFirst.bind(prisma.adminSecurity)
-const originalUpdate = prisma.adminSecurity.update.bind(prisma.adminSecurity)
-const originalSessionCreate = prisma.adminSession.create.bind(prisma.adminSession)
-const originalSessionFindUnique = prisma.adminSession.findUnique.bind(prisma.adminSession)
-const originalSessionUpdate = prisma.adminSession.update.bind(prisma.adminSession)
+const prismaAny = prisma as any
+const originalFindFirst = prismaAny.adminSecurity.findFirst.bind(prisma.adminSecurity)
+const originalUpdate = prismaAny.adminSecurity.update.bind(prisma.adminSecurity)
+const originalSessionCreate = prismaAny.adminSession.create.bind(prisma.adminSession)
+const originalSessionFindUnique = prismaAny.adminSession.findUnique.bind(prisma.adminSession)
+const originalSessionUpdate = prismaAny.adminSession.update.bind(prisma.adminSession)
 
 function restorePrisma() {
-  prisma.adminSecurity.findFirst = originalFindFirst
-  prisma.adminSecurity.update = originalUpdate
-  prisma.adminSession.create = originalSessionCreate
-  prisma.adminSession.findUnique = originalSessionFindUnique
-  prisma.adminSession.update = originalSessionUpdate
+  prismaAny.adminSecurity.findFirst = originalFindFirst
+  prismaAny.adminSecurity.update = originalUpdate
+  prismaAny.adminSession.create = originalSessionCreate
+  prismaAny.adminSession.findUnique = originalSessionFindUnique
+  prismaAny.adminSession.update = originalSessionUpdate
 }
 
 test.afterEach(() => {
@@ -53,7 +54,7 @@ test('isOwnerTelegramId: false when owner variable is missing', () => {
 
 test('verifyAdminPassword returns configuration_error when ADMIN_PASSWORD is missing', async () => {
   delete process.env.ADMIN_PASSWORD
-  prisma.adminSecurity.findFirst = async () => null as never
+  prismaAny.adminSecurity.findFirst = async () => null
 
   const result = await verifyAdminPassword('secret')
   assert.deepEqual(result, { valid: false, reason: 'configuration_error' })
@@ -61,7 +62,7 @@ test('verifyAdminPassword returns configuration_error when ADMIN_PASSWORD is mis
 
 test('verifyAdminPassword validates against ADMIN_PASSWORD when no AdminSecurity row exists', async () => {
   process.env.ADMIN_PASSWORD = 'correct-pass'
-  prisma.adminSecurity.findFirst = async () => null as never
+  prismaAny.adminSecurity.findFirst = async () => null
 
   const ok = await verifyAdminPassword('correct-pass')
   const fail = await verifyAdminPassword('wrong-pass')
@@ -76,11 +77,11 @@ test('verifyAdminPassword re-syncs stale AdminSecurity hash when env password ma
   const staleHash = scryptSync('old-password', staleSalt, 64).toString('hex')
   let updated = false
 
-  prisma.adminSecurity.findFirst = async () =>
-    ({ id: 1, passwordHash: staleHash, passwordSalt: staleSalt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null }) as never
-  prisma.adminSecurity.update = async () => {
+  prismaAny.adminSecurity.findFirst = async () =>
+    ({ id: 1, passwordHash: staleHash, passwordSalt: staleSalt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null })
+  prismaAny.adminSecurity.update = async () => {
     updated = true
-    return {} as never
+    return {}
   }
 
   const result = await verifyAdminPassword('new-password')
@@ -90,9 +91,9 @@ test('verifyAdminPassword re-syncs stale AdminSecurity hash when env password ma
 
 test('createAdminSession stores only token hash', async () => {
   let capturedHash: string | null = null
-  prisma.adminSession.create = async ({ data }: { data: { tokenHash: string } }) => {
+  prismaAny.adminSession.create = async ({ data }: { data: { tokenHash: string } }) => {
     capturedHash = data.tokenHash
-    return {} as never
+    return {}
   }
 
   const session = await createAdminSession(10)
@@ -103,8 +104,7 @@ test('createAdminSession stores only token hash', async () => {
 })
 
 test('getAuthorizedAdminSession rejects expired session', async () => {
-  prisma.adminSession.findUnique = async () =>
-    ({
+  prismaAny.adminSession.findUnique = async () => ({
       id: 1,
       adminId: 1,
       tokenHash: 'x',
@@ -113,7 +113,7 @@ test('getAuthorizedAdminSession rejects expired session', async () => {
       lastActivityAt: new Date(),
       revokedAt: null,
       admin: { id: 1, telegramId: '8405501187', createdAt: new Date(), updatedAt: new Date() },
-    }) as never
+    })
 
   const session = await getAuthorizedAdminSession('token')
   assert.equal(session, null)

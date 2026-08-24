@@ -194,10 +194,11 @@ router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
   const adminToken = getAdminSessionToken(request)
   const session = await getAuthorizedAdminSession(adminToken)
   const sameAdminSession = Boolean(session && session.admin.telegramId === admin.user.telegramId)
+  const telegramIdRecognized = await isAdminTelegramId(admin.user.telegramId)
 
   response.json({
     telegramSession: 'valid',
-    telegramIdRecognized: Boolean(admin.user.telegramId),
+    telegramIdRecognized,
     ownerConfigured: Boolean(ownerConfiguredId),
     ownerMatch,
     adminPasswordConfigured: runtime.adminPasswordConfigured,
