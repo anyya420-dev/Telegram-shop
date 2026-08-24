@@ -3,7 +3,9 @@ import { prisma } from '../lib.js'
 
 const ADMIN_SESSION_TTL_HOURS = 12
 const TELEGRAM_ID_PATTERN = /^\d{5,20}$/
-const ENV_PASSWORD_FALLBACK_SALT = 'admin-env-fallback-v1'
+// Fixed salt used only for timing-safe equality comparison of plain-text env passwords.
+// Never used for persistent storage – actual stored hashes always use a random per-record salt.
+const ENV_COMPARE_SALT = 'admin-env-compare-v1'
 let ownerValidationWarningShown = false
 
 function normalizeTelegramId(value: unknown) {
@@ -66,6 +68,18 @@ function derivePasswordHash(password: string, salt: string) {
   return scryptSync(password, salt, 64).toString('hex')
 }
 
+/**
+ * Timing-safe equality check for two plain-text passwords.
+ * Both values are hashed with scrypt and the same fixed salt so the
+ * resulting buffers have equal length, enabling timingSafeEqual.
+ * This function is used ONLY for comparison – the result is never stored.
+ */
+function envPasswordMatchesSubmitted(envPassword: string, submittedPassword: string): boolean {
+  const a = Buffer.from(derivePasswordHash(envPassword, ENV_COMPARE_SALT), 'hex')
+  const b = Buffer.from(derivePasswordHash(submittedPassword, ENV_COMPARE_SALT), 'hex')
+  return timingSafeEqual(a, b)
+}
+
 export function hashAdminSessionToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
@@ -101,15 +115,34 @@ export async function seedAdminConfigForFreshInstall(currentTelegramId?: string)
     }
   }
 
+  const envPassword = getEnvAdminPassword()
   if (!security) {
-    const password = getEnvAdminPassword()
-    if (password) {
+    if (envPassword) {
       const salt = randomBytes(16).toString('hex')
-      const passwordHash = derivePasswordHash(password, salt)
+      const passwordHash = derivePasswordHash(envPassword, salt)
       await prisma.adminSecurity.create({
         data: {
           passwordHash,
           passwordSalt: salt,
+          passwordAlgo: 'scrypt',
+        },
+      })
+    }
+  } else if (envPassword) {
+    // If the env var no longer matches the stored hash, update the DB record
+    // to re-sync it with the current ADMIN_PASSWORD.  This handles the
+    // case where ADMIN_PASSWORD was rotated in the deployment environment
+    // (e.g. Render dashboard) after the initial seed ran.
+    const storedHash = Buffer.from(security.passwordHash, 'hex')
+    const checkHash = Buffer.from(derivePasswordHash(envPassword, security.passwordSalt), 'hex')
+    const hashesMatch = storedHash.length === checkHash.length && timingSafeEqual(storedHash, checkHash)
+    if (!hashesMatch) {
+      const newSalt = randomBytes(16).toString('hex')
+      await prisma.adminSecurity.update({
+        where: { id: security.id },
+        data: {
+          passwordHash: derivePasswordHash(envPassword, newSalt),
+          passwordSalt: newSalt,
           passwordAlgo: 'scrypt',
         },
       })
@@ -175,18 +208,23 @@ export type PasswordVerifyResult =
  * Verifies the provided password against the stored admin security record.
  *
  * Primary check: scrypt hash stored in the AdminSecurity DB table.
- * Fallback check: only when no DB record exists, the ADMIN_PASSWORD
- *   environment variable is used as a recovery path.  This covers the
- *   deployment scenario where ADMIN_PASSWORD was set (or changed) in
- *   Render after the initial database seed, leaving the adminSecurity
- *   table empty.  When a DB record exists it is the authoritative source
- *   and the env var is NOT consulted, ensuring a manually-set password
- *   cannot be bypassed via env.
+ * Recovery check: if a DB record exists but the entered password does NOT
+ *   match the stored hash, the ADMIN_PASSWORD environment variable is also
+ *   tried.  If the env var matches, the DB record is updated with a fresh
+ *   hash derived from the submitted password.  This handles the deployment
+ *   scenario where ADMIN_PASSWORD was changed in Render after the initial
+ *   DB seed, leaving a stale hash in the database.  The env var effectively
+ *   acts as a "password reset" that re-syncs the DB on next successful login.
+ * Fallback check: when no DB record exists at all, only ADMIN_PASSWORD is
+ *   consulted (original fallback path, unchanged).
  *
  * Security properties preserved:
- *  - timing-safe comparison in both paths (scrypt + fixed salt for env)
+ *  - timing-safe comparison in all paths
  *  - env password is never logged or returned
- *  - env var fallback applies only when the DB has no record at all
+ *  - DB is authoritative when DB hash and entered password agree
+ *  - env var can only promote itself to DB-authoritative by matching the
+ *    server's current ADMIN_PASSWORD value; a leaked old password alone
+ *    cannot bypass the env-gated recovery
  */
 export async function verifyAdminPassword(password: string): Promise<PasswordVerifyResult> {
   const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
@@ -197,21 +235,38 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
     if (expectedHash.length === receivedHash.length && timingSafeEqual(expectedHash, receivedHash)) {
       return { valid: true }
     }
+
+    // DB hash did not match.  Try the ADMIN_PASSWORD env var as a recovery
+    // path so that changing ADMIN_PASSWORD in the deployment environment
+    // (e.g. Render) re-syncs access without requiring direct DB access.
+    const envPassword = getEnvAdminPassword()
+    if (envPassword && envPasswordMatchesSubmitted(envPassword, password)) {
+      // Env password matches: re-sync DB record so future logins use the
+      // new hash and the env var is no longer needed as a recovery path.
+      const newSalt = randomBytes(16).toString('hex')
+      await prisma.adminSecurity.update({
+        where: { id: security.id },
+        data: {
+          passwordHash: derivePasswordHash(envPassword, newSalt),
+          passwordSalt: newSalt,
+          passwordAlgo: 'scrypt',
+        },
+      })
+      return { valid: true }
+    }
+
     return { valid: false, reason: 'invalid_credentials' }
   }
 
   // No DB record yet: compare against ADMIN_PASSWORD env var.
   // This handles the scenario where ADMIN_PASSWORD was added to Render
   // after the initial seed ran, so no adminSecurity row was ever created.
-  // A fixed salt makes the comparison timing-safe.
   const envPassword = getEnvAdminPassword()
   if (!envPassword) {
     return { valid: false, reason: 'configuration_error' }
   }
 
-  const envExpectedHash = Buffer.from(derivePasswordHash(envPassword, ENV_PASSWORD_FALLBACK_SALT), 'hex')
-  const envReceivedHash = Buffer.from(derivePasswordHash(password, ENV_PASSWORD_FALLBACK_SALT), 'hex')
-  if (envExpectedHash.length === envReceivedHash.length && timingSafeEqual(envExpectedHash, envReceivedHash)) {
+  if (envPasswordMatchesSubmitted(envPassword, password)) {
     return { valid: true }
   }
 
