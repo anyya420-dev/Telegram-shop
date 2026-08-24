@@ -8,6 +8,7 @@ import {
   getMissingRequiredRuntimeConfigKeys,
   getRuntimeConfigSummary,
 } from './services/runtimeConfig.js'
+import { startHttpServer } from './startup.js'
 import { initializeTelegramBot } from './services/telegramBotRuntime.js'
 
 const port = Number(process.env.PORT ?? 3001)
@@ -46,25 +47,11 @@ async function start() {
         invalid: invalidConfig,
       })
     }
-    await seedAdminConfigForFreshInstall()
-
-    // Start HTTP server first so Render's health check succeeds immediately.
-    // Bot initialization is intentionally deferred: if the bot token is
-    // missing or Telegram's API is slow the server must still accept HTTP
-    // traffic.  A failed bot init is logged but does NOT crash the process.
-    await new Promise<void>((resolve) => {
-      app.listen(port, '0.0.0.0', () => {
-        console.log(`Backend running on http://0.0.0.0:${port}`)
-        resolve()
-      })
-    })
-
-    console.log('Backend HTTP server started; initializing Telegram bot in background')
-    initializeTelegramBot().catch((error: unknown) => {
-      console.error(
-        '[BOT] Background initialization failed (server continues running):',
-        error instanceof Error ? error.message : String(error),
-      )
+    await startHttpServer({
+      app,
+      port,
+      seedAdminConfigForFreshInstall,
+      initializeTelegramBot,
     })
   } catch (error) {
     console.error('Backend startup failed.')
