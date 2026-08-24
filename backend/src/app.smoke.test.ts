@@ -68,6 +68,20 @@ test('GET /api/health mirrors /health and requires no auth', async () => {
   assert.equal(body.service, 'telegram-shop-backend')
 })
 
+test('GET /ready returns JSON readiness details without requiring auth', async () => {
+  const response = await fetch(`${baseUrl}/ready`)
+  assert.ok([200, 503].includes(response.status), `expected readiness status 200/503, received ${response.status}`)
+  assert.match(response.headers.get('content-type') ?? '', /application\/json/)
+  const body = await response.json() as {
+    status?: string
+    service?: string
+    dependencies?: { database?: string }
+  }
+  assert.equal(body.service, 'telegram-shop-backend')
+  assert.ok(body.status === 'ok' || body.status === 'degraded')
+  assert.ok(body.dependencies?.database === 'ok' || body.dependencies?.database === 'error')
+})
+
 test('GET /health from the allowed origin returns credentialed CORS headers', async () => {
   const response = await fetch(`${baseUrl}/health`, { headers: { Origin: ALLOWED_ORIGIN } })
   assert.equal(response.status, 200)

@@ -17,6 +17,7 @@ import supportRouter from './routes/support.js'
 import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
 import { createCorsMiddleware } from './middleware/cors.js'
+import { prisma } from './lib.js'
 import { getAllowedCorsOrigins } from './services/runtimeConfig.js'
 
 export const SERVICE_NAME = 'telegram-shop-backend'
@@ -31,8 +32,14 @@ export const SERVICE_NAME = 'telegram-shop-backend'
  *   4. API routers (each router owns its own auth)
  *   5. JSON 404 + JSON error handler
  */
-export function createApp(options: { allowedOrigins?: readonly string[] } = {}): Express {
+export function createApp(options: {
+  allowedOrigins?: readonly string[]
+  logger?: Pick<Console, 'error' | 'warn'>
+  readinessCheck?: () => Promise<unknown>
+} = {}): Express {
   const allowedOrigins = options.allowedOrigins ?? getAllowedCorsOrigins()
+  const logger = options.logger ?? console
+  const readinessCheck = options.readinessCheck ?? (() => prisma.$queryRaw`SELECT 1`)
   const app = express()
 
   app.disable('x-powered-by')
@@ -43,7 +50,7 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
   app.use(createCorsMiddleware({
     allowedOrigins,
     onRejected: (origin) => {
-      console.warn('[cors] rejected origin', { origin, allowedOrigins })
+      logger.warn('[cors] rejected origin', { origin, allowedOrigins })
     },
   }))
 
@@ -56,9 +63,41 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
     })
   }
 
+  const sendReadiness = async (_request: Request, response: Response) => {
+    const timestamp = new Date().toISOString()
+
+    try {
+      await readinessCheck()
+      response.status(200).json({
+        status: 'ok',
+        service: SERVICE_NAME,
+        timestamp,
+        dependencies: {
+          database: 'ok',
+        },
+      })
+    } catch (error) {
+      logger.error(
+        '[ready] database readiness check failed',
+        error instanceof Error ? error.message : String(error),
+      )
+      response.status(503).json({
+        status: 'degraded',
+        service: SERVICE_NAME,
+        timestamp,
+        dependencies: {
+          database: 'error',
+        },
+      })
+    }
+  }
+
   app.get('/health', sendHealth)
   app.get('/healthz', sendHealth)
   app.get('/api/health', sendHealth)
+  app.get('/ready', sendReadiness)
+  app.get('/readyz', sendReadiness)
+  app.get('/api/ready', sendReadiness)
 
   app.get('/', (_request, response) => {
     response.json({ status: 'ok', service: SERVICE_NAME, message: 'Backend is running' })
@@ -97,7 +136,7 @@ export function createApp(options: { allowedOrigins?: readonly string[] } = {}):
       return
     }
 
-    console.error('[http] unhandled error', error instanceof Error ? error.message : String(error))
+    logger.error('[http] unhandled error', error instanceof Error ? error.message : String(error))
     response.status(500).json({ code: 'server_error', message: 'Internal server error' })
   })
 

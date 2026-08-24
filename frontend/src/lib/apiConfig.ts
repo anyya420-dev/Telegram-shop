@@ -63,5 +63,29 @@ export function resolveApiBaseUrl(
     }
   }
 
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(configured)
+  } catch {
+    return {
+      baseUrl: '',
+      error: `VITE_API_URL must be a valid URL in production (received "${configured}")`,
+    }
+  }
+
+  if (parsedUrl.protocol !== 'https:') {
+    return {
+      baseUrl: '',
+      error: `VITE_API_URL must use HTTPS in production (received "${configured}")`,
+    }
+  }
+
+  if (parsedUrl.pathname !== '/api') {
+    return {
+      baseUrl: '',
+      error: `VITE_API_URL must point to the backend /api base in production (received "${configured}")`,
+    }
+  }
+
   return { baseUrl: configured, error: null }
 }
