@@ -47,11 +47,11 @@ export default function CitySelectPage() {
     } finally {
       setSelecting(null);
     }
+  }
 
-    function handleSkipSelection() {
-      skipCitySelection();
-      navigate('/shop', { replace: true });
-    }
+  function handleSkipSelection() {
+    skipCitySelection();
+    navigate('/shop', { replace: true });
   }
 
   return (
