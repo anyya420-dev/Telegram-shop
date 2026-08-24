@@ -8,7 +8,6 @@ import { maskTelegramId } from '../services/logging.js'
 import {
   createAdminSession,
   ensureOwnerAdministratorRecord,
-  getOwnerTelegramId,
   getAuthorizedAdminSession,
   hasAdminPasswordConfigured,
   isAdminTelegramId,
@@ -183,7 +182,6 @@ router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const ownerConfiguredId = getOwnerTelegramId()
   const ownerMatch = isOwnerTelegramId(admin.user.telegramId)
   if (!ownerMatch) {
     sendError(response, 403, 'forbidden', 'Owner diagnostics only')
@@ -191,26 +189,30 @@ router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
   }
 
   const runtime = getRuntimeConfigStatus()
-  const adminToken = getAdminSessionToken(request)
-  const session = await getAuthorizedAdminSession(adminToken)
-  const adminSessionValid = Boolean(session && session.admin.telegramId === admin.user.telegramId)
   const telegramIdRecognized = await isAdminTelegramId(admin.user.telegramId)
 
   response.json({
     telegramSessionValid: true,
     telegramIdRecognized,
-    ownerConfigured: Boolean(ownerConfiguredId),
+    ownerConfigured: runtime.ownerTelegramIdConfigured,
     ownerMatch,
     administratorRecordExists: Boolean(admin.administrator?.id),
     adminPasswordConfigured: runtime.adminPasswordConfigured,
     databaseConfigured: runtime.databaseConfigured,
     botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
-    adminSessionValid,
+    adminSessionValid: true,
     environment: getRuntimeEnvironmentLabel(),
   })
 })
 
-router.get('/diagnostics/runtime', authRateLimiter, (_request, response) => {
+router.get('/diagnostics/runtime', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+  if (!isOwnerTelegramId(admin.user.telegramId)) {
+    sendError(response, 403, 'forbidden', 'Owner diagnostics only')
+    return
+  }
+
   const runtime = getRuntimeConfigStatus()
   response.json({
     ownerConfigured: runtime.ownerTelegramIdConfigured,
