@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api } from '../api/client'
+import { ApiError, api, getApiDiagnostics } from '../api/client'
 import { resolveApiErrorMessage } from '../lib/errors'
 import i18n from '../lib/i18n'
 import { getTelegramContext } from '../lib/telegram'
@@ -9,6 +9,17 @@ import type { BootstrapResponse, Cart, Category, City, Language, Order, ProductS
 const CITY_SELECTION_SKIPPED_KEY = 'telegram-shop-city-selection-skipped'
 
 type AuthStatus = 'AUTH_LOADING' | 'AUTHENTICATED' | 'AUTHENTICATION_FAILED'
+export type ConnectionDiagnostics = {
+  apiBaseUrl: string
+  apiConfigured: boolean
+  apiConfigError: string | null
+  mode: string
+  pageOrigin: string | null
+  inTelegram: boolean
+  hasEmptyInitData: boolean
+  errorCode: string | null
+  errorStatus: number | null
+}
 type BootstrapSnapshot = {
   response: BootstrapResponse
   products: ProductSummary[]
@@ -22,6 +33,7 @@ type AppState = {
   authStatus: AuthStatus
   loading: boolean
   error: string | null
+  diagnostics: ConnectionDiagnostics | null
   telegramEnvironment: boolean
   isAdmin: boolean
   isOwner: boolean
@@ -173,6 +185,7 @@ async function bootstrapSession(initData: string) {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [authStatus, setAuthStatus] = useState<AuthStatus>('AUTH_LOADING')
   const [error, setError] = useState<string | null>(null)
+  const [diagnostics, setDiagnostics] = useState<ConnectionDiagnostics | null>(null)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
@@ -259,10 +272,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     async function bootstrap() {
+      let telegram = { initData: '', isTelegramEnvironment: false, hasEmptyInitData: false }
+
       try {
         setAuthStatus('AUTH_LOADING')
         setError(null)
-        const telegram = getTelegramContext()
+        setDiagnostics(null)
+        telegram = getTelegramContext()
         const snapshot = await bootstrapSession(telegram.initData)
 
         if (cancelled) {
@@ -302,6 +318,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCitySelectionSkipped(false)
         resetCityScopedState()
         setError(translateError(bootstrapError, 'shop_load_failed'))
+        setDiagnostics({
+          ...getApiDiagnostics(),
+          hasEmptyInitData: telegram.hasEmptyInitData,
+          errorCode: bootstrapError instanceof ApiError ? bootstrapError.code ?? null : null,
+          errorStatus: bootstrapError instanceof ApiError ? bootstrapError.status ?? null : null,
+        })
         setAuthStatus('AUTHENTICATION_FAILED')
       }
     }
@@ -476,6 +498,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authStatus,
     loading,
     error,
+    diagnostics,
     telegramEnvironment,
     isAdmin,
     isOwner,
@@ -506,6 +529,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   } satisfies AppState), [
     authStatus,
     error,
+    diagnostics,
     telegramEnvironment,
     isAdmin,
     isOwner,

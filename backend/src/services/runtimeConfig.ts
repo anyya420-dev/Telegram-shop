@@ -1,3 +1,5 @@
+import { normalizeOrigin } from '../middleware/cors.js'
+
 export type ConfigStatus = 'CONFIGURED' | 'MISSING' | 'INVALID'
 
 type RuntimeConfigStatus = {
@@ -9,6 +11,18 @@ type RuntimeConfigStatus = {
 }
 
 const TELEGRAM_ID_PATTERN = /^\d{5,20}$/
+const URL_CONFIG_KEYS = ['FRONTEND_URL', 'WEB_APP_URL'] as const
+const BOOLEAN_CONFIG_KEYS = ['ALLOW_DEMO_MODE'] as const
+
+/**
+ * Origins that are always part of the CORS allowlist in production.
+ * They act as a safety net so a stale FRONTEND_URL/WEB_APP_URL in the hosting
+ * dashboard cannot lock the real Telegram Mini App out of its own backend.
+ */
+const KNOWN_PRODUCTION_FRONTEND_ORIGINS = [
+  'https://telegram-shop-3781.onrender.com',
+] as const
+
 const REQUIRED_PRODUCTION_KEYS = [
   'DATABASE_URL',
   'SESSION_SECRET',
@@ -37,7 +51,19 @@ export function isProductionRuntime() {
 }
 
 export function isDemoModeEnabled() {
-  return readEnv('ALLOW_DEMO_MODE') === 'true'
+  // Demo mode is never available in production, regardless of the env value.
+  if (isProductionRuntime()) {
+    return false
+  }
+  // Outside production demo mode stays on unless explicitly disabled.
+  return parseBooleanEnv(readEnv('ALLOW_DEMO_MODE')) !== false
+}
+
+function parseBooleanEnv(value: string): boolean | null {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'true') return true
+  if (normalized === 'false') return false
+  return null
 }
 
 export function getSessionSecret() {
@@ -77,20 +103,41 @@ export function getWebAppUrl() {
     return frontendUrl
   }
 
+  if (isProductionRuntime()) {
+    // Never hand out a localhost Web App URL to real Telegram users.
+    return KNOWN_PRODUCTION_FRONTEND_ORIGINS[0]
+  }
+
   return 'http://localhost:5173'
 }
 
 export function getAllowedCorsOrigins() {
   const origins = new Set<string>()
-  const frontendUrl = getFrontendUrl()
-  const webAppUrl = readEnv('WEB_APP_URL')
 
-  if (frontendUrl) origins.add(frontendUrl)
-  if (webAppUrl) origins.add(webAppUrl)
+  const add = (value: string) => {
+    const normalized = normalizeOrigin(value)
+    if (normalized) {
+      origins.add(normalized)
+    }
+  }
 
-  if (!isProductionRuntime()) {
-    origins.add('http://localhost:5173')
-    origins.add('http://localhost:4173')
+  add(getFrontendUrl())
+  add(readEnv('WEB_APP_URL'))
+
+  // Optional comma-separated escape hatch for additional deploy previews.
+  for (const extra of readEnv('CORS_ALLOWED_ORIGINS').split(',')) {
+    add(extra)
+  }
+
+  if (isProductionRuntime()) {
+    for (const knownOrigin of KNOWN_PRODUCTION_FRONTEND_ORIGINS) {
+      add(knownOrigin)
+    }
+  } else {
+    add('http://localhost:5173')
+    add('http://localhost:4173')
+    add('http://127.0.0.1:5173')
+    add('http://127.0.0.1:4173')
   }
 
   return [...origins]
@@ -106,7 +153,15 @@ function getConfigStatusForKey(key: string): ConfigStatus {
     return 'INVALID'
   }
 
-  if (key === 'ALLOW_DEMO_MODE' && isProductionRuntime() && value !== 'false') {
+  if ((URL_CONFIG_KEYS as readonly string[]).includes(key) && !normalizeOrigin(value)) {
+    return 'INVALID'
+  }
+
+  if ((BOOLEAN_CONFIG_KEYS as readonly string[]).includes(key) && parseBooleanEnv(value) === null) {
+    return 'INVALID'
+  }
+
+  if (key === 'ALLOW_DEMO_MODE' && isProductionRuntime() && parseBooleanEnv(value) !== false) {
     return 'INVALID'
   }
 

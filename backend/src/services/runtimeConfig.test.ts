@@ -6,7 +6,10 @@ import {
   getRuntimeConfigSummary,
   getRuntimeConfigStatus,
   getSessionSecret,
+  isDemoModeEnabled,
 } from './runtimeConfig.js'
+
+const KNOWN_PRODUCTION_FRONTEND_ORIGIN = 'https://telegram-shop-3781.onrender.com'
 
 type EnvSnapshot = Record<string, string | undefined>
 
@@ -20,6 +23,7 @@ const trackedEnvKeys = [
   'FRONTEND_URL',
   'WEB_APP_URL',
   'ALLOW_DEMO_MODE',
+  'CORS_ALLOWED_ORIGINS',
 ] as const
 
 const envSnapshot: EnvSnapshot = Object.fromEntries(
@@ -80,10 +84,33 @@ test('assertProductionRuntimeConfig succeeds with valid production config', () =
   assert.doesNotThrow(() => assertProductionRuntimeConfig())
 })
 
-test('getAllowedCorsOrigins keeps production origins explicit', () => {
+test('getAllowedCorsOrigins keeps production origins explicit and never adds localhost', () => {
   setProductionBaseline()
   const origins = getAllowedCorsOrigins()
-  assert.deepEqual(origins, ['https://frontend.example.com'])
+  assert.ok(origins.some((origin) => origin === 'https://frontend.example.com'))
+  assert.ok(origins.some((origin) => origin === KNOWN_PRODUCTION_FRONTEND_ORIGIN))
+  assert.ok(origins.every((origin) => !origin.includes('localhost')))
+  assert.ok(origins.every((origin) => !origin.endsWith('/')))
+})
+
+test('getAllowedCorsOrigins normalizes trailing slashes and casing', () => {
+  setProductionBaseline()
+  process.env.FRONTEND_URL = 'https://Frontend.Example.com/'
+  process.env.WEB_APP_URL = 'HTTPS://FRONTEND.EXAMPLE.COM'
+
+  const origins = getAllowedCorsOrigins()
+  assert.equal(origins.filter((origin) => origin === 'https://frontend.example.com').length, 1)
+  assert.ok(origins.some((origin) => origin === 'https://frontend.example.com'))
+})
+
+test('getAllowedCorsOrigins honours CORS_ALLOWED_ORIGINS', () => {
+  setProductionBaseline()
+  process.env.CORS_ALLOWED_ORIGINS = 'https://preview-a.example.com, https://preview-b.example.com/'
+
+  const origins = getAllowedCorsOrigins()
+  assert.ok(origins.some((origin) => origin === 'https://preview-a.example.com'))
+  assert.ok(origins.some((origin) => origin === 'https://preview-b.example.com'))
+  delete process.env.CORS_ALLOWED_ORIGINS
 })
 
 test('getSessionSecret throws in production when missing', () => {
@@ -141,11 +168,34 @@ test('assertProductionRuntimeConfig fails when OWNER_TELEGRAM_ID is numeric but 
   assert.throws(() => assertProductionRuntimeConfig(), /OWNER_TELEGRAM_ID/)
 })
 
-test('getAllowedCorsOrigins returns empty array when neither FRONTEND_URL nor WEB_APP_URL is set in production', () => {
+test('getAllowedCorsOrigins falls back to the known production frontend origin', () => {
   setProductionBaseline()
   delete process.env.FRONTEND_URL
   delete process.env.WEB_APP_URL
 
   const origins = getAllowedCorsOrigins()
-  assert.equal(origins.length, 0)
+  assert.deepEqual(origins, [KNOWN_PRODUCTION_FRONTEND_ORIGIN])
+})
+
+test('ALLOW_DEMO_MODE must be a boolean string', () => {
+  setProductionBaseline()
+  process.env.ALLOW_DEMO_MODE = 'nope'
+
+  assert.equal(getRuntimeConfigSummary().ALLOW_DEMO_MODE, 'INVALID')
+  assert.throws(() => assertProductionRuntimeConfig(), /ALLOW_DEMO_MODE/)
+})
+
+test('demo mode is never enabled in production', () => {
+  setProductionBaseline()
+  process.env.ALLOW_DEMO_MODE = 'true'
+
+  assert.equal(isDemoModeEnabled(), false)
+})
+
+test('FRONTEND_URL that is not an absolute http(s) URL is INVALID', () => {
+  setProductionBaseline()
+  process.env.FRONTEND_URL = 'frontend.example.com'
+
+  assert.equal(getRuntimeConfigSummary().FRONTEND_URL, 'INVALID')
+  assert.throws(() => assertProductionRuntimeConfig(), /FRONTEND_URL/)
 })

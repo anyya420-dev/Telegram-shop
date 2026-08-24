@@ -1,3 +1,4 @@
+import { resolveApiBaseUrl } from '../lib/apiConfig'
 import type {
   AdminCategory,
   AdminCity,
@@ -20,21 +21,33 @@ import type {
   WishlistItem,
 } from '../types'
 
-// In production VITE_API_URL is baked in by Vite at build time (set in render.yaml).
-// It must include the /api path segment, e.g. https://narcos-shop.onrender.com/api.
-// In local dev without the env var the Vite proxy forwards /api/* to localhost:3001,
-// so we default to '/api' to keep the proxy mapping intact.
-const API_URL: string = import.meta.env.VITE_API_URL ?? '/api'
-const LOCALHOST_API_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i
+const IS_PRODUCTION = Boolean(import.meta.env.PROD)
+const { baseUrl: API_URL, error: API_CONFIG_ERROR } = resolveApiBaseUrl(
+  import.meta.env.VITE_API_URL,
+  IS_PRODUCTION,
+)
 
-if (import.meta.env.PROD) {
-  if (!import.meta.env.VITE_API_URL) {
-    throw new Error('Invalid production API configuration: VITE_API_URL must be set at build time')
-  }
-  if (LOCALHOST_API_PATTERN.test(API_URL)) {
-    throw new Error('Invalid production API configuration: VITE_API_URL must not target localhost')
+export const apiBaseUrl = API_URL
+export const apiConfigError = API_CONFIG_ERROR
+
+// Loud, but non-fatal: throwing at module scope would abort evaluation of the
+// whole bundle and leave the user with a blank screen instead of a diagnostic.
+if (API_CONFIG_ERROR) {
+  console.error('[api] Invalid production API configuration:', API_CONFIG_ERROR)
+}
+
+/** Safe diagnostics only — never logs initData, session tokens or admin tokens. */
+export function getApiDiagnostics() {
+  return {
+    apiBaseUrl: API_URL,
+    apiConfigured: !API_CONFIG_ERROR && API_URL.length > 0,
+    apiConfigError: API_CONFIG_ERROR,
+    mode: IS_PRODUCTION ? 'production' : 'development',
+    pageOrigin: typeof window === 'undefined' ? null : window.location.origin,
+    inTelegram: typeof window !== 'undefined' && Boolean(window.Telegram?.WebApp),
   }
 }
+
 let sessionToken: string | null = null
 let adminToken: string | null = null
 
@@ -51,22 +64,67 @@ export class ApiError extends Error {
 }
 
 const FALLBACK_CODE_BY_STATUS: Record<number, string> = {
+  400: 'validation_failed',
   401: 'unauthorized',
   403: 'forbidden',
   404: 'not_found',
   409: 'conflict',
   422: 'validation_failed',
+  429: 'too_many_requests',
   500: 'server_error',
+  502: 'server_unreachable',
   503: 'service_unavailable',
+  504: 'request_timeout',
+}
+
+const REQUEST_TIMEOUT_MS = 20_000
+
+/**
+ * A browser reports a blocked CORS response and a genuinely offline network with
+ * the exact same opaque `TypeError`. We can still distinguish the likely cause:
+ * if the browser reports itself as offline it is a network problem, otherwise a
+ * cross-origin request to a different origin was most likely blocked by CORS.
+ */
+function classifyFetchFailure(error: unknown): { code: string; message: string } {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return { code: 'request_timeout', message: 'Request timed out' }
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { code: 'network_error', message: 'Device is offline' }
+  }
+
+  const isCrossOrigin =
+    /^https?:\/\//i.test(API_URL) &&
+    typeof window !== 'undefined' &&
+    !API_URL.toLowerCase().startsWith(window.location.origin.toLowerCase())
+
+  if (isCrossOrigin) {
+    return {
+      code: 'cors_or_network_error',
+      message: 'Request was blocked before a response was received (CORS or network)',
+    }
+  }
+
+  return { code: 'network_error', message: 'Network error' }
 }
 
 async function request<T>(path: string, init?: RequestInit) {
+  if (API_CONFIG_ERROR) {
+    throw new ApiError(API_CONFIG_ERROR, 'api_not_configured')
+  }
+
   let response: Response
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController()
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    : null
 
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
       credentials: 'include',
+      signal: controller?.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
@@ -74,9 +132,20 @@ async function request<T>(path: string, init?: RequestInit) {
         ...(init?.headers ?? {}),
       },
     })
-  } catch {
-    console.error('[api] Network error – failed to reach', API_URL)
-    throw new ApiError('Network error', 'network_error')
+  } catch (fetchError) {
+    const { code, message } = classifyFetchFailure(fetchError)
+    // Safe diagnostics: URL + method only. Never log initData, tokens or bodies.
+    console.error('[api] request failed before response', {
+      url: `${API_URL}${path}`,
+      method: init?.method ?? 'GET',
+      reason: code,
+      ...getApiDiagnostics(),
+    })
+    throw new ApiError(message, code)
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
   }
 
   if (!response.ok) {
@@ -89,6 +158,15 @@ async function request<T>(path: string, init?: RequestInit) {
       } else if (path.startsWith('/admin') && path !== '/admin/auth/login' && error.code === 'unauthorized') {
         code = 'invalid_admin_session'
       }
+    }
+
+    if (response.status >= 500 || response.status === 403) {
+      console.error('[api] request rejected', {
+        url: `${API_URL}${path}`,
+        method: init?.method ?? 'GET',
+        status: response.status,
+        code,
+      })
     }
 
     throw new ApiError(error.message ?? 'Request failed', code, response.status)

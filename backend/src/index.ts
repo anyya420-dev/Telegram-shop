@@ -1,22 +1,5 @@
 import 'dotenv/config'
-import cors from 'cors'
-import express from 'express'
-import adminRouter from './routes/admin.js'
-import balanceRouter from './routes/balance.js'
-import cartRouter from './routes/cart.js'
-import casinoRouter from './routes/casino.js'
-import catalogRouter from './routes/catalog.js'
-import categoriesRouter from './routes/categories.js'
-import citiesRouter from './routes/cities.js'
-import deliveryRouter from './routes/delivery.js'
-import discountsRouter from './routes/discounts.js'
-import ordersRouter from './routes/orders.js'
-import productsRouter from './routes/products.js'
-import reviewsRouter from './routes/reviews.js'
-import sessionRouter from './routes/session.js'
-import supportRouter from './routes/support.js'
-import usersRouter from './routes/users.js'
-import wishlistRouter from './routes/wishlist.js'
+import { createApp } from './app.js'
 import { getOwnerTelegramId, seedAdminConfigForFreshInstall } from './services/adminAuthService.js'
 import {
   assertProductionRuntimeConfig,
@@ -27,51 +10,23 @@ import {
 } from './services/runtimeConfig.js'
 import { initializeTelegramBot } from './services/telegramBotRuntime.js'
 
-const app = express()
 const port = Number(process.env.PORT ?? 3001)
-
 const allowedOrigins = getAllowedCorsOrigins()
-
-app.use(cors({
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // allow requests with no origin (e.g. mobile apps, curl, Telegram WebApp)
-    if (!origin) return callback(null, true)
-    if (allowedOrigins.includes(origin)) return callback(null, true)
-    return callback(new Error(`CORS: origin ${origin} not allowed`))
-  },
-  credentials: true,
-}))
-app.use(express.json())
-
-app.use('/api/session', sessionRouter)
-app.use('/api/cities', citiesRouter)
-app.use('/api/categories', categoriesRouter)
-app.use('/api/catalog', catalogRouter)
-app.use('/api/products', productsRouter)
-app.use('/api/cart', cartRouter)
-app.use('/api/orders', ordersRouter)
-app.use('/api/users', usersRouter)
-app.use('/api/balance', balanceRouter)
-app.use('/api/casino', casinoRouter)
-app.use('/api/support', supportRouter)
-app.use('/api/discounts', discountsRouter)
-app.use('/api/reviews', reviewsRouter)
-app.use('/api/wishlist', wishlistRouter)
-app.use('/api/delivery', deliveryRouter)
-app.use('/api/admin', adminRouter)
-
-app.get('/', (_request, response) => {
-  response.json({ status: 'ok', message: 'Backend is running' })
-})
-
-app.get('/api/health', (_request, response) => {
-  response.json({ status: 'ok' })
-})
+const app = createApp({ allowedOrigins })
 
 async function start() {
   try {
     const runtimeConfig = getRuntimeConfigSummary()
+
+    // Fail fast: an unbootable configuration must not silently serve broken CORS.
     assertProductionRuntimeConfig()
+
+    if (allowedOrigins.length === 0) {
+      throw new Error(
+        '[config] No CORS origins resolved. Set FRONTEND_URL / WEB_APP_URL to the public frontend URL.',
+      )
+    }
+
     console.info('Backend startup auth config', {
       nodeEnv: process.env.NODE_ENV ?? 'undefined',
       ownerTelegramIdConfigured: Boolean(getOwnerTelegramId()),
