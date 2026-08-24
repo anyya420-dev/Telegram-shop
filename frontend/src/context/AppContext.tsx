@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
@@ -7,7 +7,18 @@ import type { BootstrapResponse, Cart, Category, City, Language, Order, ProductS
 
 const CITY_SELECTION_SKIPPED_KEY = 'telegram-shop-city-selection-skipped'
 
+type AuthStatus = 'AUTH_LOADING' | 'AUTHENTICATED' | 'AUTHENTICATION_FAILED'
+type BootstrapSnapshot = {
+  response: BootstrapResponse
+  products: ProductSummary[]
+  cart: Cart
+  recommended: ProductSummary[]
+  citySelectionSkipped: boolean
+  optionalError: string | null
+}
+
 type AppState = {
+  authStatus: AuthStatus
   loading: boolean
   error: string | null
   telegramEnvironment: boolean
@@ -40,16 +51,34 @@ type AppState = {
 }
 
 const AppContext = createContext<AppState | null>(null)
-let bootstrapInFlight: Promise<BootstrapResponse> | null = null
+let bootstrapInFlight: Promise<BootstrapSnapshot> | null = null
+let cachedBootstrapSnapshot: BootstrapSnapshot | null = null
+let cachedBootstrapKey: string | null = null
 
-function bootstrapSession(initData: string) {
-  if (!bootstrapInFlight) {
-    api.setSessionToken(null)
-    bootstrapInFlight = api.bootstrap({ initData }).finally(() => {
-      bootstrapInFlight = null
-    })
+function getCitySelectionStorageKey(telegramId: string) {
+  return `${CITY_SELECTION_SKIPPED_KEY}:${telegramId}`
+}
+
+function readCitySelectionSkipped(telegramId: string) {
+  if (typeof window === 'undefined') {
+    return false
   }
-  return bootstrapInFlight
+
+  return window.localStorage.getItem(getCitySelectionStorageKey(telegramId)) === 'true'
+}
+
+function writeCitySelectionSkipped(telegramId: string, skipped: boolean) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const key = getCitySelectionStorageKey(telegramId)
+  if (skipped) {
+    window.localStorage.setItem(key, 'true')
+    return
+  }
+
+  window.localStorage.removeItem(key)
 }
 
 function emptyCart(): Cart {
@@ -63,16 +92,71 @@ function emptyCart(): Cart {
   }
 }
 
-function translateError(error: unknown, t: (key: string) => string, fallbackKey: string) {
+function translateError(error: unknown, fallbackKey: string) {
   if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
-    return t(`errors.${error.code}`)
+    return i18n.t(`errors.${error.code}`)
   }
 
-  return t(`errors.${fallbackKey}`)
+  return i18n.t(`errors.${fallbackKey}`)
+}
+
+async function bootstrapSession(initData: string) {
+  const cacheKey = initData || '__demo__'
+
+  if (cachedBootstrapSnapshot && cachedBootstrapKey === cacheKey) {
+    return cachedBootstrapSnapshot
+  }
+
+  if (!bootstrapInFlight || cachedBootstrapKey !== cacheKey) {
+    cachedBootstrapKey = cacheKey
+    api.setSessionToken(null)
+    bootstrapInFlight = (async () => {
+      const response = await api.bootstrap({ initData })
+      api.setSessionToken(response.sessionToken)
+
+      let products: ProductSummary[] = []
+      let cart = emptyCart()
+      let recommended: ProductSummary[] = []
+      let optionalError: string | null = null
+      const citySelectionSkipped = !response.user.selectedCityId && readCitySelectionSkipped(response.user.telegramId)
+
+      if (response.user.selectedCityId) {
+        writeCitySelectionSkipped(response.user.telegramId, false)
+
+        try {
+          const [catalogResponse, cartResponse] = await Promise.all([
+            api.getCatalog({ cityId: response.user.selectedCityId }),
+            api.getCart(),
+          ])
+          products = catalogResponse.products
+          cart = cartResponse.cart
+          recommended = cartResponse.recommended
+        } catch (error) {
+          optionalError = translateError(error, 'catalog_refresh_failed')
+        }
+      }
+
+      const snapshot = {
+        response,
+        products,
+        cart,
+        recommended,
+        citySelectionSkipped,
+        optionalError,
+      } satisfies BootstrapSnapshot
+
+      cachedBootstrapSnapshot = snapshot
+      return snapshot
+    })().finally(() => {
+      bootstrapInFlight = null
+    })
+  }
+
+  return bootstrapInFlight
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [loading, setLoading] = useState(true)
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('AUTH_LOADING')
   const [error, setError] = useState<string | null>(null)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -85,89 +169,134 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [recommended, setRecommended] = useState<ProductSummary[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
-  const [citySelectionSkipped, setCitySelectionSkipped] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false
-    }
-    return window.sessionStorage.getItem(CITY_SELECTION_SKIPPED_KEY) === 'true'
-  })
+  const [citySelectionSkipped, setCitySelectionSkipped] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  const latestCatalogRequestId = useRef(0)
+  const latestOrdersRequestId = useRef(0)
+  const citiesRequestRef = useRef<Promise<City[]> | null>(null)
+  const catalogRequestRef = useRef<{ key: string; promise: Promise<void> } | null>(null)
+  const ordersRequestRef = useRef<Promise<void> | null>(null)
 
-  function t(key: string): string {
-    return i18n.t(key)
-  }
+  const loading = authStatus === 'AUTH_LOADING'
 
   function setLanguage(lang: Language) {
     void i18n.changeLanguage(lang)
   }
 
-  const refreshCities = useCallback(async () => {
-    const nextCities = await api.getCities()
-    setCities(nextCities)
-    return nextCities
+  const resetCityScopedState = useCallback(() => {
+    setProducts([])
+    setCart(emptyCart())
+    setRecommended([])
   }, [])
 
-  async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
+  const refreshCities = useCallback(async () => {
+    if (!citiesRequestRef.current) {
+      citiesRequestRef.current = api.getCities()
+        .then((nextCities) => {
+          setCities(nextCities)
+          return nextCities
+        })
+        .finally(() => {
+          citiesRequestRef.current = null
+        })
+    }
+
+    return citiesRequestRef.current
+  }, [])
+
+  const refreshCatalog = useCallback(async (search = '', categoryId: number | 'all' = 'all') => {
     if (!user?.selectedCityId) {
       setProducts([])
       return
     }
 
-    try {
-      setError(null)
-      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
-      setProducts(response.products)
-    } catch (catalogError) {
-      setError(translateError(catalogError, t, 'catalog_refresh_failed'))
-      throw catalogError
+    const requestKey = JSON.stringify([user.selectedCityId, search, categoryId])
+    if (catalogRequestRef.current?.key === requestKey) {
+      return catalogRequestRef.current.promise
     }
-  }
+
+    const requestId = ++latestCatalogRequestId.current
+    const promise = (async () => {
+      try {
+        setError(null)
+        const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
+        if (requestId === latestCatalogRequestId.current) {
+          setProducts(response.products)
+        }
+      } catch (catalogError) {
+        if (requestId === latestCatalogRequestId.current) {
+          setError(translateError(catalogError, 'catalog_refresh_failed'))
+        }
+        throw catalogError
+      }
+    })().finally(() => {
+      if (catalogRequestRef.current?.promise === promise) {
+        catalogRequestRef.current = null
+      }
+    })
+
+    catalogRequestRef.current = { key: requestKey, promise }
+    return promise
+  }, [user?.selectedCityId])
 
   useEffect(() => {
+    let cancelled = false
+
     async function bootstrap() {
       try {
-        setLoading(true)
+        setAuthStatus('AUTH_LOADING')
         setError(null)
         const telegram = getTelegramContext()
-        const response = await bootstrapSession(telegram.initData)
+        const snapshot = await bootstrapSession(telegram.initData)
 
-        api.setSessionToken(response.sessionToken)
-        setTelegramEnvironment(response.telegramEnvironment)
-        setIsAdmin(response.isAdmin ?? false)
-        setIsOwner(response.isOwner ?? false)
-        setUser(response.user)
-        void i18n.changeLanguage(response.user.language)
-        setCities(response.cities)
-        setCategories(response.categories)
+        if (cancelled) {
+          return
+        }
 
-        if (!response.user.selectedCityId) {
-          setProducts([])
-          setCart(emptyCart())
-          setRecommended([])
-        } else {
-          if (typeof window !== 'undefined') {
-            window.sessionStorage.removeItem(CITY_SELECTION_SKIPPED_KEY)
-          }
-          setCitySelectionSkipped(false)
-          const [catalogResponse, cartResponse] = await Promise.all([
-            api.getCatalog({ cityId: response.user.selectedCityId }),
-            api.getCart(),
-          ])
-          setProducts(catalogResponse.products)
-          setCart(cartResponse.cart)
-          setRecommended(cartResponse.recommended)
+        api.setSessionToken(snapshot.response.sessionToken)
+        setTelegramEnvironment(snapshot.response.telegramEnvironment)
+        setIsAdmin(snapshot.response.isAdmin ?? false)
+        setIsOwner(snapshot.response.isOwner ?? false)
+        setUser(snapshot.response.user)
+        setLanguage(snapshot.response.user.language)
+        setCities(snapshot.response.cities)
+        setCategories(snapshot.response.categories)
+        setCitySelectionSkipped(snapshot.citySelectionSkipped)
+        setProducts(snapshot.products)
+        setCart(snapshot.cart)
+        setRecommended(snapshot.recommended)
+        setAuthStatus('AUTHENTICATED')
+
+        if (snapshot.optionalError) {
+          setError(snapshot.optionalError)
         }
       } catch (bootstrapError) {
-        setError(translateError(bootstrapError, t, 'shop_load_failed'))
-      } finally {
-        setLoading(false)
+        if (cancelled) {
+          return
+        }
+
+        api.setSessionToken(null)
+        setTelegramEnvironment(false)
+        setIsAdmin(false)
+        setIsOwner(false)
+        setUser(null)
+        setCities([])
+        setCategories([])
+        setOrders([])
+        setCitySelectionSkipped(false)
+        resetCityScopedState()
+        setError(translateError(bootstrapError, 'shop_load_failed'))
+        setAuthStatus('AUTHENTICATION_FAILED')
       }
     }
 
     void bootstrap()
-  }, [])  // no dependency on setLanguage needed
+    return () => {
+      cancelled = true
+    }
+  }, [resetCityScopedState])
 
-  async function selectCity(cityId: number) {
+  const selectCity = useCallback(async (cityId: number) => {
     if (!user) {
       return
     }
@@ -177,9 +306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const response = await api.updateCity(cityId)
       setUser(response.user)
       setCityPickerOpen(false)
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem(CITY_SELECTION_SKIPPED_KEY)
-      }
+      writeCitySelectionSkipped(response.user.telegramId, false)
       setCitySelectionSkipped(false)
 
       const productsResponse = await api.getCatalog({ cityId })
@@ -188,12 +315,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCart(cartResponse.cart)
       setRecommended(cartResponse.recommended)
     } catch (cityError) {
-      setError(translateError(cityError, t, 'city_not_found'))
+      setError(translateError(cityError, 'city_not_found'))
       throw cityError
     }
-  }
+  }, [user])
 
-  async function updateLanguagePreference(language: Language) {
+  const updateLanguagePreference = useCallback(async (language: Language) => {
     if (!user || user.language === language) {
       return
     }
@@ -204,12 +331,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUser(response.user)
       void i18n.changeLanguage(response.user.language)
     } catch (languageError) {
-      setError(translateError(languageError, t, 'language_update_failed'))
+      setError(translateError(languageError, 'language_update_failed'))
       throw languageError
     }
-  }
+  }, [user])
 
-  async function addToCart(productCityId: number, quantity: number) {
+  const addToCart = useCallback(async (productCityId: number, quantity: number) => {
     if (!user) {
       return
     }
@@ -220,12 +347,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCart(response.cart)
       setRecommended(response.recommended)
     } catch (cartError) {
-      setError(translateError(cartError, t, 'cart_update_failed'))
+      setError(translateError(cartError, 'cart_update_failed'))
       throw cartError
     }
-  }
+  }, [user])
 
-  async function updateCartItem(itemId: number, quantity: number) {
+  const updateCartItem = useCallback(async (itemId: number, quantity: number) => {
     if (!user) {
       return
     }
@@ -236,12 +363,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCart(response.cart)
       setRecommended(response.recommended)
     } catch (cartError) {
-      setError(translateError(cartError, t, 'cart_update_failed'))
+      setError(translateError(cartError, 'cart_update_failed'))
       throw cartError
     }
-  }
+  }, [user])
 
-  async function removeCartItem(itemId: number) {
+  const removeCartItem = useCallback(async (itemId: number) => {
     if (!user) {
       return
     }
@@ -252,12 +379,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCart(response.cart)
       setRecommended(response.recommended)
     } catch (cartError) {
-      setError(translateError(cartError, t, 'cart_update_failed'))
+      setError(translateError(cartError, 'cart_update_failed'))
       throw cartError
     }
-  }
+  }, [user])
 
-  async function checkout(options?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) {
+  const checkout = useCallback(async (options?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) => {
     if (!user) {
       throw new Error('User not loaded')
     }
@@ -270,29 +397,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setOrders((prev) => [response.order, ...prev])
       return response.order
     } catch (checkoutError) {
-      setError(translateError(checkoutError, t, 'checkout_failed'))
+      setError(translateError(checkoutError, 'checkout_failed'))
       throw checkoutError
     }
-  }
+  }, [user])
 
-  async function fetchOrders() {
+  const fetchOrders = useCallback(async () => {
     if (!user) {
       return
     }
 
-    try {
-      setOrdersLoading(true)
-      setError(null)
-      const response = await api.getOrders()
-      setOrders(response.orders)
-    } catch (ordersError) {
-      setError(translateError(ordersError, t, 'orders_fetch_failed'))
-    } finally {
-      setOrdersLoading(false)
+    if (!ordersRequestRef.current) {
+      const requestId = ++latestOrdersRequestId.current
+      ordersRequestRef.current = (async () => {
+        try {
+          setOrdersLoading(true)
+          setError(null)
+          const response = await api.getOrders()
+          if (requestId === latestOrdersRequestId.current) {
+            setOrders(response.orders)
+          }
+        } catch (ordersError) {
+          if (requestId === latestOrdersRequestId.current) {
+            setError(translateError(ordersError, 'orders_fetch_failed'))
+          }
+        } finally {
+          if (requestId === latestOrdersRequestId.current) {
+            setOrdersLoading(false)
+          }
+        }
+      })().finally(() => {
+        ordersRequestRef.current = null
+      })
     }
-  }
 
-  const value = {
+    await ordersRequestRef.current
+  }, [user])
+
+  const openCityPicker = useCallback(() => setCityPickerOpen(true), [])
+  const closeCityPicker = useCallback(() => setCityPickerOpen(false), [])
+
+  const skipCitySelection = useCallback(() => {
+    if (user) {
+      writeCitySelectionSkipped(user.telegramId, true)
+    }
+    setCitySelectionSkipped(true)
+    setCityPickerOpen(false)
+    resetCityScopedState()
+  }, [resetCityScopedState, user])
+
+  const clearCitySelectionSkip = useCallback(() => {
+    if (user) {
+      writeCitySelectionSkipped(user.telegramId, false)
+    }
+    setCitySelectionSkipped(false)
+  }, [user])
+
+  const value = useMemo(() => ({
+    authStatus,
     loading,
     error,
     telegramEnvironment,
@@ -308,24 +470,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ordersLoading,
     citySelectionSkipped,
     cityPickerOpen,
-    openCityPicker: () => setCityPickerOpen(true),
-    closeCityPicker: () => setCityPickerOpen(false),
-    skipCitySelection: () => {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.setItem(CITY_SELECTION_SKIPPED_KEY, 'true')
-      }
-      setCitySelectionSkipped(true)
-      setCityPickerOpen(false)
-      setProducts([])
-      setCart(emptyCart())
-      setRecommended([])
-    },
-    clearCitySelectionSkip: () => {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.removeItem(CITY_SELECTION_SKIPPED_KEY)
-      }
-      setCitySelectionSkipped(false)
-    },
+    openCityPicker,
+    closeCityPicker,
+    skipCitySelection,
+    clearCitySelectionSkip,
     refreshCities,
     refreshCatalog,
     selectCity,
@@ -336,7 +484,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     checkout,
     fetchOrders,
     setError,
-  } satisfies AppState
+  } satisfies AppState), [
+    authStatus,
+    loading,
+    error,
+    telegramEnvironment,
+    isAdmin,
+    isOwner,
+    user,
+    cities,
+    categories,
+    products,
+    cart,
+    recommended,
+    orders,
+    ordersLoading,
+    citySelectionSkipped,
+    cityPickerOpen,
+    openCityPicker,
+    closeCityPicker,
+    skipCitySelection,
+    clearCitySelectionSkip,
+    refreshCities,
+    refreshCatalog,
+    selectCity,
+    updateLanguagePreference,
+    addToCart,
+    updateCartItem,
+    removeCartItem,
+    checkout,
+    fetchOrders,
+  ])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

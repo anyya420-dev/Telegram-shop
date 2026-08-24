@@ -133,12 +133,12 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   const telegramId = normalizeTelegramId(request.body.telegramId)
   const password = typeof request.body.password === 'string' ? request.body.password : ''
 
-  if (!telegramId || !password) {
-    sendError(response, 400, 'invalid_credentials', 'Telegram ID and password are required')
+  if (!password) {
+    sendError(response, 400, 'invalid_credentials', 'Administrator password is required')
     return
   }
 
-  if (telegramId !== admin.user.telegramId) {
+  if (telegramId && telegramId !== admin.user.telegramId) {
     sendError(response, 403, 'forbidden', 'Telegram ID does not match current user session')
     return
   }
@@ -255,6 +255,11 @@ router.patch('/settings/administrators/:telegramId', authRateLimiter, async (req
     return
   }
 
+  if (isOwnerTelegramId(currentId)) {
+    sendError(response, 403, 'forbidden', 'Cannot modify OWNER administrator ID')
+    return
+  }
+
   const existing = await prisma.administrator.findUnique({ where: { telegramId: currentId } })
   if (!existing) {
     sendError(response, 404, 'admin_not_found', 'Administrator not found')
@@ -286,7 +291,12 @@ router.delete('/settings/administrators/:telegramId', authRateLimiter, async (re
 
   const telegramId = normalizeTelegramId(request.params.telegramId)
   if (!telegramId) {
-    sendError(response, 400, 'invalid_telegram_id', 'Telegram ID must contain only digits')
+    sendError(response, 400, 'invalid_telegram_id', 'Telegram ID must be numeric')
+    return
+  }
+
+  if (isOwnerTelegramId(telegramId)) {
+    sendError(response, 403, 'forbidden', 'Cannot delete OWNER administrator')
     return
   }
 

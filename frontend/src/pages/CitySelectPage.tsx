@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getLocalizedCityName } from '../lib/localized';
@@ -8,7 +8,7 @@ import i18n from '../lib/i18n';
 import type { City } from '../types';
 
 export default function CitySelectPage() {
-  const { cities, refreshCities, selectCity, skipCitySelection, user } = useApp();
+  const { authStatus, cities, refreshCities, selectCity, skipCitySelection, user } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [selecting, setSelecting] = useState<number | null>(null);
@@ -22,7 +22,7 @@ export default function CitySelectPage() {
     }
   }, [navigate, user]);
 
-  async function loadCities() {
+  const loadCities = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -33,11 +33,11 @@ export default function CitySelectPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [refreshCities, t]);
 
   useEffect(() => {
     void loadCities();
-  }, []);
+  }, [loadCities]);
 
   async function handleSelect(cityId: number) {
     setSelecting(cityId);
@@ -52,6 +52,16 @@ export default function CitySelectPage() {
   function handleSkipSelection() {
     skipCitySelection();
     navigate('/shop', { replace: true });
+  }
+
+  if (authStatus === 'AUTHENTICATION_FAILED' && !user) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.stateCard}>
+          <p>{t('errors.shop_load_failed')}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -86,20 +96,27 @@ export default function CitySelectPage() {
           </button>
         </div>
       ) : (
-        <div className={styles.list}>
-          {cityList.map((city) => (
-            <button
-              key={city.id}
-              className={`${styles.cityBtn} ${selecting === city.id ? styles.selected : ''}`}
-              onClick={() => handleSelect(city.id)}
-              disabled={selecting !== null}
-              type="button"
-            >
-              <span className={styles.cityName}>{getLocalizedCityName(city, i18n.language as 'ru' | 'en')}</span>
-              <span className={styles.arrow}>→</span>
+        <>
+          <div className={styles.list}>
+            {cityList.map((city) => (
+              <button
+                key={city.id}
+                className={`${styles.cityBtn} ${selecting === city.id ? styles.selected : ''}`}
+                onClick={() => handleSelect(city.id)}
+                disabled={selecting !== null}
+                type="button"
+              >
+                <span className={styles.cityName}>{getLocalizedCityName(city, i18n.language as 'ru' | 'en')}</span>
+                <span className={styles.arrow}>→</span>
+              </button>
+            ))}
+          </div>
+          {!user?.selectedCityId && (
+            <button className={styles.laterBtn} onClick={handleSkipSelection} type="button">
+              {t('city.chooseLater')}
             </button>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );

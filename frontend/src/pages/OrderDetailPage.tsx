@@ -41,7 +41,7 @@ export default function OrderDetailPage() {
       setLoading(false);
     }
     void load();
-  }, [id]);
+  }, [fetchOrders, id, orders]);
 
   useEffect(() => {
     if (id && !loading) {

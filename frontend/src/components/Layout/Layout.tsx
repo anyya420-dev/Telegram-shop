@@ -52,7 +52,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
-  const { error, loading, setError, user, cart, citySelectionSkipped } = useApp();
+  const { authStatus, error, loading, setError, user, cart, citySelectionSkipped } = useApp();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,6 +67,16 @@ export default function Layout() {
     return (
       <div className={styles.loading}>
         <div className={styles.spinner} aria-hidden="true" />
+      </div>
+    );
+  }
+
+  if (authStatus === 'AUTHENTICATION_FAILED' && !user) {
+    return (
+      <div className={styles.loading}>
+        <div className={styles.errorBanner} role="alert">
+          <span>{error ?? t('errors.shop_load_failed')}</span>
+        </div>
       </div>
     );
   }
