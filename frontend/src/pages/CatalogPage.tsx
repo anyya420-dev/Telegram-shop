@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
@@ -38,6 +38,7 @@ export default function CatalogPage() {
   const [showSort, setShowSort] = useState(false);
   const [loading, setLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const mountedRef = useRef(false);
 
   const doRefresh = useCallback(async (s: string, cat: number | 'all') => {
     setLoading(true);
@@ -57,6 +58,10 @@ export default function CatalogPage() {
 
   useEffect(() => {
     if (!user?.selectedCityId) return;
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
     const handle = window.setTimeout(() => {
       void doRefresh(search.trim(), activeCategoryId);
     }, 350);
@@ -206,4 +211,3 @@ export default function CatalogPage() {
     </div>
   );
 }
-

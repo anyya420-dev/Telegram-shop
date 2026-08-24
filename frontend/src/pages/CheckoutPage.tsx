@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { api } from '../api/client';
@@ -27,21 +27,22 @@ export default function CheckoutPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successOrderId, setSuccessOrderId] = useState<number | null>(null);
 
-  useEffect(() => {
-    async function loadDelivery() {
-      try {
-        setDeliveryLoading(true);
-        setDeliveryError(null);
-        const response = await api.getDeliveryOptions();
-        setDeliveryOptions(response.options);
-      } catch (err) {
-        setDeliveryError(err instanceof Error ? err.message : t('errors.request_failed'));
-      } finally {
-        setDeliveryLoading(false);
-      }
+  const loadDelivery = useCallback(async () => {
+    try {
+      setDeliveryLoading(true);
+      setDeliveryError(null);
+      const response = await api.getDeliveryOptions();
+      setDeliveryOptions(response.options);
+    } catch (err) {
+      setDeliveryError(err instanceof Error ? err.message : t('errors.request_failed'));
+    } finally {
+      setDeliveryLoading(false);
     }
-    void loadDelivery();
   }, [t]);
+
+  useEffect(() => {
+    void loadDelivery();
+  }, [loadDelivery]);
 
   const selectedDelivery = useMemo(
     () => deliveryOptions.find((option) => option.id === selectedDeliveryId) ?? null,
@@ -89,18 +90,6 @@ export default function CheckoutPage() {
     }
   }
 
-  if (!cart || cart.items.length === 0) {
-    return (
-      <div className={styles.empty}>
-        <h1 className={styles.title}>{t('checkout.title')}</h1>
-        <p className={styles.emptyText}>{t('cart.empty')}</p>
-        <button className={styles.primaryBtn} onClick={() => navigate('/catalog')} type="button">
-          {t('cart.continueShopping')}
-        </button>
-      </div>
-    );
-  }
-
   if (successOrderId) {
     return (
       <div className={styles.empty}>
@@ -108,6 +97,18 @@ export default function CheckoutPage() {
         <p className={styles.emptyText}>{t('checkout.successText')}</p>
         <button className={styles.primaryBtn} onClick={() => navigate(`/orders/${successOrderId}`)} type="button">
           {t('checkout.viewOrder')}
+        </button>
+      </div>
+    );
+  }
+
+  if (!cart || cart.items.length === 0) {
+    return (
+      <div className={styles.empty}>
+        <h1 className={styles.title}>{t('checkout.title')}</h1>
+        <p className={styles.emptyText}>{t('cart.empty')}</p>
+        <button className={styles.primaryBtn} onClick={() => navigate('/catalog')} type="button">
+          {t('cart.continueShopping')}
         </button>
       </div>
     );
@@ -163,7 +164,7 @@ export default function CheckoutPage() {
         {deliveryError && (
           <div className={styles.errorRow}>
             <p className={styles.error}>{deliveryError}</p>
-            <button className={styles.secondaryBtn} onClick={() => window.location.reload()} type="button">
+            <button className={styles.secondaryBtn} onClick={() => void loadDelivery()} type="button">
               {t('common.retry')}
             </button>
           </div>

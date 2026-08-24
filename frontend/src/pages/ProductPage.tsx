@@ -306,7 +306,7 @@ export default function ProductPage() {
 
       {relatedProducts.length > 0 && (
         <div className={styles.relatedSection}>
-          <h3 className={styles.reviewsTitle}>{t('product.related')}</h3>
+          <h3 className={styles.relatedTitle}>{t('product.related')}</h3>
           <div className={styles.relatedGrid}>
             {relatedProducts.map((related) => (
               <ProductCard

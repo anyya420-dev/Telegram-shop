@@ -61,8 +61,7 @@
     "submitReview": "Submit",
     "submitting": "Submitting...",
     "addToWishlist": "Add to wishlist",
-    "inWishlist": "In wishlist"
-    ,
+    "inWishlist": "In wishlist",
     "stockAvailable": "In stock: {{count}} {{unit}}",
     "featured": "TOP"
   },

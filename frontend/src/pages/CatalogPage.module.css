@@ -151,6 +151,7 @@
   padding-bottom: 75%;
   border-radius: var(--radius-md);
   background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  background-size: 400px 100%;
   animation: shimmer 1.2s infinite linear;
 }
 
@@ -165,6 +166,11 @@
 
 .skeletonLineShort {
   width: 60%;
+}
+
+.skeletonLine,
+.skeletonLineShort {
+  background-size: 400px 100%;
 }
 
 @keyframes spin {

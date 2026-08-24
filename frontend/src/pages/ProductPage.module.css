@@ -505,9 +505,15 @@
   padding: 0 16px 16px;
 }
 
+.relatedTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+
 .relatedGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
-
