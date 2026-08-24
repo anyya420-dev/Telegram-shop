@@ -180,7 +180,7 @@ router.get('/auth/status', authRateLimiter, async (request, response) => {
 })
 
 router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
-  const admin = await getAdminUser(request, response, { requireAdminSession: false })
+  const admin = await getAdminUser(request, response)
   if (!admin) return
 
   const ownerConfiguredId = getOwnerTelegramId()
@@ -193,18 +193,30 @@ router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
   const runtime = getRuntimeConfigStatus()
   const adminToken = getAdminSessionToken(request)
   const session = await getAuthorizedAdminSession(adminToken)
-  const sameAdminSession = Boolean(session && session.admin.telegramId === admin.user.telegramId)
+  const adminSessionValid = Boolean(session && session.admin.telegramId === admin.user.telegramId)
   const telegramIdRecognized = await isAdminTelegramId(admin.user.telegramId)
 
   response.json({
-    telegramSession: 'valid',
+    telegramSessionValid: true,
     telegramIdRecognized,
     ownerConfigured: Boolean(ownerConfiguredId),
     ownerMatch,
+    administratorRecordExists: Boolean(admin.administrator?.id),
     adminPasswordConfigured: runtime.adminPasswordConfigured,
     databaseConfigured: runtime.databaseConfigured,
     botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
-    adminSession: sameAdminSession ? 'valid' : 'none',
+    adminSessionValid,
+    environment: getRuntimeEnvironmentLabel(),
+  })
+})
+
+router.get('/diagnostics/runtime', authRateLimiter, (_request, response) => {
+  const runtime = getRuntimeConfigStatus()
+  response.json({
+    ownerConfigured: runtime.ownerTelegramIdConfigured,
+    adminPasswordConfigured: runtime.adminPasswordConfigured,
+    databaseConfigured: runtime.databaseConfigured,
+    botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
     environment: getRuntimeEnvironmentLabel(),
   })
 })

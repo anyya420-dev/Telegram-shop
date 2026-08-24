@@ -17,7 +17,7 @@ import sessionRouter from './routes/session.js'
 import supportRouter from './routes/support.js'
 import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
-import { getOwnerTelegramId } from './services/adminAuthService.js'
+import { getOwnerTelegramId, seedAdminConfigForFreshInstall } from './services/adminAuthService.js'
 import { getMissingRequiredRuntimeConfigKeys, getRuntimeConfigSummary } from './services/runtimeConfig.js'
 import { initializeTelegramBot } from './services/telegramBotRuntime.js'
 
@@ -82,6 +82,7 @@ async function start() {
         missing: missingRequiredConfig,
       })
     }
+    await seedAdminConfigForFreshInstall()
     console.log('Backend startup: initializing Telegram bot before starting HTTP server')
     await initializeTelegramBot()
     app.listen(port, '0.0.0.0', () => {

@@ -228,10 +228,6 @@ export type PasswordVerifyResult =
  */
 export async function verifyAdminPassword(password: string): Promise<PasswordVerifyResult> {
   const envPassword = getEnvAdminPassword()
-  if (!envPassword) {
-    return { valid: false, reason: 'configuration_error' }
-  }
-
   const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
 
   if (security) {
@@ -260,6 +256,10 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
     }
 
     return { valid: false, reason: 'invalid_credentials' }
+  }
+
+  if (!envPassword) {
+    return { valid: false, reason: 'configuration_error' }
   }
 
   if (envPasswordMatchesSubmitted(envPassword, password)) {
@@ -353,5 +353,10 @@ export async function getAuthorizedAdminSession(token: string | undefined) {
 }
 
 export async function hasAdminPasswordConfigured() {
-  return Boolean(getEnvAdminPassword())
+  if (getEnvAdminPassword()) {
+    return true
+  }
+
+  const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
+  return Boolean(security)
 }
