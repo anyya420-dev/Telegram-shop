@@ -355,3 +355,13 @@ test('createAdminSession produces a token with sufficient entropy (length > 30)'
   assert.ok(session.token.length > 30, 'token should have sufficient length')
 })
 
+test('getAuthorizedAdminSession returns null for missing/undefined token', async () => {
+  const result = await getAuthorizedAdminSession(undefined)
+  assert.equal(result, null)
+})
+
+test('getAuthorizedAdminSession returns null for empty string token', async () => {
+  const result = await getAuthorizedAdminSession('')
+  assert.equal(result, null)
+})
+

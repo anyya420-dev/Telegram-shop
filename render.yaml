@@ -3,9 +3,9 @@ databases:
     plan: free
 
 services:
-  # Backend Web Service
+  # Backend Web Service (Render service name: Narcos-shop)
   - type: web
-    name: telegram-shop-backend
+    name: Narcos-shop
     runtime: node
     plan: free
     buildCommand: npm install --include=dev && npm run build --workspace backend
@@ -38,10 +38,10 @@ services:
       - key: ADMIN_TELEGRAM_IDS
         sync: false
 
-  # Frontend Static Site
+  # Frontend Static Site (Render service name: Telegram-shop)
   - type: web
     runtime: static
-    name: telegram-shop-frontend
+    name: Telegram-shop
     buildCommand: npm install && npm run build --workspace frontend
     staticPublishPath: frontend/dist
     envVars:
