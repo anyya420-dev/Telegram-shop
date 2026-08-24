@@ -72,19 +72,19 @@ This was the key gap left by prior fixes: application startup order had been fix
 
 ## 6. Files Changed
 
-### `/home/runner/work/Telegram-shop/Telegram-shop/backend/package.json`
+### `backend/package.json` (`/home/runner/work/Telegram-shop/Telegram-shop/backend/package.json`)
 - Removed `npm run db:migrate:deploy` from `prestart`.
 - Reason: prevent database migration work from blocking `node dist/index.js` and delaying or preventing binding to Render's `PORT`.
 
-### `/home/runner/work/Telegram-shop/Telegram-shop/render.yaml`
+### `render.yaml` (`/home/runner/work/Telegram-shop/Telegram-shop/render.yaml`)
 - Added `preDeployCommand: npm run db:migrate:deploy --workspace backend` to the backend service.
 - Reason: keep migrations in the deploy lifecycle, but execute them before the new release becomes live rather than during process boot.
 
-### `/home/runner/work/Telegram-shop/Telegram-shop/README.md`
+### `README.md` (`/home/runner/work/Telegram-shop/Telegram-shop/README.md`)
 - Added deployment note describing why production migrations belong in Render `preDeployCommand`.
 - Reason: document the startup constraint so the bug is not reintroduced.
 
-### `/home/runner/work/Telegram-shop/Telegram-shop/PRODUCTION_FINAL_REPORT.md`
+### `PRODUCTION_FINAL_REPORT.md` (`/home/runner/work/Telegram-shop/Telegram-shop/PRODUCTION_FINAL_REPORT.md`)
 - Added full technical investigation and final verification report.
 - Reason: satisfy the final reporting requirement with one complete root-level file.
 
