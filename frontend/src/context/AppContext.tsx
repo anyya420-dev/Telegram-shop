@@ -5,6 +5,8 @@ import i18n from '../lib/i18n'
 import { getTelegramContext } from '../lib/telegram'
 import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
 
+const CITY_SELECTION_SKIPPED_KEY = 'telegram-shop-city-selection-skipped'
+
 type AppState = {
   loading: boolean
   error: string | null
@@ -18,9 +20,12 @@ type AppState = {
   recommended: ProductSummary[]
   orders: Order[]
   ordersLoading: boolean
+  citySelectionSkipped: boolean
   cityPickerOpen: boolean
   openCityPicker: () => void
   closeCityPicker: () => void
+  skipCitySelection: () => void
+  clearCitySelectionSkip: () => void
   refreshCities: () => Promise<City[]>
   refreshCatalog: (search?: string, categoryId?: number | 'all') => Promise<void>
   selectCity: (cityId: number) => Promise<void>
@@ -67,6 +72,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [recommended, setRecommended] = useState<ProductSummary[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
+  const [citySelectionSkipped, setCitySelectionSkipped] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+    return window.sessionStorage.getItem(CITY_SELECTION_SKIPPED_KEY) === 'true'
+  })
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
 
   function t(key: string): string {
@@ -123,6 +134,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCart(emptyCart())
           setRecommended([])
         } else {
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.removeItem(CITY_SELECTION_SKIPPED_KEY)
+          }
+          setCitySelectionSkipped(false)
           const [catalogResponse, cartResponse] = await Promise.all([
             api.getCatalog({ cityId: response.user.selectedCityId }),
             api.getCart(),
@@ -151,6 +166,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const response = await api.updateCity(cityId)
       setUser(response.user)
       setCityPickerOpen(false)
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(CITY_SELECTION_SKIPPED_KEY)
+      }
+      setCitySelectionSkipped(false)
 
       const productsResponse = await api.getCatalog({ cityId })
       const cartResponse = await api.getCart()
@@ -275,9 +294,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     recommended,
     orders,
     ordersLoading,
+    citySelectionSkipped,
     cityPickerOpen,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
+    skipCitySelection: () => {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(CITY_SELECTION_SKIPPED_KEY, 'true')
+      }
+      setCitySelectionSkipped(true)
+      setCityPickerOpen(false)
+      setProducts([])
+      setCart(emptyCart())
+      setRecommended([])
+    },
+    clearCitySelectionSkip: () => {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(CITY_SELECTION_SKIPPED_KEY)
+      }
+      setCitySelectionSkipped(false)
+    },
     refreshCities,
     refreshCatalog,
     selectCity,

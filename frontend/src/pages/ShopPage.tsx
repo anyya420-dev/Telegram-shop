@@ -17,8 +17,11 @@ export default function ShopPage() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
+    if (!user?.selectedCityId) {
+      return;
+    }
     void refreshCatalog(search, activeCategoryId);
-  }, []);
+  }, [activeCategoryId, refreshCatalog, search, user?.selectedCityId]);
 
   const handleSearch = useCallback(() => {
     void refreshCatalog(search, activeCategoryId);
@@ -31,9 +34,13 @@ export default function ShopPage() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <h1 className={styles.title}>{t('shop.title')}</h1>
-          {user?.selectedCity && (
-            <button className={styles.city} onClick={() => openCityPicker()}>
+          {user?.selectedCity ? (
+            <button className={styles.city} onClick={() => openCityPicker()} type="button">
               {user.selectedCity.name}
+            </button>
+          ) : (
+            <button className={styles.city} onClick={() => navigate('/select-city')} type="button">
+              {t('city.selectAction')}
             </button>
           )}
         </div>
@@ -53,60 +60,78 @@ export default function ShopPage() {
         </button>
       </div>
 
-      <div className={styles.searchWrap}>
-        <input
-          className={styles.search}
-          type="text"
-          placeholder={t('shop.searchPlaceholder')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-        />
-      </div>
-
-      <div className={styles.categories}>
-        <button
-          className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
-          onClick={() => {
-            setActiveCategoryId('all');
-            void refreshCatalog(search, 'all');
-          }}
-        >
-          {t('shop.allCategories')}
-        </button>
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
-            onClick={() => {
-              setActiveCategoryId(cat.id);
-              void refreshCatalog(search, cat.id);
-            }}
-          >
-            {getLocalizedCategoryName(cat, language)}
-          </button>
-        ))}
-      </div>
-
-      {products.length === 0 ? (
+      {!user?.selectedCityId ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
             </svg>
           </div>
-          <p>{t('shop.empty')}</p>
+          <p>{t('city.productsAfterSelection')}</p>
+          <button className={styles.selectCityBtn} onClick={() => navigate('/select-city')} type="button">
+            {t('city.selectAction')}
+          </button>
         </div>
       ) : (
-        <div className={styles.grid}>
-          {products.map((product) => (
-            <ProductCard
-              key={product.productCityId}
-              product={product as any}
-              onClick={() => navigate(`/shop/product/${product.id}`)}
+        <>
+
+          <div className={styles.searchWrap}>
+            <input
+              className={styles.search}
+              type="text"
+              placeholder={t('shop.searchPlaceholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
-          ))}
-        </div>
+          </div>
+
+          <div className={styles.categories}>
+            <button
+              className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
+              onClick={() => {
+                setActiveCategoryId('all');
+                void refreshCatalog(search, 'all');
+              }}
+            >
+              {t('shop.allCategories')}
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
+                onClick={() => {
+                  setActiveCategoryId(cat.id);
+                  void refreshCatalog(search, cat.id);
+                }}
+              >
+                {getLocalizedCategoryName(cat, language)}
+              </button>
+            ))}
+          </div>
+
+          {products.length === 0 ? (
+            <div className={styles.empty}>
+              <div className={styles.emptyIcon}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                </svg>
+              </div>
+              <p>{t('shop.empty')}</p>
+            </div>
+          ) : (
+            <div className={styles.grid}>
+              {products.map((product) => (
+                <ProductCard
+                  key={product.productCityId}
+                  product={product as any}
+                  onClick={() => navigate(`/shop/product/${product.id}`)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

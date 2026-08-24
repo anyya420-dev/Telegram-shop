@@ -108,6 +108,18 @@
   font-weight: 600;
 }
 
+.laterBtn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .spinner {
   width: 32px;
   height: 32px;

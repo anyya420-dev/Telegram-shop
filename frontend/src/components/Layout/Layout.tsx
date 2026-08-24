@@ -52,16 +52,16 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
-  const { error, loading, setError, user, cart } = useApp();
+  const { error, loading, setError, user, cart, citySelectionSkipped } = useApp();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    if (!loading && user && !user.selectedCityId) {
+    if (!loading && user && !user.selectedCityId && !citySelectionSkipped) {
       navigate('/select-city', { replace: true });
     }
-  }, [loading, navigate, user]);
+  }, [citySelectionSkipped, loading, navigate, user]);
 
   if (loading) {
     return (

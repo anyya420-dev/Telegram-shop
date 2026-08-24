@@ -44,11 +44,9 @@ export function CityPicker() {
             <span className="eyebrow">{t('cityPicker.badge')}</span>
             <h2>{t('cityPicker.title')}</h2>
           </div>
-          {user?.selectedCityId ? (
-            <button className="ghost-button" type="button" onClick={closeCityPicker}>
-              {t('common.later')}
-            </button>
-          ) : null}
+          <button className="ghost-button" type="button" onClick={closeCityPicker}>
+            {user?.selectedCityId ? t('common.later') : t('common.close')}
+          </button>
         </div>
         {loading ? (
           <p className="subtle-text">{t('common.loading')}</p>

@@ -155,3 +155,14 @@
   color: var(--text-muted);
   margin: 0 auto 14px;
 }
+
+.selectCityBtn {
+  margin-top: 10px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
