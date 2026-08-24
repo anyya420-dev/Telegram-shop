@@ -10,7 +10,6 @@ import {
   isAdminTelegramId,
   listAdministratorIds,
   revokeAdminSession,
-  seedAdminConfigForFreshInstall,
   setAdminPassword,
   verifyAdminPassword,
 } from '../services/adminAuthService.js'
@@ -51,8 +50,10 @@ async function getAdminUser(request: Request, response: Response, options?: { re
     return null
   }
 
-  const user = await prisma.user.findUnique({ where: { telegramId } })
-  const administrator = await prisma.administrator.findUnique({ where: { telegramId } })
+  const [user, administrator] = await Promise.all([
+    prisma.user.findUnique({ where: { telegramId } }),
+    prisma.administrator.findUnique({ where: { telegramId } }),
+  ])
   if (!user || !administrator) {
     sendError(response, 403, 'forbidden', 'Admin access required')
     return null
@@ -79,7 +80,7 @@ function normalizeTelegramId(value: unknown) {
   return normalized
 }
 
-function isStrongPassword(password: string) {
+function meetsMinimumPasswordLength(password: string) {
   return password.length >= 8
 }
 
@@ -104,7 +105,6 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response, { requireAdminSession: false })
   if (!admin) return
 
-  await seedAdminConfigForFreshInstall(admin.user.telegramId)
 
   const telegramId = normalizeTelegramId(request.body.telegramId)
   const password = typeof request.body.password === 'string' ? request.body.password : ''
@@ -167,7 +167,7 @@ router.post('/settings/password', authRateLimiter, async (request, response) => 
   const currentPassword = typeof request.body.currentPassword === 'string' ? request.body.currentPassword : ''
   const newPassword = typeof request.body.newPassword === 'string' ? request.body.newPassword : ''
 
-  if (!newPassword || !isStrongPassword(newPassword)) {
+  if (!newPassword || !meetsMinimumPasswordLength(newPassword)) {
     sendError(response, 400, 'weak_password', 'Password must contain at least 8 characters')
     return
   }
@@ -181,7 +181,7 @@ router.post('/settings/password', authRateLimiter, async (request, response) => 
     }
   }
 
-  await setAdminPassword(newPassword, admin.user.id)
+  await setAdminPassword(newPassword, admin.administrator.id)
 
   await prisma.adminSession.updateMany({
     where: { revokedAt: null },

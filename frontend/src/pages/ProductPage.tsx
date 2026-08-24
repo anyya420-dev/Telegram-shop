@@ -296,7 +296,7 @@ export default function ProductPage() {
           <div key={review.id} className={styles.reviewCard}>
             <div className={styles.reviewTop}>
               <span className={styles.reviewAuthor}>{review.user.firstName}</span>
-              <span className={styles.reviewRating}>{Array.from({ length: review.rating }).map((_, index) => '★').join('')}</span>
+              <span className={styles.reviewRating}>{'★'.repeat(review.rating)}</span>
             </div>
             {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
             <span className={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US')}</span>

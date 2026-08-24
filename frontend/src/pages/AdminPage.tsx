@@ -195,6 +195,21 @@ export default function AdminPage() {
     }
   }
 
+
+  async function handleDisconnectBot() {
+    if (!settings?.bot.connected) return
+    setLoading(true)
+    setStatus(null)
+    try {
+      await api.disconnectAdminBot()
+      await refreshSettings('Bot disconnected.')
+    } catch (error) {
+      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to disconnect bot' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const botStatusLabel = useMemo(() => {
     if (!settings) return 'Disconnected'
     if (settings.bot.connected) return 'Connected'
@@ -277,7 +292,7 @@ export default function AdminPage() {
             </div>
             <div className={styles.actions}>
               <button className={styles.ghostButton} onClick={() => void handleTestBot()} disabled={loading || !settings.bot.connected}>Test connection</button>
-              <button className={styles.removeButton} onClick={() => void api.disconnectAdminBot().then(() => refreshSettings('Bot disconnected.')).catch((error: unknown) => setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to disconnect bot' }))} disabled={loading || !settings.bot.connected}>Disconnect</button>
+              <button className={styles.removeButton} onClick={() => void handleDisconnectBot()} disabled={loading || !settings.bot.connected}>Disconnect</button>
             </div>
           </section>
 
