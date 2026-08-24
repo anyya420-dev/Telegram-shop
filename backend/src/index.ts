@@ -18,6 +18,7 @@ import supportRouter from './routes/support.js'
 import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
 import { getOwnerTelegramId } from './services/adminAuthService.js'
+import { getMissingRequiredRuntimeConfigKeys, getRuntimeConfigSummary } from './services/runtimeConfig.js'
 import { initializeTelegramBot } from './services/telegramBotRuntime.js'
 
 const app = express()
@@ -67,12 +68,20 @@ app.get('/api/health', (_request, response) => {
 
 async function start() {
   try {
+    const runtimeConfig = getRuntimeConfigSummary()
     console.info('Backend startup auth config', {
       nodeEnv: process.env.NODE_ENV ?? 'undefined',
       allowDemoMode: process.env.ALLOW_DEMO_MODE ?? 'undefined',
       ownerTelegramIdConfigured: Boolean(getOwnerTelegramId()),
+      runtimeConfig,
       renderGitCommit: process.env.RENDER_GIT_COMMIT ?? 'unknown',
     })
+    const missingRequiredConfig = getMissingRequiredRuntimeConfigKeys()
+    if (missingRequiredConfig.length > 0) {
+      console.error('[config] missing required runtime environment variables', {
+        missing: missingRequiredConfig,
+      })
+    }
     console.log('Backend startup: initializing Telegram bot before starting HTTP server')
     await initializeTelegramBot()
     app.listen(port, '0.0.0.0', () => {

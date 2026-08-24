@@ -60,7 +60,7 @@ function getEnvAdminIds() {
 }
 
 function getEnvAdminPassword() {
-  const raw = process.env.ADMIN_PASSWORD ?? process.env.DEFAULT_ADMIN_PASSWORD ?? ''
+  const raw = process.env.ADMIN_PASSWORD ?? ''
   return raw.trim()
 }
 
@@ -227,6 +227,11 @@ export type PasswordVerifyResult =
  *    cannot bypass the env-gated recovery
  */
 export async function verifyAdminPassword(password: string): Promise<PasswordVerifyResult> {
+  const envPassword = getEnvAdminPassword()
+  if (!envPassword) {
+    return { valid: false, reason: 'configuration_error' }
+  }
+
   const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
 
   if (security) {
@@ -239,7 +244,6 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
     // DB hash did not match.  Try the ADMIN_PASSWORD env var as a recovery
     // path so that changing ADMIN_PASSWORD in the deployment environment
     // (e.g. Render) re-syncs access without requiring direct DB access.
-    const envPassword = getEnvAdminPassword()
     if (envPassword && envPasswordMatchesSubmitted(envPassword, password)) {
       // Env password matches: re-sync DB record so future logins use the
       // new hash and the env var is no longer needed as a recovery path.
@@ -256,14 +260,6 @@ export async function verifyAdminPassword(password: string): Promise<PasswordVer
     }
 
     return { valid: false, reason: 'invalid_credentials' }
-  }
-
-  // No DB record yet: compare against ADMIN_PASSWORD env var.
-  // This handles the scenario where ADMIN_PASSWORD was added to Render
-  // after the initial seed ran, so no adminSecurity row was ever created.
-  const envPassword = getEnvAdminPassword()
-  if (!envPassword) {
-    return { valid: false, reason: 'configuration_error' }
   }
 
   if (envPasswordMatchesSubmitted(envPassword, password)) {
@@ -357,7 +353,5 @@ export async function getAuthorizedAdminSession(token: string | undefined) {
 }
 
 export async function hasAdminPasswordConfigured() {
-  const security = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
-  if (security) return true
   return Boolean(getEnvAdminPassword())
 }

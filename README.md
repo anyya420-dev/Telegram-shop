@@ -56,12 +56,31 @@ npm run build
 
 Скопируйте `.env.example` в `.env` и заполните значения локально.
 
-- `DATABASE_URL` — строка подключения к PostgreSQL
-- `PORT` — порт backend сервера
-- `FRONTEND_URL` — origin frontend для CORS
-- `ALLOW_DEMO_MODE` — локальный demo-режим вне Telegram
-- `SESSION_SECRET` — секрет подписи пользовательской сессии
-- `TELEGRAM_BOT_TOKEN` — токен Telegram бота
-- `WEB_APP_URL` — публичный URL Web App
+### Render: backend service (`telegram-shop-backend`)
+
+Обязательные backend-переменные:
+
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `OWNER_TELEGRAM_ID`
+- `ADMIN_PASSWORD`
+- `BOT_TOKEN_ENCRYPTION_KEY`
+
+Дополнительно:
+
+- `PORT`
+- `FRONTEND_URL`
+- `ALLOW_DEMO_MODE`
+- `TELEGRAM_BOT_TOKEN` (fallback, если токен не задан через Admin UI)
+- `WEB_APP_URL`
+- `ADMIN_TELEGRAM_IDS`
+
+`ADMIN_PASSWORD`, `OWNER_TELEGRAM_ID`, `DATABASE_URL`, `BOT_TOKEN_ENCRYPTION_KEY` используются **только backend runtime** и не должны попадать во frontend.
+
+### Render: frontend service (`telegram-shop-frontend`)
+
+- `VITE_API_URL` (например, `https://telegram-shop-backend.onrender.com/api`)
+
+Во frontend запрещено передавать backend-секреты (`ADMIN_PASSWORD`, `BOT_TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`).
 
 ⚠️ Никогда не коммитьте реальные секреты в репозиторий.

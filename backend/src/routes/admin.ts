@@ -8,6 +8,7 @@ import { maskTelegramId } from '../services/logging.js'
 import {
   createAdminSession,
   ensureOwnerAdministratorRecord,
+  getOwnerTelegramId,
   getAuthorizedAdminSession,
   hasAdminPasswordConfigured,
   isAdminTelegramId,
@@ -17,6 +18,7 @@ import {
   setAdminPassword,
   verifyAdminPassword,
 } from '../services/adminAuthService.js'
+import { getRuntimeConfigStatus, getRuntimeEnvironmentLabel } from '../services/runtimeConfig.js'
 import rateLimit from 'express-rate-limit'
 
 const router = Router()
@@ -175,6 +177,35 @@ router.get('/auth/status', authRateLimiter, async (request, response) => {
   if (!admin) return
 
   response.json({ authenticated: true })
+})
+
+router.get('/diagnostics/auth', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireAdminSession: false })
+  if (!admin) return
+
+  const ownerConfiguredId = getOwnerTelegramId()
+  const ownerMatch = isOwnerTelegramId(admin.user.telegramId)
+  if (!ownerMatch) {
+    sendError(response, 403, 'forbidden', 'Owner diagnostics only')
+    return
+  }
+
+  const runtime = getRuntimeConfigStatus()
+  const adminToken = getAdminSessionToken(request)
+  const session = await getAuthorizedAdminSession(adminToken)
+  const sameAdminSession = Boolean(session && session.admin.telegramId === admin.user.telegramId)
+
+  response.json({
+    telegramSession: 'valid',
+    telegramIdRecognized: Boolean(admin.user.telegramId),
+    ownerConfigured: Boolean(ownerConfiguredId),
+    ownerMatch,
+    adminPasswordConfigured: runtime.adminPasswordConfigured,
+    databaseConfigured: runtime.databaseConfigured,
+    botTokenEncryptionKeyConfigured: runtime.botTokenEncryptionKeyConfigured,
+    adminSession: sameAdminSession ? 'valid' : 'none',
+    environment: getRuntimeEnvironmentLabel(),
+  })
 })
 
 router.get('/settings', authRateLimiter, async (request, response) => {
