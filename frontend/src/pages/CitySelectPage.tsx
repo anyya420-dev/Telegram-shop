@@ -8,7 +8,7 @@ import i18n from '../lib/i18n';
 import type { City } from '../types';
 
 export default function CitySelectPage() {
-  const { cities, refreshCities, selectCity, user } = useApp();
+  const { cities, refreshCities, selectCity, skipCitySelection, user } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [selecting, setSelecting] = useState<number | null>(null);
@@ -47,6 +47,11 @@ export default function CitySelectPage() {
     } finally {
       setSelecting(null);
     }
+
+    function handleSkipSelection() {
+      skipCitySelection();
+      navigate('/shop', { replace: true });
+    }
   }
 
   return (
@@ -76,6 +81,9 @@ export default function CitySelectPage() {
       ) : cityList.length === 0 ? (
         <div className={styles.stateCard}>
           <p>{t('city.empty')}</p>
+          <button className={styles.laterBtn} onClick={handleSkipSelection} type="button">
+            {t('city.chooseLater')}
+          </button>
         </div>
       ) : (
         <div className={styles.list}>

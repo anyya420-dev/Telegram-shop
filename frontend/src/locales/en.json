@@ -128,7 +128,10 @@
     "title": "Select city",
     "subtitle": "The product catalog depends on the selected city",
     "loading": "Loading...",
-    "empty": "No cities available yet"
+    "empty": "No cities available yet",
+    "chooseLater": "Choose later",
+    "selectAction": "Choose city",
+    "productsAfterSelection": "Products will become available after selecting a city."
   },
   "balance": {
     "title": "Balance",

@@ -90,7 +90,10 @@ export default function CatalogPage() {
     return (
       <div className={styles.empty}>
         <div className={styles.emptyIcon}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg></div>
-        <p>{t('city.subtitle')}</p>
+        <p>{t('city.productsAfterSelection')}</p>
+        <button className={styles.cityActionBtn} onClick={() => navigate('/select-city')} type="button">
+          {t('city.selectAction')}
+        </button>
       </div>
     );
   }
@@ -99,9 +102,14 @@ export default function CatalogPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>{t('catalog.title')}</h1>
-        <button className={styles.sortBtn} onClick={() => setShowSort(true)}>
-          ⇅ {sortLabels[sort]}
-        </button>
+        <div className={styles.headerActions}>
+          <button className={styles.cityActionBtn} onClick={() => navigate('/select-city')} type="button">
+            {t('city.selectAction')}
+          </button>
+          <button className={styles.sortBtn} onClick={() => setShowSort(true)}>
+            ⇅ {sortLabels[sort]}
+          </button>
+        </div>
       </div>
 
       <div className={styles.searchWrap}>

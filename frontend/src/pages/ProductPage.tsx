@@ -126,6 +126,15 @@ export default function ProductPage() {
     );
   }
 
+  if (!user?.selectedCityId) {
+    return (
+      <div className={styles.error}>
+        <p>{t('city.productsAfterSelection')}</p>
+        <button onClick={() => navigate('/select-city')} type="button">{t('city.selectAction')}</button>
+      </div>
+    );
+  }
+
   if (!product) {
     return (
       <div className={styles.error}>
