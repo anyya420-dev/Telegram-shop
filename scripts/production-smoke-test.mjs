@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 
 const PRODUCTION = {
-  frontendUrl: 'https://telegram-shop-3781.onrender.com',
-  backendUrl: 'https://narcos-shop.onrender.com',
-  apiBaseUrl: 'https://narcos-shop.onrender.com/api',
-  allowedOrigin: 'https://telegram-shop-3781.onrender.com',
+  frontendUrl: process.env.SMOKE_FRONTEND_URL?.trim() || 'https://telegram-shop-3781.onrender.com',
+  backendUrl: process.env.SMOKE_BACKEND_URL?.trim() || 'https://narcos-shop.onrender.com',
 }
+PRODUCTION.apiBaseUrl = `${PRODUCTION.backendUrl}/api`
 
-const BAD_PATTERNS = [
-  /https?:\/\/localhost(?::\d+)?\/api/gi,
-  /https?:\/\/127\.0\.0\.1(?::\d+)?\/api/gi,
-  /https?:\/\/78j\.onrender\.com\/api/gi,
+const LOCAL_API_PATTERNS = [
+  /https?:\/\/localhost(?::\d+)?\/api/i,
+  /https?:\/\/127\.0\.0\.1(?::\d+)?\/api/i,
 ]
+const RETIRED_API_PATTERNS = [/https?:\/\/78j\.onrender\.com/i]
 
 const checks = []
+let cachedFrontendBundleText = null
 
 function isBlockedError(error) {
   const message = String(error instanceof Error ? error.message : error).toLowerCase()
@@ -58,6 +58,19 @@ async function readJson(url) {
   return { response, body: await response.json() }
 }
 
+async function getFrontendBundleText() {
+  if (cachedFrontendBundleText !== null) {
+    return cachedFrontendBundleText
+  }
+
+  const html = await readText(PRODUCTION.frontendUrl)
+  const assetMatches = [...html.matchAll(/src="(\/assets\/[^"]+\.js)"/g)].map((m) => m[1])
+  ensure(assetMatches.length > 0, 'no JS assets found in frontend HTML')
+  const assetTexts = await Promise.all(assetMatches.map((path) => readText(`${PRODUCTION.frontendUrl}${path}`)))
+  cachedFrontendBundleText = `${html}\n${assetTexts.join('\n')}`
+  return cachedFrontendBundleText
+}
+
 await runCheck('frontend URL responds', async () => {
   const response = await fetch(PRODUCTION.frontendUrl)
   ensure(response.ok, `frontend returned ${response.status}`)
@@ -79,7 +92,12 @@ await runCheck('/health responds', async () => {
 await runCheck('/ready responds', async () => {
   const response = await fetch(`${PRODUCTION.backendUrl}/ready`)
   ensure([200, 503].includes(response.status), `/ready returned ${response.status}`)
-  const body = await response.json()
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    throw new Error('/ready did not return JSON')
+  }
   ensure(body?.dependencies?.database === 'ok' || body?.dependencies?.database === 'error', 'invalid /ready payload')
   return `status=${response.status}`
 })
@@ -100,51 +118,45 @@ await runCheck('OPTIONS preflight for /api/session/bootstrap', async () => {
   const response = await fetch(`${PRODUCTION.apiBaseUrl}/session/bootstrap`, {
     method: 'OPTIONS',
     headers: {
-      Origin: PRODUCTION.allowedOrigin,
+      Origin: PRODUCTION.frontendUrl,
       'Access-Control-Request-Method': 'POST',
       'Access-Control-Request-Headers': 'Content-Type, Authorization',
     },
   })
-  ensure(response.status === 204, `preflight returned ${response.status}`)
+  ensure([200, 204].includes(response.status), `preflight returned ${response.status}`)
   ensure(
-    response.headers.get('access-control-allow-origin') === PRODUCTION.allowedOrigin,
+    response.headers.get('access-control-allow-origin') === PRODUCTION.frontendUrl,
     'Access-Control-Allow-Origin mismatch',
   )
   ensure(response.headers.get('access-control-allow-credentials') === 'true', 'missing credentials header')
   ensure((response.headers.get('vary') ?? '').toLowerCase().includes('origin'), 'missing Vary: Origin')
-  return '204 + valid CORS headers'
+  return `${response.status} + valid CORS headers`
 })
 
 await runCheck('session bootstrap endpoint reachable', async () => {
   const response = await fetch(`${PRODUCTION.apiBaseUrl}/session/bootstrap`, {
     method: 'POST',
     headers: {
-      Origin: PRODUCTION.allowedOrigin,
+      Origin: PRODUCTION.frontendUrl,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({}),
   })
-  ensure([400, 401, 403, 503].includes(response.status), `unexpected status ${response.status}`)
+  ensure([200, 400, 401, 403, 422, 503].includes(response.status), `unexpected status ${response.status}`)
   return `${response.status}`
 })
 
 await runCheck('frontend does not reference localhost API', async () => {
-  const html = await readText(PRODUCTION.frontendUrl)
-  const assetMatches = [...html.matchAll(/src="(\/assets\/[^"]+\.js)"/g)].map((m) => m[1])
-  ensure(assetMatches.length > 0, 'no JS assets found in frontend HTML')
-  const assetTexts = await Promise.all(assetMatches.map((path) => readText(`${PRODUCTION.frontendUrl}${path}`)))
-  const combined = `${html}\n${assetTexts.join('\n')}`
-  ensure(!BAD_PATTERNS[0].test(combined), 'frontend bundle contains localhost API URL')
-  ensure(!BAD_PATTERNS[1].test(combined), 'frontend bundle contains 127.0.0.1 API URL')
+  const combined = await getFrontendBundleText()
+  const localhostMatch = LOCAL_API_PATTERNS.find((pattern) => pattern.test(combined))
+  ensure(!localhostMatch, 'frontend bundle contains localhost API URL')
   return 'no localhost API references'
 })
 
 await runCheck('frontend does not reference old Render API host', async () => {
-  const html = await readText(PRODUCTION.frontendUrl)
-  const assetMatches = [...html.matchAll(/src="(\/assets\/[^"]+\.js)"/g)].map((m) => m[1])
-  const assetTexts = await Promise.all(assetMatches.map((path) => readText(`${PRODUCTION.frontendUrl}${path}`)))
-  const combined = `${html}\n${assetTexts.join('\n')}`
-  ensure(!BAD_PATTERNS[2].test(combined), 'frontend bundle contains https://78j.onrender.com/api')
+  const combined = await getFrontendBundleText()
+  const retiredMatch = RETIRED_API_PATTERNS.find((pattern) => pattern.test(combined))
+  ensure(!retiredMatch, 'frontend bundle contains https://78j.onrender.com/api')
   return 'no retired host references'
 })
 

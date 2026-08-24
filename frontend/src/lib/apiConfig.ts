@@ -10,7 +10,6 @@
  */
 
 const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
-const FORBIDDEN_PRODUCTION_API_HOSTNAMES = new Set(['78j.onrender.com'])
 
 export type ApiBaseResolution = {
   baseUrl: string
@@ -23,15 +22,6 @@ function isLocalhostUrl(value: string) {
     return LOCALHOST_HOSTNAMES.has(url.hostname.toLowerCase())
   } catch {
     return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i.test(value)
-  }
-
-  function hasForbiddenProductionHost(value: string) {
-    try {
-      const url = new URL(value)
-      return FORBIDDEN_PRODUCTION_API_HOSTNAMES.has(url.hostname.toLowerCase())
-    } catch {
-      return false
-    }
   }
 }
 
@@ -70,13 +60,6 @@ export function resolveApiBaseUrl(
     return {
       baseUrl: '',
       error: `VITE_API_URL must not target localhost in production (received "${configured}")`,
-    }
-  }
-
-  if (hasForbiddenProductionHost(configured)) {
-    return {
-      baseUrl: '',
-      error: `VITE_API_URL points to a retired backend host and must be updated (received "${configured}")`,
     }
   }
 

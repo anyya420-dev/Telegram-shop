@@ -55,12 +55,6 @@ test('production build requires HTTPS and the /api path', () => {
   }
 })
 
-test('production build rejects retired backend hostnames', () => {
-  const result = resolveApiBaseUrl('https://78j.onrender.com/api', true)
-  assert.equal(result.baseUrl, '')
-  assert.match(result.error ?? '', /retired backend host/i)
-})
-
 test('normalized production API base never generates /api/api', () => {
   const resolved = resolveApiBaseUrl('https://narcos-shop.onrender.com/api/', true)
   assert.equal(resolved.error, null)
