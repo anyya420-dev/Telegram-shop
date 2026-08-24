@@ -961,4 +961,261 @@ router.post('/bot/disconnect', botRateLimiter, async (request, response) => {
   response.json({ connected: false, bot: null, tokenMasked: null })
 })
 
+// ── Cities ──────────────────────────────────────────────────────────────────
+
+router.get('/cities', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const cities = await prisma.city.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] })
+  response.json({ cities })
+})
+
+router.post('/cities', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const { name, nameEn, sortOrder } = request.body
+  if (typeof name !== 'string' || !name.trim()) {
+    sendError(response, 400, 'invalid_name', 'City name is required')
+    return
+  }
+
+  const city = await prisma.city.create({
+    data: {
+      name: name.trim(),
+      nameEn: typeof nameEn === 'string' ? nameEn.trim() || null : null,
+      sortOrder: typeof sortOrder === 'number' ? sortOrder : 0,
+      isActive: true,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'city_created', entity: 'city', entityId: city.id, meta: JSON.stringify({ name: city.name }) },
+  })
+
+  response.status(201).json({ city })
+})
+
+router.patch('/cities/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const cityId = parsePositiveInt(request.params.id)
+  if (!cityId) {
+    sendError(response, 400, 'invalid_id', 'Invalid city id')
+    return
+  }
+
+  const { name, nameEn, isActive, sortOrder } = request.body
+  const data: Record<string, unknown> = {}
+  if (typeof name === 'string' && name.trim()) data.name = name.trim()
+  if (typeof nameEn === 'string') data.nameEn = nameEn.trim() || null
+  if (typeof isActive === 'boolean') data.isActive = isActive
+  if (typeof sortOrder === 'number') data.sortOrder = sortOrder
+
+  const city = await prisma.city.update({ where: { id: cityId }, data })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'city_updated', entity: 'city', entityId: cityId, meta: JSON.stringify(data) },
+  })
+
+  response.json({ city })
+})
+
+router.delete('/cities/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const cityId = parsePositiveInt(request.params.id)
+  if (!cityId) {
+    sendError(response, 400, 'invalid_id', 'Invalid city id')
+    return
+  }
+
+  // Soft-delete: deactivate rather than hard delete if there are related orders
+  const orderCount = await prisma.order.count({ where: { cityId } })
+  if (orderCount > 0) {
+    const city = await prisma.city.update({ where: { id: cityId }, data: { isActive: false } })
+    await prisma.auditLog.create({
+      data: { userId: admin.user.id, action: 'city_deactivated', entity: 'city', entityId: cityId, meta: JSON.stringify({ reason: 'has_orders' }) },
+    })
+    response.json({ city, deactivated: true })
+    return
+  }
+
+  await prisma.city.delete({ where: { id: cityId } })
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'city_deleted', entity: 'city', entityId: cityId },
+  })
+
+  response.json({ ok: true })
+})
+
+// ── Categories ───────────────────────────────────────────────────────────────
+
+router.get('/categories', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const categories = await prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] })
+  response.json({ categories })
+})
+
+router.post('/categories', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const { name, nameEn, sortOrder } = request.body
+  if (typeof name !== 'string' || !name.trim()) {
+    sendError(response, 400, 'invalid_name', 'Category name is required')
+    return
+  }
+
+  const category = await prisma.category.create({
+    data: {
+      name: name.trim(),
+      nameEn: typeof nameEn === 'string' ? nameEn.trim() || null : null,
+      sortOrder: typeof sortOrder === 'number' ? sortOrder : 0,
+      isActive: true,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'category_created', entity: 'category', entityId: category.id, meta: JSON.stringify({ name: category.name }) },
+  })
+
+  response.status(201).json({ category })
+})
+
+router.patch('/categories/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const categoryId = parsePositiveInt(request.params.id)
+  if (!categoryId) {
+    sendError(response, 400, 'invalid_id', 'Invalid category id')
+    return
+  }
+
+  const { name, nameEn, isActive, sortOrder } = request.body
+  const data: Record<string, unknown> = {}
+  if (typeof name === 'string' && name.trim()) data.name = name.trim()
+  if (typeof nameEn === 'string') data.nameEn = nameEn.trim() || null
+  if (typeof isActive === 'boolean') data.isActive = isActive
+  if (typeof sortOrder === 'number') data.sortOrder = sortOrder
+
+  const category = await prisma.category.update({ where: { id: categoryId }, data })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'category_updated', entity: 'category', entityId: categoryId, meta: JSON.stringify(data) },
+  })
+
+  response.json({ category })
+})
+
+router.delete('/categories/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const categoryId = parsePositiveInt(request.params.id)
+  if (!categoryId) {
+    sendError(response, 400, 'invalid_id', 'Invalid category id')
+    return
+  }
+
+  const productCount = await prisma.product.count({ where: { categoryId } })
+  if (productCount > 0) {
+    const category = await prisma.category.update({ where: { id: categoryId }, data: { isActive: false } })
+    await prisma.auditLog.create({
+      data: { userId: admin.user.id, action: 'category_deactivated', entity: 'category', entityId: categoryId, meta: JSON.stringify({ reason: 'has_products' }) },
+    })
+    response.json({ category, deactivated: true })
+    return
+  }
+
+  await prisma.category.delete({ where: { id: categoryId } })
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'category_deleted', entity: 'category', entityId: categoryId },
+  })
+
+  response.json({ ok: true })
+})
+
+// ── Products (create / delete) ───────────────────────────────────────────────
+
+router.post('/products', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const { name, nameEn, description, descriptionEn, price, categoryId, image, isActive, isRecommended } = request.body
+
+  if (typeof name !== 'string' || !name.trim()) {
+    sendError(response, 400, 'invalid_name', 'Product name is required')
+    return
+  }
+  if (typeof description !== 'string' || !description.trim()) {
+    sendError(response, 400, 'invalid_description', 'Product description is required')
+    return
+  }
+  if (typeof price !== 'number' || price <= 0) {
+    sendError(response, 400, 'invalid_price', 'Valid price is required')
+    return
+  }
+  const catId = parsePositiveInt(categoryId)
+  if (!catId) {
+    sendError(response, 400, 'invalid_category', 'Valid category id is required')
+    return
+  }
+
+  const product = await prisma.product.create({
+    data: {
+      name: name.trim(),
+      nameEn: typeof nameEn === 'string' ? nameEn.trim() || null : null,
+      description: description.trim(),
+      descriptionEn: typeof descriptionEn === 'string' ? descriptionEn.trim() || null : null,
+      price,
+      categoryId: catId,
+      image: typeof image === 'string' ? image.trim() || null : null,
+      isActive: typeof isActive === 'boolean' ? isActive : true,
+      isRecommended: typeof isRecommended === 'boolean' ? isRecommended : false,
+    },
+    include: { category: true },
+  })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'product_created', entity: 'product', entityId: product.id, meta: JSON.stringify({ name: product.name }) },
+  })
+
+  response.status(201).json({ product })
+})
+
+router.delete('/products/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const productId = parsePositiveInt(request.params.id)
+  if (!productId) {
+    sendError(response, 400, 'invalid_id', 'Invalid product id')
+    return
+  }
+
+  const orderItemCount = await prisma.orderItem.count({ where: { productCity: { productId } } })
+  if (orderItemCount > 0) {
+    const product = await prisma.product.update({ where: { id: productId }, data: { isActive: false } })
+    await prisma.auditLog.create({
+      data: { userId: admin.user.id, action: 'product_deactivated', entity: 'product', entityId: productId, meta: JSON.stringify({ reason: 'has_orders' }) },
+    })
+    response.json({ product, deactivated: true })
+    return
+  }
+
+  await prisma.product.delete({ where: { id: productId } })
+  await prisma.auditLog.create({
+    data: { userId: admin.user.id, action: 'product_deleted', entity: 'product', entityId: productId },
+  })
+
+  response.json({ ok: true })
+})
+
 export default router
