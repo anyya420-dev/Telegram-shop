@@ -32,6 +32,18 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(false)
   const [catalogError, setCatalogError] = useState<string | null>(null)
 
+  async function runRefresh(nextSearch = search.trim(), nextCategoryId = activeCategoryId, nextSort = sort) {
+    try {
+      setLoading(true)
+      setCatalogError(null)
+      await refreshCatalog(nextSearch, nextCategoryId, nextSort)
+    } catch (error) {
+      setCatalogError(error instanceof ApiError && error.code ? t(`errors.${error.code}`) : t('errors.catalog_refresh_failed'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     const nextParams = new URLSearchParams()
     if (activeCategoryId !== 'all') nextParams.set('categoryId', String(activeCategoryId))
@@ -45,16 +57,8 @@ export default function CatalogPage() {
       return
     }
 
-    const handle = window.setTimeout(async () => {
-      try {
-        setLoading(true)
-        setCatalogError(null)
-        await refreshCatalog(search.trim(), activeCategoryId, sort)
-      } catch (error) {
-        setCatalogError(error instanceof ApiError && error.code ? t(`errors.${error.code}`) : t('errors.catalog_refresh_failed'))
-      } finally {
-        setLoading(false)
-      }
+    const handle = window.setTimeout(() => {
+      void runRefresh()
     }, 250)
 
     return () => window.clearTimeout(handle)
@@ -163,7 +167,7 @@ export default function CatalogPage() {
       {catalogError ? (
         <div className={styles.errorState}>
           <p>{catalogError}</p>
-          <button className={styles.retryBtn} onClick={() => void refreshCatalog(search.trim(), activeCategoryId, sort)} type="button">
+          <button className={styles.retryBtn} onClick={() => void runRefresh()} type="button">
             <RefreshCw size={14} strokeWidth={1.5} />
             {t('common.retry')}
           </button>
