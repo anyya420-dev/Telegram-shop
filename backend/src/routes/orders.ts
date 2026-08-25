@@ -3,6 +3,7 @@ import {
   authRateLimiter,
   buildCartResponse,
   getAuthorizedUser,
+  isAllowedQuantity,
   normalizeQuantity,
   parsePositiveInt,
   prisma,
@@ -11,6 +12,8 @@ import {
 import { notifyOrderStatusChange } from '../services/notifier.js'
 
 const router = Router()
+
+class CheckoutConflictError extends Error {}
 
 const ORDER_INCLUDE = {
   items: true,
@@ -96,6 +99,10 @@ router.post('/', authRateLimiter, async (request, response) => {
       sendError(response, 400, 'product_unavailable', `Product "${pc.product.name}" is no longer available`)
       return
     }
+    if (!isAllowedQuantity(item.quantity, pc.minimumQuantity, pc.quantityStep, pc.maximumQuantity)) {
+      sendError(response, 422, 'quantity_invalid', `Quantity for "${pc.product.name}" no longer matches product rules`)
+      return
+    }
     if (item.quantity > pc.stock) {
       sendError(response, 400, 'stock_exceeded', `Insufficient stock for "${pc.product.name}"`)
       return
@@ -136,60 +143,105 @@ router.post('/', authRateLimiter, async (request, response) => {
   const total = normalizeQuantity(Math.max(0, subtotal - discountAmount + deliveryFee))
 
   // Create order and clear cart in a transaction
-  const order = await prisma.$transaction(async (tx) => {
-    const newOrder = await tx.order.create({
-      data: {
-        userId: user.id,
-        cityId: user.selectedCityId!,
-        status: 'pending',
-        subtotal,
-        discountAmount,
-        deliveryFee,
-        total,
-        comment: comment || null,
-        deliveryOptionId,
-        discountId,
-        items: {
-          create: cart.items.map((item) => ({
-            productCityId: item.productCityId,
-            productName: item.productCity.product.name,
-            productImage: item.productCity.product.image,
-            unit: item.productCity.unit,
-            quantity: item.quantity,
-            price: item.productCity.product.price,
-            lineTotal: normalizeQuantity(item.productCity.product.price * item.quantity),
-          })),
+  let order
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      // Reserve stock atomically to avoid concurrent checkout underflow.
+      for (const item of cart.items) {
+        const result = await tx.productCity.updateMany({
+          where: {
+            id: item.productCityId,
+            isAvailable: true,
+            stock: { gte: item.quantity },
+          },
+          data: { stock: { decrement: item.quantity } },
+        })
+
+        if (result.count !== 1) {
+          throw new CheckoutConflictError(`Insufficient stock for "${item.productCity.product.name}"`)
+        }
+      }
+
+      // Increment discount usage when a code is attached.
+      if (discountId) {
+        const discountState = await tx.discount.findUnique({
+          where: { id: discountId },
+          select: { isActive: true, usageLimit: true },
+        })
+
+        if (!discountState?.isActive) {
+          throw new CheckoutConflictError('Discount code is no longer available')
+        }
+
+        if (discountState.usageLimit === null) {
+          const discountResult = await tx.discount.updateMany({
+            where: { id: discountId, isActive: true },
+            data: { usedCount: { increment: 1 } },
+          })
+
+          if (discountResult.count !== 1) {
+            throw new CheckoutConflictError('Discount code is no longer available')
+          }
+        } else {
+          const discountResult = await tx.discount.updateMany({
+            where: {
+              id: discountId,
+              isActive: true,
+              usedCount: { lt: discountState.usageLimit },
+            },
+            data: { usedCount: { increment: 1 } },
+          })
+
+          if (discountResult.count !== 1) {
+            throw new CheckoutConflictError('Discount code is no longer available')
+          }
+        }
+      }
+
+      const newOrder = await tx.order.create({
+        data: {
+          userId: user.id,
+          cityId: user.selectedCityId!,
+          status: 'pending',
+          subtotal,
+          discountAmount,
+          deliveryFee,
+          total,
+          comment: comment || null,
+          deliveryOptionId,
+          discountId,
+          items: {
+            create: cart.items.map((item) => ({
+              productCityId: item.productCityId,
+              productName: item.productCity.product.name,
+              productImage: item.productCity.product.image,
+              unit: item.productCity.unit,
+              quantity: item.quantity,
+              price: item.productCity.product.price,
+              lineTotal: normalizeQuantity(item.productCity.product.price * item.quantity),
+            })),
+          },
         },
-      },
-      include: ORDER_INCLUDE,
-    })
-
-    // Record initial status history
-    await tx.orderStatusHistory.create({
-      data: { orderId: newOrder.id, status: 'pending', comment: 'Order placed' },
-    })
-
-    // Increment discount usage
-    if (discountId) {
-      await tx.discount.update({
-        where: { id: discountId },
-        data: { usedCount: { increment: 1 } },
+        include: ORDER_INCLUDE,
       })
-    }
 
-    // Reduce stock for each item
-    for (const item of cart.items) {
-      await tx.productCity.update({
-        where: { id: item.productCityId },
-        data: { stock: { decrement: item.quantity } },
+      // Record initial status history
+      await tx.orderStatusHistory.create({
+        data: { orderId: newOrder.id, status: 'pending', comment: 'Order placed' },
       })
+
+      // Clear cart items
+      await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
+
+      return newOrder
+    })
+  } catch (error) {
+    if (error instanceof CheckoutConflictError) {
+      sendError(response, 409, 'checkout_conflict', error.message)
+      return
     }
-
-    // Clear cart items
-    await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
-
-    return newOrder
-  })
+    throw error
+  }
 
   await prisma.userActivityLog.create({
     data: { userId: user.id, action: 'order_placed', meta: JSON.stringify({ orderId: order.id, total }) },

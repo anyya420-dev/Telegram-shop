@@ -146,6 +146,22 @@ test('POST /api/session/bootstrap with a non-string initData returns 400', async
   assert.equal(body.code, 'invalid_request_body')
 })
 
+test('invalid JSON payloads return 400 JSON errors instead of 500/html', async () => {
+  const response = await fetch(`${baseUrl}/api/session/bootstrap`, {
+    method: 'POST',
+    headers: {
+      Origin: ALLOWED_ORIGIN,
+      'Content-Type': 'application/json',
+    },
+    body: '{"initData":',
+  })
+
+  assert.equal(response.status, 400)
+  assert.match(response.headers.get('content-type') ?? '', /application\/json/)
+  const body = await response.json() as { code?: string }
+  assert.equal(body.code, 'invalid_json')
+})
+
 test('unknown /api routes return JSON, never an HTML error page', async () => {
   const response = await fetch(`${baseUrl}/api/does-not-exist`, {
     headers: { Origin: ALLOWED_ORIGIN },

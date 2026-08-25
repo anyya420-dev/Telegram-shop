@@ -48,6 +48,7 @@ npm run dev:bot
 ## Проверка
 
 ```bash
+npm run verify
 npm run typecheck
 npm run build
 ```
@@ -85,7 +86,7 @@ npm run build
 
 ### Render: frontend service (`telegram-shop-frontend`)
 
-- `VITE_API_URL` (например, `https://telegram-shop-backend.onrender.com/api`)
+- `VITE_API_URL` (production: `https://narcos-shop.onrender.com/api`)
 
 Во frontend запрещено передавать backend-секреты (`ADMIN_PASSWORD`, `BOT_TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`).
 
@@ -119,3 +120,11 @@ Backend выполняет production startup validation и аварийно з�
 - В Render frontend env `VITE_API_URL` указывает на production backend `/api`.
 - В BotFather/menu button веб-приложение бота направлено на production `WEB_APP_URL`.
 - После деплоя owner (`8405501187`) проходит bootstrap в Telegram Mini App, открывает `/admin`, вводит только admin password и получает доступ в панель.
+
+## Production smoke test
+
+```bash
+npm run smoke:production
+```
+
+Скрипт проверяет production frontend/backend, health/readiness endpoints, CORS preflight для `/api/session/bootstrap`, и ищет stale API URLs (`localhost`, `127.0.0.1`, `78j.onrender.com`) в production frontend assets.

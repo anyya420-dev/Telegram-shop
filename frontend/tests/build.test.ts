@@ -45,3 +45,33 @@ test('production bundle bakes in VITE_API_URL and contains no localhost API fall
 
   rmSync(outDir, { recursive: true, force: true })
 })
+
+test('production build fails when VITE_API_URL is missing', () => {
+  rmSync(outDir, { recursive: true, force: true })
+  assert.throws(() => {
+    execFileSync(
+      process.execPath,
+      [viteBin, 'build', '--outDir', outDir],
+      {
+        cwd: frontendRoot,
+        env: { ...process.env, NODE_ENV: 'production', VITE_API_URL: '' },
+        stdio: 'pipe',
+      },
+    )
+  }, /VITE_API_URL is not set/)
+})
+
+test('production build fails for retired backend host URL', () => {
+  rmSync(outDir, { recursive: true, force: true })
+  assert.throws(() => {
+    execFileSync(
+      process.execPath,
+      [viteBin, 'build', '--outDir', outDir],
+      {
+        cwd: frontendRoot,
+        env: { ...process.env, NODE_ENV: 'production', VITE_API_URL: 'https://78j.onrender.com/api' },
+        stdio: 'pipe',
+      },
+    )
+  }, /retired backend host/i)
+})

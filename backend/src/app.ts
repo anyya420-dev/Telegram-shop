@@ -22,6 +22,29 @@ import { getAllowedCorsOrigins } from './services/runtimeConfig.js'
 
 export const SERVICE_NAME = 'telegram-shop-backend'
 
+type StructuredHttpError = {
+  status: number
+  code: string
+  message: string
+}
+
+function isStructuredHttpError(value: unknown): value is StructuredHttpError {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as Partial<StructuredHttpError>
+  return (
+    typeof candidate.status === 'number' &&
+    candidate.status >= 400 &&
+    candidate.status <= 599 &&
+    typeof candidate.code === 'string' &&
+    candidate.code.length > 0 &&
+    typeof candidate.message === 'string' &&
+    candidate.message.length > 0
+  )
+}
+
 /**
  * Builds the Express application.
  *
@@ -133,6 +156,19 @@ export function createApp(options: {
   app.use((error: unknown, _request: Request, response: Response, next: NextFunction) => {
     if (response.headersSent) {
       next(error)
+      return
+    }
+
+    if (
+      error instanceof SyntaxError &&
+      typeof (error as { status?: unknown }).status === 'number'
+    ) {
+      response.status(400).json({ code: 'invalid_json', message: 'Invalid JSON request body' })
+      return
+    }
+
+    if (isStructuredHttpError(error)) {
+      response.status(error.status).json({ code: error.code, message: error.message })
       return
     }
 
