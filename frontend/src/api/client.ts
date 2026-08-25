@@ -45,13 +45,18 @@ if (API_CONFIG_ERROR) {
 
 /** Safe diagnostics only — never logs initData, session tokens or admin tokens. */
 export function getApiDiagnostics() {
+  const telegramWebApp =
+    typeof window === 'undefined'
+      ? undefined
+      : (window as Window & { Telegram?: { WebApp?: unknown } }).Telegram?.WebApp
+
   return {
     apiBaseUrl: API_URL,
     apiConfigured: !API_CONFIG_ERROR && API_URL.length > 0,
     apiConfigError: API_CONFIG_ERROR,
     mode: IS_PRODUCTION ? 'production' : 'development',
     pageOrigin: typeof window === 'undefined' ? null : window.location.origin,
-    inTelegram: typeof window !== 'undefined' && Boolean(window.Telegram?.WebApp),
+    inTelegram: Boolean(telegramWebApp),
   }
 }
 
