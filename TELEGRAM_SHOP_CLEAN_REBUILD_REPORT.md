@@ -190,23 +190,84 @@ Tests cover:
 
 ---
 
-## Remaining Checks for PART 2
+## Part 2 — Local Verification Results
 
-| Check | Method |
+### Code Audit
+
+| Item | Result |
 |---|---|
-| Migration status in production DB | Render shell: `prisma migrate status` |
-| Backend health | `GET https://narcos-shop.onrender.com/api/health` |
-| Admin status unauthenticated | `GET /api/admin/auth/status` → expect 401 |
-| Admin login | `POST /api/admin/auth/login` with ADMIN_PASSWORD → expect 200 + cookie |
-| Admin status authenticated | `GET /api/admin/auth/status` with cookie → expect 200 |
-| Admin stats authenticated | `GET /api/admin/stats` with cookie → expect 200 |
-| Admin logout | `POST /api/admin/auth/logout` → expect 200 |
-| Admin stats after logout | `GET /api/admin/stats` → expect 401 |
-| Browser flow | Open `/admin`, login, verify panel loads, logout |
-| P3009 resolved | Render deploy log shows no P3009 |
+| `P3009` in operational files | **NONE** (only in historical report docs) |
+| `20260825140000_add_admin_server_sessions` hardcoded in deploy | **NONE** (only in migration dir and report docs) |
+| `resolve --rolled-back` in operational files | **NONE** |
+| `2>/dev/null` in operational files | **NONE** |
+| `\|\| true` hiding migration errors | **NONE** (`package.json` postinstall CI conditional is unrelated to migrations) |
+| `prestart` running migrations | **NONE** (`prestart` = `db:generate` only) |
+| `migrate deploy` duplicate (prestart + preDeployCommand) | **NONE** (only in `preDeployCommand`) |
+| Unrelated Narcos City code changed | **NONE** |
+| Secrets committed | **NONE** |
+| Debug code remaining | **NONE** |
+
+### render.yaml preDeployCommand
+
+```yaml
+preDeployCommand: npm run db:generate --workspace backend && npm run db:migrate:deploy --workspace backend
+```
+
+- ONE migration command only
+- Uses `prisma migrate deploy` (safe, no hacks)
+- No `|| true`, no `resolve --rolled-back`, no hidden failures
+
+### Build / Test Results
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | **PASS** |
+| `npm run test --workspace backend` | **PASS** — 3/3 tests |
+| `npm run build --workspace backend` | **PASS** |
+| `npm run build --workspace frontend` | **PASS** |
+
+Tests cover:
+- Admin login (200, Set-Cookie with HttpOnly/Secure/SameSite=None/Path=/api/admin) ✓
+- Stats without session → 401 ✓
+- Stats with valid session → 200 ✓
+- Login → status → stats → logout → stats (401) flow ✓
+- CORS: correct origin (204 preflight), disallowed (403), no origin (200) ✓
+- Payment settings CRUD with auth ✓
+- Checkout payment flow ✓
+
+### Production Verification
+
+> **NOTE:** This sandbox has no DNS/network access to `narcos-shop.onrender.com` or
+> `telegram-shop-3781.onrender.com`. All production HTTP checks below must be performed
+> from the Render dashboard shell or a browser with internet access.
+>
+> The commit `a7c88fd` has been pushed to GitHub. When Render deploys it:
+> - `preDeployCommand` runs `prisma migrate deploy` with no hacks → should succeed cleanly
+> - If migration `20260825140000_add_admin_server_sessions` is still `failed` in the DB,
+>   run from Render shell BEFORE deploying:
+>   ```
+>   npx prisma migrate resolve --rolled-back 20260825140000_add_admin_server_sessions --schema ./prisma/schema.prisma
+>   ```
+>   Then trigger a new deploy.
+
+| Production Check | Expected | Status |
+|---|---|---|
+| Render deploy — no P3009 | No error | Requires Render dashboard |
+| `GET /api/health` | HTTP 200 | Requires network access |
+| `GET /api/admin/auth/status` (no cookie) | 401 | Requires network access |
+| `POST /api/admin/auth/login` | 200 + Set-Cookie (HttpOnly, Secure, SameSite=None, Path=/api/admin) | Requires network access |
+| `GET /api/admin/auth/status` (with cookie) | 200, authenticated:true | Requires network access |
+| `GET /api/admin/stats` (with cookie) | 200 | Requires network access |
+| `POST /api/admin/auth/logout` | 200 | Requires network access |
+| `GET /api/admin/auth/status` (after logout) | 401 | Requires network access |
+| `GET /api/admin/stats` (after logout) | 401 | Requires network access |
+| Browser flow `/admin` | Login → panel loads → logout → blocked | Requires browser |
+| Public shop / products | Load normally | Requires network access |
+| CORS: credentials:include accepted | Access-Control-Allow-Credentials:true | Requires network access |
 
 ---
 
 ## Commit
 
-See `git log --oneline -1` for the commit hash of this clean rebuild.
+- `ee6b686` — Rebuild admin session authentication and fix production migration
+- `a7c88fd` — Clean rebuild: remove last migration hack from render.yaml preDeployCommand
