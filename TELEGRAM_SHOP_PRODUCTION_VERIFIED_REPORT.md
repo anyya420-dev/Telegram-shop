@@ -1,59 +1,63 @@
 # Telegram Shop — Production Verified Report
 
 **Branch:** `copilot/rebuild-admin-server-session`
-**Final commit:** `118ebeb`
-**Production backend:** https://narcos-shop.onrender.com
+**Final commit:** `753af803e021c75208faa7db37a20b7359004b94`
+**GitHub commit:** https://github.com/anyya420-dev/Telegram-shop/commit/753af80
+**PR:** https://github.com/anyya420-dev/Telegram-shop/pull/43
 **Production frontend:** https://telegram-shop-3781.onrender.com
-**Admin panel:** https://telegram-shop-3781.onrender.com/admin
+**Production admin:** https://telegram-shop-3781.onrender.com/admin
+**Production backend:** https://narcos-shop.onrender.com
 
 ---
 
-## What Was Broken (Root Causes)
+## 1. Root Causes Found and Fixed
 
-### 1. Prisma P3009 — Failed migration in production DB
+### A — Prisma P3009 (broken migration hack on main)
 
-Migration `20260825140000_add_admin_server_sessions` was left in a **failed** state in the
-production `_prisma_migrations` table. The SQL had already executed (uses `CREATE TABLE IF NOT EXISTS`),
-but the Prisma runner was killed before writing success status. Every subsequent `migrate deploy`
-failed with P3009.
+The `db:migrate:deploy` script on `main` was:
 
-### 2. Broken `db:migrate:deploy` script (main before fix)
-
-```
-"prestart": "npm run db:generate && npm run db:migrate:deploy"
-"db:migrate:deploy": "... resolve --rolled-back 20260825140000_... 2>/dev/null || true && ... migrate deploy"
+```sh
+prisma migrate resolve --rolled-back 20260825140000_add_admin_server_sessions 2>/dev/null || true \
+&& prisma migrate deploy
 ```
 
 - Hardcoded migration ID ran `resolve --rolled-back` unconditionally on every deploy.
 - `2>/dev/null || true` silently swallowed all migration errors.
-- Migrations ran twice (prestart + preDeployCommand).
+- Any future migration failure would be hidden and deployment would continue.
 
-### 3. `npm exec` resolves wrong Prisma version
+### B — Prisma binary version conflict
 
-The original scripts used `npm exec -- prisma` without pinning, causing npm to resolve
-the latest Prisma (8.x) from the registry instead of the locally installed 6.12.0.
-Later fix used `--no-install` which is not a valid flag on npm 11, producing the same result.
+Both `npm exec -- prisma` and `npm exec --no-install -- prisma` failed on npm 11:
+- `npm exec -- prisma` resolves Prisma 8.x from registry instead of locally installed 6.12.0.
+- `--no-install` is not a supported flag on npm 11; npm treats it as unknown config and falls back to registry resolution.
 
-### 4. `/admin` route showing blank/Not Found
+Both caused: `No command registered for 'generate'`
 
-The frontend uses `HashRouter`. Admin lives at `/#/admin`, not `/admin`. Without a Render
-redirect rule, visiting `/admin` loaded `index.html` with an empty hash — React Router
-rendered the default shop page instead of the admin panel.
+### C — Duplicate migrations on every server restart
+
+`prestart` was `npm run db:generate && npm run db:migrate:deploy` — migrations ran on every
+server restart, not only in `preDeployCommand`.
+
+### D — `/admin` route blank/wrong page
+
+Frontend uses `HashRouter`. Admin panel lives at `/#/admin`, not `/admin`. Without a Render
+redirect, visiting `/admin` served `index.html` with empty hash — React Router rendered the
+public shop instead of the admin panel.
 
 ---
 
-## What Was Deleted
+## 2. What Was Deleted
 
 | Location | Removed |
 |---|---|
-| `backend/package.json` `db:migrate:deploy` | `resolve --rolled-back … 2>/dev/null \|\| true` hack |
+| `backend/package.json` `db:migrate:deploy` | `resolve --rolled-back … 2>/dev/null \|\| true` |
 | `backend/package.json` `prestart` | `&& npm run db:migrate:deploy` |
 
 ---
 
-## What Was Fixed
+## 3. What Was Fixed
 
-### `backend/package.json` — final clean scripts
+### `backend/package.json`
 
 ```json
 "prestart": "npm run db:generate",
@@ -62,11 +66,11 @@ rendered the default shop page instead of the admin panel.
 "db:push": "prisma db push --schema ./prisma/schema.prisma"
 ```
 
-- `prestart` generates the Prisma client only — no migrations.
-- Prisma called directly via `node_modules/.bin` (npm scripts PATH) — no `npm exec`, no version conflicts.
-- `db:migrate:deploy` is a plain `prisma migrate deploy` — no hacks, no hidden errors.
+- `prestart` only generates the client.
+- Direct `prisma` invocation via `node_modules/.bin` — no `npm exec`, no version conflicts.
+- `db:migrate:deploy` is a plain `prisma migrate deploy`.
 
-### `render.yaml` — clean preDeployCommand + /admin redirect
+### `render.yaml`
 
 ```yaml
 preDeployCommand: npm run db:generate --workspace backend && npm run db:migrate:deploy --workspace backend
@@ -80,52 +84,12 @@ routes:
     destination: /index.html
 ```
 
-- ONE migration command in `preDeployCommand`.
-- No `|| true`, no `2>/dev/null`, no hardcoded migration IDs.
-- `/admin` permanently redirects to `/#/admin` where HashRouter renders `<AdminPage />`.
-
 ---
 
-## Local Verification Results
+## 4. Migration Status
 
-| Check | Result |
-|---|---|
-| `npm run typecheck` | **PASS** |
-| `npm run test --workspace backend` | **PASS** — 3/3 tests |
-| `npm run build` | **PASS** — backend + frontend + bot |
-
-Tests verified: admin login/logout, session validation, stats auth, CORS preflight,
-payment settings CRUD, checkout flow.
-
----
-
-## Admin Authentication Architecture
-
-- `POST /api/admin/auth/login` — scrypt verify, server-side session in `admin_sessions`, sets `HttpOnly` cookie.
-- `GET /api/admin/auth/status` — validates session against DB, returns `{authenticated:true}` or 401.
-- `POST /api/admin/auth/logout` — revokes session row in DB, clears cookie.
-- Session tokens never exposed to JavaScript.
-
-## Cookie Configuration
-
-| Attribute | Production | Development |
-|---|---|---|
-| HttpOnly | true | true |
-| Secure | true | false |
-| SameSite | none | lax |
-| Path | /api/admin | /api/admin |
-
-## CORS Configuration
-
-- Production allowed origin: `https://telegram-shop-3781.onrender.com` only.
-- `Access-Control-Allow-Credentials: true`.
-- No wildcard origin. Unlisted origins → 403.
-
----
-
-## Migration P3009 Fix
-
-The migration SQL uses `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` — safe to re-run.
+Migration `20260825140000_add_admin_server_sessions` SQL uses `CREATE TABLE IF NOT EXISTS` /
+`CREATE INDEX IF NOT EXISTS` — safe to re-run without data loss.
 
 **One-time production DB repair** (run from Render shell if migration still shows `failed`):
 
@@ -135,82 +99,151 @@ prisma migrate resolve --rolled-back 20260825140000_add_admin_server_sessions \
 prisma migrate deploy --schema ./prisma/schema.prisma
 ```
 
-All subsequent clean deploys succeed without any hacks.
+Cannot verify current production DB state — sandbox has no DNS access to Render.
 
 ---
 
-## Production HTTP Verification
+## 5. Typecheck Result
 
-> **BLOCKED:** This CI sandbox has no DNS access to Render hosts.
-> Production HTTP results are NOT verified by actual HTTP requests from this environment.
+```
+npm run typecheck → PASS
+  frontend: PASS
+  backend: PASS
+  bot: PASS
+```
 
-| Check | Expected | Verified |
+---
+
+## 6. Test Result
+
+```
+npm run test → PASS
+
+Backend (3/3):
+  ✔ admin session flow keeps public endpoints independent
+  ✔ cors allows only production frontend origin and handles preflight
+  ✔ payment settings CRUD and checkout manual payment flow
+
+Frontend (3/3):
+  ✔ public and admin clients keep transport isolation across auth flow
+  ✔ public client never switches to credentialed mode
+  ✔ payment and admin payment endpoints use correct paths and transports
+```
+
+---
+
+## 7. Build Result
+
+```
+npm run build → PASS (frontend + backend + bot)
+```
+
+---
+
+## 8. Admin Authentication Architecture
+
+- `POST /api/admin/auth/login` — scrypt password verify, server-side session in `admin_sessions`, sets `HttpOnly` cookie.
+- `GET /api/admin/auth/status` — validates session against DB, returns `{authenticated:true}` or 401.
+- `POST /api/admin/auth/logout` — revokes session in DB, clears cookie.
+- Session tokens never exposed to JavaScript.
+
+## 9. Cookie Configuration
+
+| Attribute | Production | Development |
 |---|---|---|
-| `GET /api/health` | HTTP 200 | BLOCKED — sandbox DNS |
+| HttpOnly | true | true |
+| Secure | true | false |
+| SameSite | none | lax |
+| Path | /api/admin | /api/admin |
+
+## 10. CORS Configuration
+
+- Production allowed origin: `https://telegram-shop-3781.onrender.com` only.
+- `Access-Control-Allow-Credentials: true`.
+- No wildcard origin. Unlisted origins → 403.
+
+---
+
+## 11. Backend API Verification
+
+> **BLOCKED:** Sandbox DNS cannot resolve `narcos-shop.onrender.com`.
+> `npm run smoke:production` → all 12 checks: BLOCKED (fetch failed).
+>
+> These checks were NOT performed against a live production URL.
+
+| Check | Expected | Actual |
+|---|---|---|
+| `GET /api/health` | HTTP 200 | BLOCKED |
 | `GET /api/admin/auth/status` (no cookie) | HTTP 401 | BLOCKED |
 | `POST /api/admin/auth/login` | HTTP 200 + Set-Cookie | BLOCKED |
-| `GET /api/admin/auth/status` (with cookie) | HTTP 200, `{authenticated:true}` | BLOCKED |
+| `GET /api/admin/auth/status` (with cookie) | HTTP 200 | BLOCKED |
 | `GET /api/admin/stats` (with cookie) | HTTP 200 | BLOCKED |
 | `POST /api/admin/auth/logout` | HTTP 200 | BLOCKED |
 | `GET /api/admin/auth/status` (after logout) | HTTP 401 | BLOCKED |
 | `GET /api/admin/stats` (after logout) | HTTP 401 | BLOCKED |
 
-## Real Browser /admin Verification
+## 12. Frontend/Admin URL Verification
 
 > **BLOCKED:** Cannot open a real browser from this CI sandbox.
 
-Expected after Render goes LIVE:
-
-- `https://telegram-shop-3781.onrender.com/admin` → Render redirect → `/#/admin` → admin login page.
-- Login sets `HttpOnly; Secure; SameSite=None; Path=/api/admin` cookie.
-- `credentials: 'include'` on all `adminRequest` calls sends cookie to backend.
-- Logout clears cookie; subsequent requests return 401.
-
 ---
 
-## Narcos City / Public Shop
+## 13. Public Shop Verification
 
 No changes made to any public shop routes, product/order/user/catalog logic, Telegram bot
-integration, or frontend public pages. All Narcos City functionality is unchanged.
+integration, or any frontend public pages. All existing shop functionality is unchanged.
+
+Telegram initData validation uses HMAC with `TELEGRAM_BOT_TOKEN` — no bypass, no hardcoded IDs.
+Demo mode is disabled in production (`ALLOW_DEMO_MODE=false` in render.yaml).
 
 ---
 
-## Git State
+## 14. Functions Present (Not Added — Already Existed)
 
-| Item | Value |
-|---|---|
-| Final commit | `118ebeb` |
-| Branch | `copilot/rebuild-admin-server-session` |
-| Push to main | **BLOCKED** — push to main returns 403 (branch protection). Merge via PR. |
+All of the following were already implemented and are unchanged:
 
-## Render Deployment
-
-To deploy these fixes to production:
-
-1. Merge the PR from `copilot/rebuild-admin-server-session` into `main` on GitHub.
-2. Render will auto-deploy from `main`.
-3. If migration `20260825140000_add_admin_server_sessions` is still `failed` in DB,
-   run the one-time repair from Render shell (see above), then trigger a redeploy.
+- Catalog (products, categories, filtering, images, availability)
+- Cart (add/remove/update items, subtotal/total, authenticated users)
+- Orders (create, status history, cancellation, refund requests)
+- Admin panel (dashboard, stats, orders, users, products, categories, discounts, support, payments)
+- User profile (Telegram identity, order history)
+- Payments (manual payment methods, admin confirmation/rejection)
+- Telegram initData validation (HMAC, server-side)
+- Admin session authentication (scrypt + server-side sessions)
+- CORS and HttpOnly cookies
 
 ---
 
-## Final Production URLs
+## 15. Production Deployment Status
 
-| Service | URL |
-|---|---|
-| Backend health | https://narcos-shop.onrender.com/api/health |
-| Frontend | https://telegram-shop-3781.onrender.com |
-| Admin panel | https://telegram-shop-3781.onrender.com/admin |
+PR #43 is open as a draft at `753af80` — **NOT yet merged into `main`**.
 
-## Final Status
+Push to `main` returns 403 from this sandbox (branch protection).
+
+**Required action to complete production deployment:**
+
+1. Open https://github.com/anyya420-dev/Telegram-shop/pull/43
+2. Click "Ready for review" to convert from draft.
+3. Merge the PR into `main`.
+4. Render will auto-deploy from `main`.
+5. If migration still shows `failed` in production DB: run one-time repair from Render shell (see section 4).
+
+**Render deployment:** NOT LIVE — awaiting PR merge.
+
+---
+
+## 16. Confirmation
 
 | Item | Status |
 |---|---|
-| Code fixes | **DONE** |
-| typecheck | **PASS** |
-| tests | **PASS** |
-| build | **PASS** |
-| Commit pushed | **DONE** (`118ebeb` on feature branch) |
-| Merge to main | **BLOCKED** — 403 on push; requires manual PR merge |
-| Live production HTTP | **BLOCKED** — sandbox DNS; requires manual verification after deploy |
-| Real browser /admin | **BLOCKED** — no browser access from sandbox |
+| Code fixes complete | ✅ YES |
+| No hacks / no `\|\| true` / no `2>/dev/null` | ✅ YES |
+| typecheck PASS | ✅ YES |
+| tests PASS | ✅ YES |
+| build PASS | ✅ YES |
+| Commit on feature branch | ✅ YES (`753af80`) |
+| PR #43 open and mergeable | ✅ YES |
+| Merge to main | ❌ BLOCKED (403 — branch protection) |
+| Live production HTTP verified | ❌ BLOCKED (sandbox DNS) |
+| Real browser /admin verified | ❌ BLOCKED (no browser) |
+| Render deployment LIVE | ❌ PENDING (awaiting PR merge) |
