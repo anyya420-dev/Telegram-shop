@@ -183,3 +183,53 @@ test('an unlisted origin cannot reach /api/session/bootstrap', async () => {
   assert.equal(response.status, 403)
   assert.equal(response.headers.get('access-control-allow-origin'), null)
 })
+
+test('public bootstrap endpoint does not depend on admin cookie/session', async () => {
+  const response = await fetch(`${baseUrl}/api/session/bootstrap`, {
+    method: 'POST',
+    headers: {
+      Origin: ALLOWED_ORIGIN,
+      'Content-Type': 'application/json',
+      Cookie: 'tg_shop_admin_session=stale-admin-session',
+    },
+    body: JSON.stringify({}),
+  })
+
+  assert.equal(response.status, 401)
+  const body = await response.json() as { code?: string }
+  assert.equal(body.code, 'telegram_init_data_required')
+})
+
+test('admin auth failure does not affect public health endpoints', async () => {
+  const failedAdminLogin = await fetch(`${baseUrl}/api/admin/auth/login`, {
+    method: 'POST',
+    headers: {
+      Origin: ALLOWED_ORIGIN,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ password: 'wrong-password' }),
+  })
+
+  assert.equal(failedAdminLogin.status, 401)
+  const adminBody = await failedAdminLogin.json() as { code?: string }
+  assert.equal(adminBody.code, 'unauthorized')
+  assert.match(failedAdminLogin.headers.get('content-type') ?? '', /application\/json/)
+
+  const health = await fetch(`${baseUrl}/api/health`, {
+    headers: { Origin: ALLOWED_ORIGIN },
+  })
+  assert.equal(health.status, 200)
+  const body = await health.json() as { status?: string }
+  assert.equal(body.status, 'ok')
+})
+
+test('protected admin endpoint rejects unauthenticated requests with JSON 401', async () => {
+  const response = await fetch(`${baseUrl}/api/admin/stats`, {
+    headers: { Origin: ALLOWED_ORIGIN },
+  })
+
+  assert.equal(response.status, 401)
+  assert.match(response.headers.get('content-type') ?? '', /application\/json/)
+  const body = await response.json() as { code?: string }
+  assert.equal(body.code, 'unauthorized')
+})

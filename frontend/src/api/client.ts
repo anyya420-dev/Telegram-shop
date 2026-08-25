@@ -21,9 +21,16 @@ import type {
   WishlistItem,
 } from '../types'
 
-const IS_PRODUCTION = Boolean(import.meta.env.PROD)
+const ENV = (import.meta as ImportMeta & {
+  env?: {
+    PROD?: boolean
+    VITE_API_URL?: string
+  }
+}).env ?? {}
+
+const IS_PRODUCTION = Boolean(ENV.PROD)
 const { baseUrl: API_URL, error: API_CONFIG_ERROR } = resolveApiBaseUrl(
-  import.meta.env.VITE_API_URL,
+  ENV.VITE_API_URL,
   IS_PRODUCTION,
 )
 
@@ -50,6 +57,10 @@ export function getApiDiagnostics() {
 
 let sessionToken: string | null = null
 let adminToken: string | null = null
+
+function isAdminPath(path: string) {
+  return path === '/admin' || path.startsWith('/admin/')
+}
 
 export class ApiError extends Error {
   code?: string
@@ -120,17 +131,24 @@ async function request<T>(path: string, init?: RequestInit) {
     ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     : null
 
+  const adminRequest = isAdminPath(path)
+  const headers = new Headers(init?.headers)
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  if (sessionToken) {
+    headers.set('Authorization', 'Bearer ' + sessionToken)
+  }
+  if (adminRequest && adminToken) {
+    headers.set('X-Admin-Token', adminToken)
+  }
+
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
-      credentials: 'include',
+      credentials: adminRequest ? 'include' : 'omit',
       signal: controller?.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
-        ...(adminToken ? { 'X-Admin-Token': adminToken } : {}),
-        ...(init?.headers ?? {}),
-      },
+      headers,
     })
   } catch (fetchError) {
     const { code, message } = classifyFetchFailure(fetchError)

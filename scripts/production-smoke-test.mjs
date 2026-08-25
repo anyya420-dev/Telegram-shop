@@ -133,6 +133,19 @@ await runCheck('OPTIONS preflight for /api/session/bootstrap', async () => {
   return `${response.status} + valid CORS headers`
 })
 
+await runCheck('wrong Origin is rejected safely', async () => {
+  const response = await fetch(`${PRODUCTION.apiBaseUrl}/health`, {
+    headers: {
+      Origin: 'https://evil.example.com',
+    },
+  })
+  ensure(response.status === 403, `expected 403 for disallowed origin, received ${response.status}`)
+  ensure(response.headers.get('access-control-allow-origin') === null, 'disallowed origin should not receive ACAO')
+  const body = await response.json()
+  ensure(body?.code === 'cors_origin_not_allowed', 'unexpected disallowed-origin payload')
+  return '403 + no ACAO'
+})
+
 await runCheck('session bootstrap endpoint reachable', async () => {
   const response = await fetch(`${PRODUCTION.apiBaseUrl}/session/bootstrap`, {
     method: 'POST',
@@ -143,6 +156,17 @@ await runCheck('session bootstrap endpoint reachable', async () => {
     body: JSON.stringify({}),
   })
   ensure([200, 400, 401, 403, 422, 503].includes(response.status), `unexpected status ${response.status}`)
+  return `${response.status}`
+})
+
+await runCheck('admin endpoint is protected with JSON unauthorized response', async () => {
+  const response = await fetch(`${PRODUCTION.apiBaseUrl}/admin/stats`, {
+    headers: {
+      Origin: PRODUCTION.frontendUrl,
+    },
+  })
+  ensure(response.status === 401 || response.status === 403, `expected 401/403, received ${response.status}`)
+  ensure((response.headers.get('content-type') ?? '').includes('application/json'), 'admin auth failure must return JSON')
   return `${response.status}`
 })
 

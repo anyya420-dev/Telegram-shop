@@ -15,17 +15,12 @@ const URL_CONFIG_KEYS = ['FRONTEND_URL', 'WEB_APP_URL'] as const
 const BOOLEAN_CONFIG_KEYS = ['ALLOW_DEMO_MODE'] as const
 
 /**
- * Origins that are always part of the CORS allowlist in production.
- * They act as a safety net so a stale FRONTEND_URL/WEB_APP_URL in the hosting
- * dashboard cannot lock the real Telegram Mini App out of its own backend.
+ * Origin that is always part of the CORS allowlist in production.
+ * It ensures the Telegram Mini App keeps working even if FRONTEND_URL/WEB_APP_URL
+ * is temporarily misconfigured in the hosting dashboard.
  */
 const KNOWN_PRODUCTION_FRONTEND_ORIGINS = [
   'https://telegram-shop-3781.onrender.com',
-  // Backend's own public hostname — acts as a safety net so that any page
-  // served under narcos-shop.onrender.com (e.g. admin panel, Telegram WebApp
-  // fallback) can reach the API without a CORS rejection even if FRONTEND_URL
-  // is misconfigured in the Render dashboard.
-  'https://narcos-shop.onrender.com',
 ] as const
 
 const REQUIRED_PRODUCTION_KEYS = [
