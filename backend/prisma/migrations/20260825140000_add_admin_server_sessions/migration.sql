@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "admin_security" (
+CREATE TABLE IF NOT EXISTS "admin_security" (
     "id" SERIAL NOT NULL,
     "password_hash" TEXT NOT NULL,
     "password_salt" TEXT NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE "admin_security" (
 );
 
 -- CreateTable
-CREATE TABLE "admin_sessions" (
+CREATE TABLE IF NOT EXISTS "admin_sessions" (
     "id" SERIAL NOT NULL,
     "token_hash" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE "admin_sessions" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "admin_sessions_token_hash_key" ON "admin_sessions"("token_hash");
+CREATE UNIQUE INDEX IF NOT EXISTS "admin_sessions_token_hash_key" ON "admin_sessions"("token_hash");
 
 -- CreateIndex
-CREATE INDEX "admin_sessions_expires_at_revoked_at_idx" ON "admin_sessions"("expires_at", "revoked_at");
+CREATE INDEX IF NOT EXISTS "admin_sessions_expires_at_revoked_at_idx" ON "admin_sessions"("expires_at", "revoked_at");
