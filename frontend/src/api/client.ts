@@ -18,7 +18,18 @@ import type {
   WishlistItem,
 } from '../types'
 
-const API_URL: string = (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL ?? ''
+export function resolveApiUrl(env = (import.meta as { env?: Record<string, string> }).env) {
+  const configuredValue = env?.VITE_API_URL?.trim() ?? ''
+
+  if (!configuredValue) {
+    return ''
+  }
+
+  const normalizedValue = configuredValue.replace(/\/+$/, '')
+  return normalizedValue.endsWith('/api') ? normalizedValue : `${normalizedValue}/api`
+}
+
+const API_URL = resolveApiUrl()
 let sessionToken: string | null = null
 
 export class ApiError extends Error {

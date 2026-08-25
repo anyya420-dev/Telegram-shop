@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
-import { api } from './client'
+import { api, resolveApiUrl } from './client'
 
 type Call = { url: string; init: RequestInit }
 
@@ -81,4 +81,11 @@ test('payment and admin payment endpoints use correct paths and transports', asy
   assert.equal(calls[2].url.includes('/admin/payment-settings'), true)
   assert.equal(calls[3].url.includes('/admin/payment-settings/7/toggle'), true)
   assert.equal(calls[4].url.includes('/admin/payment-settings/7'), true)
+})
+
+test('resolveApiUrl normalizes Render API env values', () => {
+  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://narcos-shop.onrender.com' }), 'https://narcos-shop.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://narcos-shop.onrender.com/api/' }), 'https://narcos-shop.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: '/api/' }), '/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: '   ' }), '')
 })

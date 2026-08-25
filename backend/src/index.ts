@@ -20,15 +20,33 @@ import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
 import { prisma } from './lib.js'
 
-const productionFrontendOrigin = 'https://telegram-shop-3781.onrender.com'
+const fallbackProductionOrigins = ['https://telegram-shop.onrender.com', 'https://telegram-shop-3781.onrender.com']
+
+function normalizeOrigin(value: string) {
+  try {
+    return new URL(value).origin
+  } catch {
+    return null
+  }
+}
+
+function readConfiguredOrigins() {
+  return [process.env.FRONTEND_URL, process.env.WEB_APP_URL, process.env.CORS_ALLOWED_ORIGINS]
+    .flatMap((value) => value?.split(',') ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map(normalizeOrigin)
+    .filter((value): value is string => Boolean(value))
+}
+
 function getAllowedOrigins() {
+  const configuredOrigins = readConfiguredOrigins()
+
   if (process.env.NODE_ENV === 'production') {
-    return new Set([productionFrontendOrigin])
+    return new Set(configuredOrigins.length > 0 ? configuredOrigins : fallbackProductionOrigins)
   }
 
-  const developmentDefaults = [productionFrontendOrigin, 'http://localhost:5173', 'http://localhost:4173']
-  const configuredOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(',').map((value) => value.trim()).filter(Boolean)
-  return new Set(configuredOrigins && configuredOrigins.length > 0 ? configuredOrigins : developmentDefaults)
+  return new Set([...fallbackProductionOrigins, 'http://localhost:5173', 'http://localhost:4173', ...configuredOrigins])
 }
 
 export function createApp() {
