@@ -19,6 +19,7 @@ let server: Server | null = null
 let baseUrl = ''
 let createApp: (() => any) | null = null
 let prisma: any = null
+let createSessionToken: ((telegramId: string) => string) | null = null
 
 function run(command: string, args: string[], cwd = repoRoot, env = process.env) {
   const childEnv = { ...env }
@@ -46,6 +47,7 @@ before(async () => {
   const libModule = await import('../src/lib.js')
   createApp = indexModule.createApp
   prisma = libModule.prisma
+  createSessionToken = libModule.createSessionToken
 
   const app = createApp()
   await new Promise<void>((resolve, reject) => {
@@ -233,14 +235,14 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
   })
   assert.equal(deletedTon.response.status, 200)
 
-  const bootstrap = await requestJson('/api/session/bootstrap', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ initData: '', telegramUser: { id: '1', first_name: 'Demo' }, isTelegramEnvironment: false }),
+  const telegramId = '900000001'
+  const user = await prisma.user.upsert({
+    where: { telegramId },
+    create: { telegramId, firstName: 'Demo', username: 'demo_customer', language: 'ru' },
+    update: {},
   })
-  assert.equal(bootstrap.response.status, 200)
-  const sessionToken = bootstrap.body.sessionToken as string
-  const userId = bootstrap.body.user.id as number
+  const sessionToken = createSessionToken!(telegramId)
+  const userId = user.id
   const authHeader = { 'X-Session-Token': sessionToken, 'Content-Type': 'application/json' }
 
   const city = await prisma.city.create({ data: { name: 'Test City', nameEn: 'Test City', isActive: true } })
@@ -269,8 +271,7 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
   })
 
   await prisma.user.update({ where: { id: userId }, data: { selectedCityId: city.id } })
-  const cart = await prisma.cart.findUnique({ where: { userId } })
-  assert.ok(cart)
+  const cart = await prisma.cart.upsert({ where: { userId }, create: { userId }, update: {} })
   await prisma.cartItem.create({ data: { cartId: cart.id, productCityId: productCity.id, quantity: 2 } })
 
   const enabledMethods = await requestJson('/api/payments/methods', {

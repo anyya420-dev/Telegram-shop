@@ -131,66 +131,66 @@ export default function AdminPage() {
     } finally {
       setCreating(false);
     }
+  }
 
-    async function handleCreatePaymentMethod() {
-      if (!newPaymentTitle.trim()) return;
-      try {
-        const payload = {
-          type: newPaymentType,
-          title: newPaymentTitle.trim(),
-          currency: newPaymentCurrency.trim() || undefined,
-          network: newPaymentNetwork.trim() || undefined,
-          walletAddress: newPaymentWalletAddress.trim() || undefined,
-          cardNumber: newPaymentCardNumber.trim() || undefined,
-          cardholderName: newPaymentCardholderName.trim() || undefined,
-        };
-        const r = await api.createAdminPaymentSetting(payload);
-        setPaymentMethods((prev) => [...prev, r.method]);
-        setNewPaymentTitle('');
-        setNewPaymentCurrency('');
-        setNewPaymentNetwork('');
-        setNewPaymentWalletAddress('');
-        setNewPaymentCardNumber('');
-        setNewPaymentCardholderName('');
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to create payment method');
-      }
+  async function handleCreatePaymentMethod() {
+    if (!newPaymentTitle.trim()) return;
+    try {
+      const payload = {
+        type: newPaymentType,
+        title: newPaymentTitle.trim(),
+        currency: newPaymentCurrency.trim() || undefined,
+        network: newPaymentNetwork.trim() || undefined,
+        walletAddress: newPaymentWalletAddress.trim() || undefined,
+        cardNumber: newPaymentCardNumber.trim() || undefined,
+        cardholderName: newPaymentCardholderName.trim() || undefined,
+      };
+      const r = await api.createAdminPaymentSetting(payload);
+      setPaymentMethods((prev) => [...prev, r.method]);
+      setNewPaymentTitle('');
+      setNewPaymentCurrency('');
+      setNewPaymentNetwork('');
+      setNewPaymentWalletAddress('');
+      setNewPaymentCardNumber('');
+      setNewPaymentCardholderName('');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create payment method');
     }
+  }
 
-    async function handleTogglePaymentMethod(id: number) {
-      try {
-        const r = await api.toggleAdminPaymentSetting(id);
-        setPaymentMethods((prev) => prev.map((method) => (method.id === id ? r.method : method)));
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to toggle payment method');
-      }
+  async function handleTogglePaymentMethod(id: number) {
+    try {
+      const r = await api.toggleAdminPaymentSetting(id);
+      setPaymentMethods((prev) => prev.map((method) => (method.id === id ? r.method : method)));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to toggle payment method');
     }
+  }
 
-    async function handleDeletePaymentMethod(id: number) {
-      try {
-        await api.deleteAdminPaymentSetting(id);
-        setPaymentMethods((prev) => prev.filter((method) => method.id !== id));
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to delete payment method');
-      }
+  async function handleDeletePaymentMethod(id: number) {
+    try {
+      await api.deleteAdminPaymentSetting(id);
+      setPaymentMethods((prev) => prev.filter((method) => method.id !== id));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to delete payment method');
     }
+  }
 
-    async function handleConfirmPendingPayment(orderId: number) {
-      try {
-        const r = await api.confirmAdminOrderPayment(orderId);
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to confirm payment');
-      }
+  async function handleConfirmPendingPayment(orderId: number) {
+    try {
+      const r = await api.confirmAdminOrderPayment(orderId);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to confirm payment');
     }
+  }
 
-    async function handleRejectPendingPayment(orderId: number) {
-      try {
-        const r = await api.rejectAdminOrderPayment(orderId);
-        setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to reject payment');
-      }
+  async function handleRejectPendingPayment(orderId: number) {
+    try {
+      const r = await api.rejectAdminOrderPayment(orderId);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to reject payment');
     }
   }
 
