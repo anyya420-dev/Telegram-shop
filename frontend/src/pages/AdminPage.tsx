@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Settings, Star, MapPin, X, Check } from 'lucide-react';
 import { api } from '../api/client';
 import type { AdminStats, Category, City, Order, SupportTicket, Discount, PaymentMethod, UserProfile } from '../types';
 import { formatCurrency } from '../lib/format';
@@ -404,7 +405,7 @@ export default function AdminPage() {
   if (!authChecked) {
     return (
       <div className={styles.page}>
-        <h1 className={styles.title}>⚙️ Admin Panel</h1>
+        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: "middle", marginRight: 8 }} />Admin Panel</h1>
         <p className={styles.loading}>Loading...</p>
       </div>
     );
@@ -413,7 +414,7 @@ export default function AdminPage() {
   if (!authenticated) {
     return (
       <div className={styles.page}>
-        <h1 className={styles.title}>⚙️ Admin Panel</h1>
+        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: "middle", marginRight: 8 }} />Admin Panel</h1>
         {error && <p className={styles.error}>{error}</p>}
         <div className={styles.form}>
           <h3 className={styles.formTitle}>{t('admin.login', { defaultValue: 'Admin login' })}</h3>
@@ -435,7 +436,7 @@ export default function AdminPage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}>⚙️ Admin Panel</h1>
+      <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: "middle", marginRight: 8 }} />Admin Panel</h1>
       <div className={styles.filterRow}>
         <button className={styles.filterBtn} onClick={() => void handleLogout()}>
           {t('common.logout', { defaultValue: 'Logout' })}
@@ -550,7 +551,7 @@ export default function AdminPage() {
               {t('admin.refresh', { defaultValue: 'Refresh' })}
             </button>
             <button className={styles.createBtn} onClick={() => setShowNewProduct((v) => !v)}>
-              {showNewProduct ? '✕ Cancel' : '+ New Product'}
+              {showNewProduct ? <><X size={14} strokeWidth={2} style={{ verticalAlign: 'middle', marginRight: 4 }} />Cancel</> : '+ New Product'}
             </button>
           </div>
 
@@ -640,7 +641,7 @@ export default function AdminPage() {
                 </div>
                 <p className={styles.orderMeta}>
                   {product.category.name} • {formatCurrency(product.price, language)}
-                  {product.isRecommended ? ' ⭐' : ''}
+                  {product.isRecommended ? <><Star size={12} strokeWidth={1.5} fill="currentColor" style={{ verticalAlign: 'middle', marginLeft: 4 }} /></> : ''}
                 </p>
 
                 {editingProduct === product.id ? (
@@ -714,11 +715,11 @@ export default function AdminPage() {
                               {' Available'}
                             </label>
                             <button className={styles.replyBtn} onClick={() => void handleSaveProductCity(pc.id)}>Save</button>
-                            <button className={styles.replyBtn} onClick={() => setEditingProductCity(null)}>✕</button>
+                            <button className={styles.replyBtn} onClick={() => setEditingProductCity(null)}><X size={14} strokeWidth={2} /></button>
                           </>
                         ) : (
                           <>
-                            <span>Stock: {pc.stock} • {pc.isAvailable ? '✓ Available' : '✗ Unavailable'}</span>
+                            <span>Stock: {pc.stock} • {pc.isAvailable ? <><Check size={12} strokeWidth={2} style={{ verticalAlign: 'middle' }} /> Available</> : <><X size={12} strokeWidth={2} style={{ verticalAlign: 'middle' }} /> Unavailable</>}</span>
                             <button className={styles.replyBtn} onClick={() => { setEditingProductCity(pc.id); setProductCityEdits((prev) => ({ ...prev, [pc.id]: {} })); }}>Edit stock</button>
                           </>
                         )}
@@ -751,7 +752,7 @@ export default function AdminPage() {
                     </span>
                     {user.language && <span className={styles.orderMeta}>{user.language.toUpperCase()}</span>}
                   </div>
-                  <p className={styles.orderMeta}>TG: {user.telegramId}{user.selectedCity ? ` • 📍 ${user.selectedCity.name}` : ''}</p>
+                  <p className={styles.orderMeta}>TG: {user.telegramId}{user.selectedCity ? <> • <MapPin size={12} strokeWidth={1.5} style={{ verticalAlign: 'middle' }} /> {user.selectedCity.name}</> : ''}</p>
                   {balance != null && (
                     <p className={styles.orderMeta}>Balance: {formatCurrency(balance.amount, language)}</p>
                   )}

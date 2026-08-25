@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import styles from './CartPage.module.css';
 import { useTranslation } from 'react-i18next';
@@ -84,7 +85,7 @@ export default function CartPage() {
                       : void removeCartItem(item.id)
                   }
                 >
-                  {nextDown < minimum ? '🗑' : '−'}
+                  {nextDown < minimum ? <Trash2 size={14} strokeWidth={1.5} /> : '−'}
                 </button>
                 <span className={styles.qty}>{item.quantity}</span>
                 <button

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { MapPin } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { getLocalizedCityName } from '../lib/localized'
 import type { Language } from '../types'
@@ -20,7 +21,7 @@ export function CityPicker() {
         <div className="modal-card__header">
           <div>
             <span className="eyebrow">{t('cityPicker.badge')}</span>
-            <h2>{t('cityPicker.title')}</h2>
+            <h2><MapPin size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 6 }} />{t('cityPicker.title')}</h2>
           </div>
           {user?.selectedCityId ? (
             <button className="ghost-button" type="button" onClick={closeCityPicker}>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
 import styles from './ShopPage.module.css';
@@ -33,7 +34,7 @@ export default function ShopPage() {
           <h1 className={styles.title}>{t('shop.title')}</h1>
           {user?.selectedCity && (
             <button className={styles.city} onClick={() => openCityPicker()}>
-              📍 {user.selectedCity.name}
+              <MapPin size={14} strokeWidth={1.5} /> {user.selectedCity.name}
             </button>
           )}
         </div>

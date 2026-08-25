@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Coins, Heart } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api/client';
 import styles from './ProfilePage.module.css';
@@ -142,7 +143,7 @@ export default function ProfilePage() {
           <div className={styles.card} onClick={() => navigate('/balance')} style={{ cursor: 'pointer' }}>
             <span className={styles.cardLabel}>{t('profile.balance')}</span>
             <div className={styles.cardRight}>
-              <span className={styles.cardValue}>💰 {profile.balance.toFixed(2)}</span>
+              <span className={styles.cardValue}><Coins size={14} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 4 }} />{profile.balance.toFixed(2)}</span>
               <span className={styles.cardArrow}>›</span>
             </div>
           </div>
@@ -185,7 +186,7 @@ export default function ProfilePage() {
           className={styles.ordersLink}
           onClick={() => navigate('/wishlist')}
         >
-          <span>🤍 {t('wishlist.title')}</span>
+          <span><Heart size={14} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 4 }} />{t('wishlist.title')}</span>
           <span className={styles.cardArrow}>›</span>
         </div>
       </div>

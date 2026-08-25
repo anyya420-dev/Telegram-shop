@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
 import { useTranslation } from 'react-i18next';
@@ -33,11 +34,11 @@ export default function HomePage() {
           <h1 className={styles.logo}>{t('home.title')}</h1>
           {user?.selectedCity ? (
             <button className={styles.cityBadge} onClick={openCityPicker}>
-              📍 {user.selectedCity.name}
+              <MapPin size={14} strokeWidth={1.5} /> {user.selectedCity.name}
             </button>
           ) : (
             <button className={styles.cityBadge} onClick={openCityPicker}>
-              📍 {t('profile.cityNotSelected')}
+              <MapPin size={14} strokeWidth={1.5} /> {t('profile.cityNotSelected')}
             </button>
           )}
         </div>
