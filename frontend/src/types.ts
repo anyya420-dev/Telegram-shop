@@ -115,22 +115,37 @@ export type DeliveryOption = {
   price: number
 }
 
+export type PaymentMethod = {
+  id: number
+  type: 'card' | 'ton' | 'crypto'
+  title: string
+  cardNumber: string | null
+  cardholderName: string | null
+  currency: string | null
+  network: string | null
+  walletAddress: string | null
+  isEnabled: boolean
+}
+
 export type Order = {
   id: number
   userId: number
   cityId: number
   status: string
+  paymentStatus: string | null
   subtotal: number
   discountAmount: number
   deliveryFee: number
   total: number
   comment: string | null
+  paymentMethodId: number | null
   cancelledAt: string | null
   refundStatus: string | null
   createdAt: string
   items: OrderItem[]
   city: { id: number; name: string; nameEn: string | null }
   statusHistory: OrderStatusEntry[]
+  paymentMethod: PaymentMethod | null
   deliveryOption: DeliveryOption | null
   discount: { id: number; code: string } | null
 }

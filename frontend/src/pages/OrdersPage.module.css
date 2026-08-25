@@ -131,6 +131,7 @@
 }
 
 .status_pending { background: rgba(230, 130, 0, 0.15); color: #e6a040; }
+.status_payment_pending { background: rgba(240, 120, 120, 0.15); color: #ff8a8a; }
 .status_confirmed { background: rgba(60, 130, 220, 0.15); color: #7ab4f0; }
 .status_processing { background: rgba(150, 80, 200, 0.15); color: #c085f0; }
 .status_ready { background: rgba(45, 158, 110, 0.15); color: #6fd4a8; }

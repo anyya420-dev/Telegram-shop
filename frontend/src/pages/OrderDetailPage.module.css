@@ -71,6 +71,7 @@
 }
 
 .status_pending { background: #fff3e0; color: #e65100; }
+.status_payment_pending { background: #fde8e8; color: #c53030; }
 .status_confirmed { background: #e3f2fd; color: #1565c0; }
 .status_processing { background: #f3e5f5; color: #6a1b9a; }
 .status_ready { background: #e8f5e9; color: #2e7d32; }
@@ -209,4 +210,3 @@
 .cancelBtn:disabled { opacity: 0.5; }
 .refundBtn { width: 100%; margin-top: 8px; padding: 12px; border: none; border-radius: 12px; background: var(--tg-theme-button-color, #7C3AED); color: var(--tg-theme-button-text-color, #fff); font-size: 15px; font-weight: 600; cursor: pointer; }
 .refundBtn:disabled { opacity: 0.5; }
-

@@ -7,6 +7,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 
 const STATUS_LABELS: Record<string, string> = {
   pending: '⏳ Ожидает подтверждения',
+  payment_pending: '💳 Платёж проверяется администратором',
   confirmed: '✅ Подтверждён',
   processing: '🔧 В обработке',
   ready: '📦 Готов к выдаче',

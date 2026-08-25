@@ -10,6 +10,7 @@ import styles from './OrdersPage.module.css';
 function statusLabel(status: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
     pending: t('orders.statusPending'),
+    payment_pending: t('orders.statusPaymentPending'),
     confirmed: t('orders.statusConfirmed'),
     processing: t('orders.statusProcessing'),
     ready: t('orders.statusReady'),

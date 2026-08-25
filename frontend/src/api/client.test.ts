@@ -57,6 +57,7 @@ test('public client never switches to credentialed mode', async () => {
 
   await api.getCities()
   await api.getProduct(1, 1)
+  await api.getPaymentMethods()
 
   for (const call of calls) {
     assert.equal(call.init.credentials, 'omit')
@@ -64,4 +65,20 @@ test('public client never switches to credentialed mode', async () => {
 
   const headers = new Headers(calls[0].init.headers)
   assert.equal(headers.has('Authorization'), false)
+})
+
+test('payment and admin payment endpoints use correct paths and transports', async () => {
+  await api.getPaymentMethods()
+  await api.getAdminPaymentSettings()
+  await api.createAdminPaymentSetting({ type: 'crypto', title: 'USDT TRC20', currency: 'USDT', network: 'TRC20', walletAddress: 'T123' })
+  await api.toggleAdminPaymentSetting(7)
+  await api.deleteAdminPaymentSetting(7)
+
+  assert.equal(calls[0].url.includes('/payments/methods'), true)
+  assert.equal(calls[0].init.credentials, 'omit')
+  assert.equal(calls[1].url.includes('/admin/payment-settings'), true)
+  assert.equal(calls[1].init.credentials, 'include')
+  assert.equal(calls[2].url.includes('/admin/payment-settings'), true)
+  assert.equal(calls[3].url.includes('/admin/payment-settings/7/toggle'), true)
+  assert.equal(calls[4].url.includes('/admin/payment-settings/7'), true)
 })

@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
-import type { AdminStats, Order, SupportTicket, Discount } from '../types';
+import type { AdminStats, Order, SupportTicket, Discount, PaymentMethod } from '../types';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'discounts' | 'support' | 'audit';
+type Tab = 'stats' | 'orders' | 'discounts' | 'support' | 'audit' | 'payments';
 
-const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
+const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
 
 export default function AdminPage() {
   const { t } = useTranslation();
@@ -26,6 +26,7 @@ export default function AdminPage() {
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // New discount form
@@ -34,6 +35,13 @@ export default function AdminPage() {
   const [newValue, setNewValue] = useState('');
   const [newMin, setNewMin] = useState('');
   const [creating, setCreating] = useState(false);
+  const [newPaymentType, setNewPaymentType] = useState<PaymentMethod['type']>('card');
+  const [newPaymentTitle, setNewPaymentTitle] = useState('');
+  const [newPaymentCurrency, setNewPaymentCurrency] = useState('');
+  const [newPaymentNetwork, setNewPaymentNetwork] = useState('');
+  const [newPaymentWalletAddress, setNewPaymentWalletAddress] = useState('');
+  const [newPaymentCardNumber, setNewPaymentCardNumber] = useState('');
+  const [newPaymentCardholderName, setNewPaymentCardholderName] = useState('');
 
   // Support reply
   const [replyText, setReplyText] = useState<Record<number, string>>({});
@@ -85,6 +93,9 @@ export default function AdminPage() {
       } else if (t === 'audit') {
         const r = await api.getAuditLogs();
         setAuditLogs(r.logs);
+      } else if (t === 'payments') {
+        const r = await api.getAdminPaymentSettings();
+        setPaymentMethods(r.methods);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error loading data');
@@ -119,6 +130,67 @@ export default function AdminPage() {
       setError(e instanceof Error ? e.message : 'Failed to create discount');
     } finally {
       setCreating(false);
+    }
+
+    async function handleCreatePaymentMethod() {
+      if (!newPaymentTitle.trim()) return;
+      try {
+        const payload = {
+          type: newPaymentType,
+          title: newPaymentTitle.trim(),
+          currency: newPaymentCurrency.trim() || undefined,
+          network: newPaymentNetwork.trim() || undefined,
+          walletAddress: newPaymentWalletAddress.trim() || undefined,
+          cardNumber: newPaymentCardNumber.trim() || undefined,
+          cardholderName: newPaymentCardholderName.trim() || undefined,
+        };
+        const r = await api.createAdminPaymentSetting(payload);
+        setPaymentMethods((prev) => [...prev, r.method]);
+        setNewPaymentTitle('');
+        setNewPaymentCurrency('');
+        setNewPaymentNetwork('');
+        setNewPaymentWalletAddress('');
+        setNewPaymentCardNumber('');
+        setNewPaymentCardholderName('');
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to create payment method');
+      }
+    }
+
+    async function handleTogglePaymentMethod(id: number) {
+      try {
+        const r = await api.toggleAdminPaymentSetting(id);
+        setPaymentMethods((prev) => prev.map((method) => (method.id === id ? r.method : method)));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to toggle payment method');
+      }
+    }
+
+    async function handleDeletePaymentMethod(id: number) {
+      try {
+        await api.deleteAdminPaymentSetting(id);
+        setPaymentMethods((prev) => prev.filter((method) => method.id !== id));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to delete payment method');
+      }
+    }
+
+    async function handleConfirmPendingPayment(orderId: number) {
+      try {
+        const r = await api.confirmAdminOrderPayment(orderId);
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to confirm payment');
+      }
+    }
+
+    async function handleRejectPendingPayment(orderId: number) {
+      try {
+        const r = await api.rejectAdminOrderPayment(orderId);
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to reject payment');
+      }
     }
   }
 
@@ -202,7 +274,7 @@ export default function AdminPage() {
       {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.tabs}>
-        {(['stats', 'orders', 'discounts', 'support', 'audit'] as Tab[]).map((tabName) => (
+        {(['stats', 'orders', 'discounts', 'support', 'audit', 'payments'] as Tab[]).map((tabName) => (
           <button
             key={tabName}
             className={`${styles.tab} ${tab === tabName ? styles.tabActive : ''}`}
@@ -242,6 +314,12 @@ export default function AdminPage() {
                     <span className={styles.orderTotal}>{formatCurrency(order.total, language)}</span>
                   </div>
                   <p className={styles.orderMeta}>{new Date(order.createdAt).toLocaleString()} • {order.items.length} items</p>
+                  {order.paymentMethod && (
+                    <p className={styles.orderMeta}>
+                      {t('checkout.paymentMethod')}: {order.paymentMethod.title}
+                      {order.paymentStatus ? ` • ${order.paymentStatus}` : ''}
+                    </p>
+                  )}
                   <div className={styles.statusRow}>
                     <select
                       className={styles.statusSelect}
@@ -255,6 +333,16 @@ export default function AdminPage() {
                       <span className={styles.refundTag}>Refund: {order.refundStatus}</span>
                     )}
                   </div>
+                  {order.status === 'payment_pending' && order.paymentStatus === 'pending' && (
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleConfirmPendingPayment(order.id)}>
+                        {t('admin.confirmPayment', { defaultValue: 'Confirm payment' })}
+                      </button>
+                      <button className={styles.replyBtn} onClick={() => void handleRejectPendingPayment(order.id)}>
+                        {t('admin.rejectPayment', { defaultValue: 'Reject payment' })}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -333,6 +421,55 @@ export default function AdminPage() {
               <span className={styles.auditDate}>{new Date(log.createdAt).toLocaleString()}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'payments' && (
+        <div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>{t('admin.paymentSettings', { defaultValue: 'Payment settings' })}</h3>
+            <div className={styles.formRow}>
+              <select className={styles.select} value={newPaymentType} onChange={(e) => setNewPaymentType(e.target.value as PaymentMethod['type'])}>
+                <option value="card">Card</option>
+                <option value="ton">TON</option>
+                <option value="crypto">Crypto</option>
+              </select>
+              <input className={styles.input} placeholder={t('admin.methodTitle', { defaultValue: 'Title' })} value={newPaymentTitle} onChange={(e) => setNewPaymentTitle(e.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder={t('checkout.currency', { defaultValue: 'Currency' })} value={newPaymentCurrency} onChange={(e) => setNewPaymentCurrency(e.target.value)} />
+              <input className={styles.input} placeholder={t('checkout.network', { defaultValue: 'Network' })} value={newPaymentNetwork} onChange={(e) => setNewPaymentNetwork(e.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder={t('checkout.walletAddress', { defaultValue: 'Wallet address' })} value={newPaymentWalletAddress} onChange={(e) => setNewPaymentWalletAddress(e.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder={t('checkout.cardNumber', { defaultValue: 'Card number' })} value={newPaymentCardNumber} onChange={(e) => setNewPaymentCardNumber(e.target.value)} />
+              <input className={styles.input} placeholder={t('checkout.cardholder', { defaultValue: 'Cardholder (optional)' })} value={newPaymentCardholderName} onChange={(e) => setNewPaymentCardholderName(e.target.value)} />
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleCreatePaymentMethod()} disabled={!newPaymentTitle.trim()}>
+              {t('common.save', { defaultValue: 'Save' })}
+            </button>
+          </div>
+
+          <div className={styles.discountList}>
+            {paymentMethods.map((method) => (
+              <div key={method.id} className={styles.discountCard}>
+                <div>
+                  <div className={styles.discountCode}>{method.title}</div>
+                  <div>{method.type.toUpperCase()} {method.currency ? `• ${method.currency}` : ''} {method.network ? `• ${method.network}` : ''}</div>
+                </div>
+                <div className={styles.replyRow}>
+                  <button className={styles.replyBtn} onClick={() => void handleTogglePaymentMethod(method.id)}>
+                    {method.isEnabled ? t('admin.disable', { defaultValue: 'Disable' }) : t('admin.enable', { defaultValue: 'Enable' })}
+                  </button>
+                  <button className={styles.replyBtn} onClick={() => void handleDeletePaymentMethod(method.id)}>
+                    {t('common.delete', { defaultValue: 'Delete' })}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

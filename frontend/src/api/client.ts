@@ -7,6 +7,7 @@ import type {
   Discount,
   Language,
   Order,
+  PaymentMethod,
   ProductDetail,
   ProductSummary,
   Review,
@@ -111,8 +112,11 @@ export const api = {
   removeCartItem(itemId: number) {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
   },
-  checkout(payload?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) {
+  checkout(payload?: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number }) {
     return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload ?? {}) })
+  },
+  markOrderPaid(id: number) {
+    return publicRequest<{ order: Order }>(`/orders/${id}/mark-paid`, { method: 'POST' })
   },
   getOrders() {
     return publicRequest<{ orders: Order[] }>('/orders')
@@ -182,6 +186,9 @@ export const api = {
   getDeliveryOptions() {
     return publicRequest<{ options: { id: number; name: string; nameEn: string | null; type: string; price: number }[] }>('/delivery')
   },
+  getPaymentMethods() {
+    return publicRequest<{ methods: PaymentMethod[] }>('/payments/methods')
+  },
 
   adminLogin(data: { password: string }) {
     return adminRequest<{ ok: boolean }>('/admin/auth/login', {
@@ -208,6 +215,12 @@ export const api = {
   },
   processRefund(orderId: number, refundStatus: 'approved' | 'rejected') {
     return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/refund`, { method: 'PATCH', body: JSON.stringify({ refundStatus }) })
+  },
+  confirmAdminOrderPayment(orderId: number) {
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/payment`, { method: 'PATCH', body: JSON.stringify({ action: 'confirm' }) })
+  },
+  rejectAdminOrderPayment(orderId: number) {
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/payment`, { method: 'PATCH', body: JSON.stringify({ action: 'reject' }) })
   },
   getAdminUsers(page = 1) {
     return adminRequest<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)
@@ -236,5 +249,20 @@ export const api = {
   },
   getAuditLogs(page = 1) {
     return adminRequest<{ logs: { id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[] }>(`/admin/audit-logs?page=${page}`)
+  },
+  getAdminPaymentSettings() {
+    return adminRequest<{ methods: PaymentMethod[] }>('/admin/payment-settings')
+  },
+  createAdminPaymentSetting(data: Partial<PaymentMethod> & { type: PaymentMethod['type']; title: string }) {
+    return adminRequest<{ method: PaymentMethod }>('/admin/payment-settings', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminPaymentSetting(id: number, data: Partial<PaymentMethod>) {
+    return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  deleteAdminPaymentSetting(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/payment-settings/${id}`, { method: 'DELETE' })
+  },
+  toggleAdminPaymentSetting(id: number) {
+    return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}/toggle`, { method: 'PATCH' })
   },
 }

@@ -11,6 +11,7 @@ import styles from './OrderDetailPage.module.css';
 function statusLabel(status: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
     pending: t('orders.statusPending'),
+    payment_pending: t('orders.statusPaymentPending'),
     confirmed: t('orders.statusConfirmed'),
     processing: t('orders.statusProcessing'),
     ready: t('orders.statusReady'),
@@ -95,7 +96,7 @@ export default function OrderDetailPage() {
     );
   }
 
-  const canCancel = ['pending', 'confirmed'].includes(order.status);
+  const canCancel = ['pending', 'confirmed', 'payment_pending'].includes(order.status);
   const canRefund = ['delivered', 'cancelled'].includes(order.status) && !order.refundStatus;
 
   return (
