@@ -399,6 +399,11 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
     },
   })
 
+  await prisma.user.updateMany({
+    where: { telegramId: '900000001' },
+    data: { selectedCityId: null },
+  })
+
   const bootstrap = await requestJson('/api/session/bootstrap', {
     method: 'POST',
     headers: {
