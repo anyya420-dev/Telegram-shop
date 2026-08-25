@@ -868,6 +868,118 @@ router.get('/stats', authRateLimiter, async (request, response) => {
   })
 })
 
+// POST /api/admin/products - create a new product
+router.post('/products', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const { name, nameEn, description, descriptionEn, price, image, categoryId, isActive, isRecommended, cities } = request.body
+
+  if (typeof name !== 'string' || !name.trim()) {
+    sendError(response, 400, 'name_required', 'Product name is required')
+    return
+  }
+  if (typeof price !== 'number' || price <= 0) {
+    sendError(response, 400, 'price_required', 'Price must be a positive number')
+    return
+  }
+  if (!parsePositiveInt(String(categoryId))) {
+    sendError(response, 400, 'category_required', 'Valid category id is required')
+    return
+  }
+
+  const product = await prisma.product.create({
+    data: {
+      name: name.trim(),
+      nameEn: typeof nameEn === 'string' && nameEn.trim() ? nameEn.trim() : null,
+      description: typeof description === 'string' ? description.trim() : '',
+      descriptionEn: typeof descriptionEn === 'string' && descriptionEn.trim() ? descriptionEn.trim() : null,
+      price,
+      image: typeof image === 'string' && image.trim() ? image.trim() : null,
+      categoryId: Number(categoryId),
+      isActive: typeof isActive === 'boolean' ? isActive : true,
+      isRecommended: typeof isRecommended === 'boolean' ? isRecommended : false,
+    },
+    include: { category: true, productCities: { include: { city: true } } },
+  })
+
+  // Optionally create city availability records
+  if (Array.isArray(cities)) {
+    for (const cityEntry of cities) {
+      const cId = parsePositiveInt(String(cityEntry.cityId))
+      if (!cId) continue
+      await prisma.productCity.create({
+        data: {
+          productId: product.id,
+          cityId: cId,
+          stock: typeof cityEntry.stock === 'number' ? cityEntry.stock : 0,
+          isAvailable: typeof cityEntry.isAvailable === 'boolean' ? cityEntry.isAvailable : true,
+        },
+      })
+    }
+  }
+
+  const updated = await prisma.product.findUnique({
+    where: { id: product.id },
+    include: { category: true, productCities: { include: { city: true } } },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'product_created',
+      entity: 'product',
+      entityId: product.id,
+      meta: JSON.stringify({ name: product.name, price: product.price }),
+    },
+  })
+
+  response.status(201).json({ product: updated })
+})
+
+// POST /api/admin/product-cities - add product to an additional city
+router.post('/product-cities', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const productId = parsePositiveInt(String(request.body.productId))
+  const cityId = parsePositiveInt(String(request.body.cityId))
+
+  if (!productId || !cityId) {
+    sendError(response, 400, 'invalid_ids', 'Valid productId and cityId are required')
+    return
+  }
+
+  const existing = await prisma.productCity.findFirst({ where: { productId, cityId } })
+  if (existing) {
+    sendError(response, 409, 'already_exists', 'Product is already available in this city')
+    return
+  }
+
+  const { stock, isAvailable } = request.body
+  const pc = await prisma.productCity.create({
+    data: {
+      productId,
+      cityId,
+      stock: typeof stock === 'number' ? stock : 0,
+      isAvailable: typeof isAvailable === 'boolean' ? isAvailable : true,
+    },
+    include: { city: true },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'product_city_created',
+      entity: 'product_city',
+      entityId: pc.id,
+      meta: JSON.stringify({ productId, cityId }),
+    },
+  })
+
+  response.status(201).json({ productCity: pc })
+})
+
 // ──── Categories ────────────────────────────────────────────────────────────
 
 // GET /api/admin/categories

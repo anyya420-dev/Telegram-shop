@@ -102,7 +102,7 @@ export default function ShopPage() {
           {products.map((product) => (
             <ProductCard
               key={product.productCityId}
-              product={product as any}
+              product={product}
               onClick={() => navigate(`/shop/product/${product.id}`)}
             />
           ))}

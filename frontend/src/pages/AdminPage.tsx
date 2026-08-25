@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
-import type { AdminStats, Category, Order, SupportTicket, Discount, PaymentMethod, UserProfile } from '../types';
+import type { AdminStats, Category, City, Order, SupportTicket, Discount, PaymentMethod, UserProfile } from '../types';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
@@ -38,9 +38,11 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [orderFilter, setOrderFilter] = useState('');
+  const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
@@ -66,6 +68,19 @@ export default function AdminPage() {
   const [newCatNameEn, setNewCatNameEn] = useState('');
   const [newCatOrder, setNewCatOrder] = useState('0');
   const [creatingCat, setCreatingCat] = useState(false);
+
+  // New product form
+  const [showNewProduct, setShowNewProduct] = useState(false);
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdNameEn, setNewProdNameEn] = useState('');
+  const [newProdDescription, setNewProdDescription] = useState('');
+  const [newProdPrice, setNewProdPrice] = useState('');
+  const [newProdCategoryId, setNewProdCategoryId] = useState('');
+  const [newProdImage, setNewProdImage] = useState('');
+  const [newProdIsActive, setNewProdIsActive] = useState(true);
+  const [newProdIsRecommended, setNewProdIsRecommended] = useState(false);
+  const [newProdCities, setNewProdCities] = useState<{ cityId: number; stock: string; isAvailable: boolean }[]>([]);
+  const [creatingProd, setCreatingProd] = useState(false);
 
   // Support reply
   const [replyText, setReplyText] = useState<Record<number, string>>({});
@@ -106,6 +121,18 @@ export default function AdminPage() {
     if (!authenticated) return;
     void loadTab(tab);
   }, [authenticated, tab]);
+
+  // Load cities once for the product creation form
+  useEffect(() => {
+    if (!authenticated) return;
+    api.getCities().then((cs) => setCities(cs)).catch(() => undefined);
+  }, [authenticated]);
+  // Load categories for the product creation form whenever products tab is active
+  useEffect(() => {
+    if (authenticated && tab === 'products' && categories.length === 0) {
+      api.getAdminCategories().then((r) => setCategories(r.categories)).catch(() => undefined);
+    }
+  }, [authenticated, tab]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadTab(tabName: Tab) {
     setError(null);
@@ -189,6 +216,36 @@ export default function AdminPage() {
       setProducts(r.products);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to update stock');
+    }
+  }
+
+  async function handleCreateProduct() {
+    if (creatingProd || !newProdName.trim() || !newProdPrice || !newProdCategoryId) return;
+    const price = Number(newProdPrice);
+    if (isNaN(price) || price <= 0) { setError('Price must be a positive number'); return; }
+    setCreatingProd(true);
+    setError(null);
+    try {
+      await api.createAdminProduct({
+        name: newProdName.trim(),
+        nameEn: newProdNameEn.trim() || undefined,
+        description: newProdDescription.trim() || undefined,
+        price,
+        categoryId: Number(newProdCategoryId),
+        image: newProdImage.trim() || undefined,
+        isActive: newProdIsActive,
+        isRecommended: newProdIsRecommended,
+        cities: newProdCities.map((c) => ({ cityId: c.cityId, stock: Number(c.stock) || 0, isAvailable: c.isAvailable })),
+      });
+      setNewProdName(''); setNewProdNameEn(''); setNewProdDescription(''); setNewProdPrice('');
+      setNewProdCategoryId(''); setNewProdImage(''); setNewProdIsActive(true); setNewProdIsRecommended(false);
+      setNewProdCities([]); setShowNewProduct(false);
+      const r = await api.getAdminProducts() as unknown as { products: AdminProduct[] };
+      setProducts(r.products);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create product');
+    } finally {
+      setCreatingProd(false);
     }
   }
 
@@ -427,7 +484,7 @@ export default function AdminPage() {
                     <span className={styles.orderId}>#{order.id}</span>
                     <span className={styles.orderTotal}>{formatCurrency(order.total, language)}</span>
                   </div>
-                  <p className={styles.orderMeta}>{new Date(order.createdAt).toLocaleString()} • {order.items.length} items</p>
+                  <p className={styles.orderMeta}>{new Date(order.createdAt).toLocaleString()} • {order.city?.name ?? ''}</p>
                   {order.paymentMethod && (
                     <p className={styles.orderMeta}>
                       {t('checkout.paymentMethod')}: {order.paymentMethod.title}
@@ -457,6 +514,28 @@ export default function AdminPage() {
                       </button>
                     </div>
                   )}
+                  {order.items.length > 0 && (
+                    <div>
+                      <button
+                        className={styles.replyBtn}
+                        style={{ marginTop: 6, fontSize: 11 }}
+                        onClick={() => setExpandedOrder((prev) => (prev === order.id ? null : order.id))}
+                      >
+                        {expandedOrder === order.id ? '▲ Hide items' : `▼ ${order.items.length} items`}
+                      </button>
+                      {expandedOrder === order.id && (
+                        <div className={styles.cityStockList}>
+                          {order.items.map((item) => (
+                            <div key={item.id} className={styles.cityStockRow}>
+                              <span className={styles.cityName}>{item.productName}</span>
+                              <span>×{item.quantity}</span>
+                              <span>{formatCurrency(item.lineTotal, language)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -470,7 +549,86 @@ export default function AdminPage() {
             <button className={styles.filterBtn} onClick={() => void loadTab('products')}>
               {t('admin.refresh', { defaultValue: 'Refresh' })}
             </button>
+            <button className={styles.createBtn} onClick={() => setShowNewProduct((v) => !v)}>
+              {showNewProduct ? '✕ Cancel' : '+ New Product'}
+            </button>
           </div>
+
+          {showNewProduct && (
+            <div className={styles.form}>
+              <p className={styles.formTitle}>New Product</p>
+              <div className={styles.formRow}>
+                <input className={styles.input} placeholder="Name *" value={newProdName} onChange={(e) => setNewProdName(e.target.value)} />
+                <input className={styles.input} placeholder="Name EN" value={newProdNameEn} onChange={(e) => setNewProdNameEn(e.target.value)} />
+              </div>
+              <div className={styles.formRow}>
+                <input className={styles.input} type="number" placeholder="Price *" value={newProdPrice} onChange={(e) => setNewProdPrice(e.target.value)} />
+                <select className={styles.select} value={newProdCategoryId} onChange={(e) => setNewProdCategoryId(e.target.value)}>
+                  <option value="">Category *</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className={styles.formRow}>
+                <input className={styles.input} placeholder="Description" value={newProdDescription} onChange={(e) => setNewProdDescription(e.target.value)} />
+                <input className={styles.input} placeholder="Image URL" value={newProdImage} onChange={(e) => setNewProdImage(e.target.value)} />
+              </div>
+              <div className={styles.formRow}>
+                <label className={styles.checkLabel}><input type="checkbox" checked={newProdIsActive} onChange={(e) => setNewProdIsActive(e.target.checked)} /> Active</label>
+                <label className={styles.checkLabel}><input type="checkbox" checked={newProdIsRecommended} onChange={(e) => setNewProdIsRecommended(e.target.checked)} /> Recommended</label>
+              </div>
+              {cities.length > 0 && (
+                <div>
+                  <p className={styles.formTitle} style={{ fontSize: 12 }}>City availability</p>
+                  {cities.map((city) => {
+                    const entry = newProdCities.find((c) => c.cityId === city.id);
+                    return (
+                      <div key={city.id} className={styles.cityStockRow}>
+                        <label className={styles.checkLabel}>
+                          <input
+                            type="checkbox"
+                            checked={!!entry}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewProdCities((prev) => [...prev, { cityId: city.id, stock: '0', isAvailable: true }]);
+                              } else {
+                                setNewProdCities((prev) => prev.filter((c) => c.cityId !== city.id));
+                              }
+                            }}
+                          />
+                          <span className={styles.cityName}>{city.name}</span>
+                        </label>
+                        {entry && (
+                          <>
+                            <input
+                              className={styles.inputSmall}
+                              type="number"
+                              placeholder="Stock"
+                              value={entry.stock}
+                              onChange={(e) => setNewProdCities((prev) => prev.map((c) => c.cityId === city.id ? { ...c, stock: e.target.value } : c))}
+                            />
+                            <label className={styles.checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={entry.isAvailable}
+                                onChange={(e) => setNewProdCities((prev) => prev.map((c) => c.cityId === city.id ? { ...c, isAvailable: e.target.checked } : c))}
+                              /> Available
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <button
+                className={styles.createBtn}
+                onClick={() => void handleCreateProduct()}
+                disabled={creatingProd || !newProdName.trim() || !newProdPrice || !newProdCategoryId}
+              >
+                {creatingProd ? 'Creating…' : 'Create Product'}
+              </button>
+            </div>
+          )}
           <div className={styles.orderList}>
             {products.map((product) => (
               <div key={product.id} className={styles.orderCard}>
@@ -583,23 +741,23 @@ export default function AdminPage() {
             </button>
           </div>
           <div className={styles.orderList}>
-            {users.map((user) => (
-              <div key={user.id} className={styles.orderCard}>
-                <div className={styles.orderHeader}>
-                  <span className={styles.orderId}>
-                    {user.firstName}{user.username ? ` @${user.username}` : ''}
-                  </span>
-                  <span className={styles.orderMeta}>ID: {user.telegramId}</span>
+            {users.map((user) => {
+              const balance = (user as unknown as { balance?: { amount: number } | null }).balance;
+              return (
+                <div key={user.id} className={styles.orderCard}>
+                  <div className={styles.orderHeader}>
+                    <span className={styles.orderId}>
+                      {user.firstName}{user.username ? ` @${user.username}` : ''}
+                    </span>
+                    {user.language && <span className={styles.orderMeta}>{user.language.toUpperCase()}</span>}
+                  </div>
+                  <p className={styles.orderMeta}>TG: {user.telegramId}{user.selectedCity ? ` • 📍 ${user.selectedCity.name}` : ''}</p>
+                  {balance != null && (
+                    <p className={styles.orderMeta}>Balance: {formatCurrency(balance.amount, language)}</p>
+                  )}
                 </div>
-                {user.selectedCity && (
-                  <p className={styles.orderMeta}>📍 {user.selectedCity.name}</p>
-                )}
-              <p className={styles.orderMeta}>
-                  {t('admin.telegramId', { defaultValue: 'Telegram ID' })}: {user.telegramId}
-                  {user.language ? ` • ${user.language.toUpperCase()}` : ''}
-                </p>
-              </div>
-            ))}
+              );
+            })}
             {users.length === 0 && <p className={styles.loading}>{t('admin.noUsers', { defaultValue: 'No users found.' })}</p>}
           </div>
         </div>
