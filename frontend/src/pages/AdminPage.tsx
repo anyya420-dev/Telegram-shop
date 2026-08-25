@@ -73,27 +73,27 @@ export default function AdminPage() {
     void loadTab(tab);
   }, [authenticated, tab]);
 
-  async function loadTab(t: Tab) {
+  async function loadTab(tabName: Tab) {
     setError(null);
     try {
-      if (t === 'stats') {
+      if (tabName === 'stats') {
         const r = await api.getAdminStats();
         setStats(r);
-      } else if (t === 'orders') {
+      } else if (tabName === 'orders') {
         setOrdersLoading(true);
         const r = await api.getAdminOrders(1, orderFilter || undefined);
         setOrders(r.orders);
         setOrdersLoading(false);
-      } else if (t === 'discounts') {
+      } else if (tabName === 'discounts') {
         const r = await api.getAdminDiscounts();
         setDiscounts(r.discounts);
-      } else if (t === 'support') {
+      } else if (tabName === 'support') {
         const r = await api.getAdminSupportTickets();
         setTickets(r.tickets);
-      } else if (t === 'audit') {
+      } else if (tabName === 'audit') {
         const r = await api.getAuditLogs();
         setAuditLogs(r.logs);
-      } else if (t === 'payments') {
+      } else if (tabName === 'payments') {
         const r = await api.getAdminPaymentSettings();
         setPaymentMethods(r.methods);
       }
