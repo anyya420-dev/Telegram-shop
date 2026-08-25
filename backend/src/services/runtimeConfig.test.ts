@@ -10,6 +10,7 @@ import {
 } from './runtimeConfig.js'
 
 const KNOWN_PRODUCTION_FRONTEND_ORIGIN = 'https://telegram-shop-3781.onrender.com'
+const KNOWN_PRODUCTION_SAFETY_NET_ORIGIN = 'https://narcos-shop.onrender.com'
 
 type EnvSnapshot = Record<string, string | undefined>
 
@@ -174,7 +175,7 @@ test('getAllowedCorsOrigins falls back to the known production frontend origin',
   delete process.env.WEB_APP_URL
 
   const origins = getAllowedCorsOrigins()
-  assert.deepEqual(origins, [KNOWN_PRODUCTION_FRONTEND_ORIGIN])
+  assert.deepEqual(origins, [KNOWN_PRODUCTION_FRONTEND_ORIGIN, KNOWN_PRODUCTION_SAFETY_NET_ORIGIN])
 })
 
 test('ALLOW_DEMO_MODE must be a boolean string', () => {
