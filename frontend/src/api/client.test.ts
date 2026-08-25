@@ -89,3 +89,13 @@ test('resolveApiUrl normalizes Render API env values', () => {
   assert.equal(resolveApiUrl({ VITE_API_URL: '/api/' }), '/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '   ' }), '')
 })
+
+test('catalog requests forward sort and filter params to the shared client', async () => {
+  await api.getCatalog({ cityId: 4, search: 'tea', categoryId: 7, sort: 'price_desc' })
+
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].url, /cityId=4/)
+  assert.match(calls[0].url, /search=tea/)
+  assert.match(calls[0].url, /categoryId=7/)
+  assert.match(calls[0].url, /sort=price_desc/)
+})

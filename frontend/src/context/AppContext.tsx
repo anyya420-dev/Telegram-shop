@@ -8,6 +8,7 @@ import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile
 type AppState = {
   loading: boolean
   error: string | null
+  citiesLoading: boolean
   telegramEnvironment: boolean
   user: UserProfile | null
   cities: City[]
@@ -20,7 +21,8 @@ type AppState = {
   cityPickerOpen: boolean
   openCityPicker: () => void
   closeCityPicker: () => void
-  refreshCatalog: (search?: string, categoryId?: number | 'all') => Promise<void>
+  reloadCities: () => Promise<City[]>
+  refreshCatalog: (search?: string, categoryId?: number | 'all', sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular') => Promise<void>
   selectCity: (cityId: number) => Promise<void>
   updateLanguagePreference: (language: Language) => Promise<void>
   addToCart: (productCityId: number, quantity: number) => Promise<void>
@@ -55,6 +57,7 @@ function translateError(error: unknown, t: (key: string) => string, fallbackKey:
 export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [citiesLoading, setCitiesLoading] = useState(false)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [cities, setCities] = useState<City[]>([])
@@ -74,7 +77,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void i18n.changeLanguage(lang)
   }
 
-  async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
+  async function reloadCities() {
+    try {
+      setCitiesLoading(true)
+      const response = await api.getCities()
+      setCities(response)
+      return response
+    } finally {
+      setCitiesLoading(false)
+    }
+  }
+
+  async function refreshCatalog(
+    search = '',
+    categoryId: number | 'all' = 'all',
+    sort: 'newest' | 'price_asc' | 'price_desc' | 'popular' = 'newest',
+  ) {
     if (!user?.selectedCityId) {
       setProducts([])
       return
@@ -82,7 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       setError(null)
-      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
+      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId, sort })
       setProducts(response.products)
     } catch (catalogError) {
       setError(translateError(catalogError, t, 'catalog_refresh_failed'))
@@ -108,6 +126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setUser(response.user)
         void i18n.changeLanguage(response.user.language)
         setCities(response.cities)
+        setCitiesLoading(false)
         setCategories(response.categories)
 
         if (!response.user.selectedCityId) {
@@ -257,6 +276,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = {
     loading,
     error,
+    citiesLoading,
     telegramEnvironment,
     user,
     cities,
@@ -269,6 +289,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     cityPickerOpen,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
+    reloadCities,
     refreshCatalog,
     selectCity,
     updateLanguagePreference,

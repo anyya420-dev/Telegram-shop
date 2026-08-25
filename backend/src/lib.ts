@@ -208,11 +208,12 @@ export function mapProduct(productCity: {
     categoryNameTranslations: createTranslations(productCity.product.category.name, productCity.product.category.nameEn),
     isRecommended: productCity.product.isRecommended,
     stock: productCity.stock,
-    isAvailable: productCity.isAvailable,
+    isAvailable: productCity.isAvailable && productCity.stock > 0,
     minimumQuantity: productCity.minimumQuantity,
     quantityStep: productCity.quantityStep,
     maximumQuantity: productCity.maximumQuantity,
     unit: productCity.unit,
+    unitTranslations: createTranslations(productCity.unit),
   }
 }
 

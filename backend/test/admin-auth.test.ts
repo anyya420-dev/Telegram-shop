@@ -326,3 +326,148 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
   assert.equal(confirmPayment.body.order.paymentStatus, 'confirmed')
   assert.equal(confirmPayment.body.order.status, 'confirmed')
 })
+
+test('session bootstrap, city selection, and catalog stay city-aware', async () => {
+  process.env.TELEGRAM_BOT_TOKEN = 'bootstrap-secret'
+  process.env.ALLOW_DEMO_MODE = 'true'
+
+  const cityNorth = await prisma.city.create({ data: { name: 'North City', nameEn: 'North City', isActive: true, sortOrder: 1 } })
+  const citySouth = await prisma.city.create({ data: { name: 'South City', nameEn: 'South City', isActive: true, sortOrder: 2 } })
+  await prisma.city.create({ data: { name: 'Hidden City', nameEn: 'Hidden City', isActive: false, sortOrder: 3 } })
+  const categoryTea = await prisma.category.create({ data: { name: 'Tea', nameEn: 'Tea', isActive: true, sortOrder: 1 } })
+  const categoryCoffee = await prisma.category.create({ data: { name: 'Coffee', nameEn: 'Coffee', isActive: true, sortOrder: 2 } })
+
+  const activeProduct = await prisma.product.create({
+    data: {
+      name: 'Aurora Tea',
+      nameEn: 'Aurora Tea',
+      description: 'Northern harvest',
+      descriptionEn: 'Northern harvest',
+      price: 15,
+      image: 'https://cdn.example.com/aurora-tea.png',
+      categoryId: categoryTea.id,
+      isActive: true,
+      isRecommended: true,
+    },
+  })
+  const hiddenProduct = await prisma.product.create({
+    data: {
+      name: 'Quiet Coffee',
+      nameEn: 'Quiet Coffee',
+      description: 'Archived roast',
+      descriptionEn: 'Archived roast',
+      price: 12,
+      categoryId: categoryCoffee.id,
+      isActive: false,
+    },
+  })
+
+  const activeCityProduct = await prisma.productCity.create({
+    data: {
+      productId: activeProduct.id,
+      cityId: cityNorth.id,
+      stock: 5,
+      minimumQuantity: 1,
+      quantityStep: 1,
+      maximumQuantity: 10,
+      unit: 'шт.',
+      isAvailable: true,
+    },
+  })
+  await prisma.productCity.create({
+    data: {
+      productId: activeProduct.id,
+      cityId: citySouth.id,
+      stock: 0,
+      minimumQuantity: 1,
+      quantityStep: 1,
+      maximumQuantity: 10,
+      unit: 'шт.',
+      isAvailable: true,
+    },
+  })
+  await prisma.productCity.create({
+    data: {
+      productId: hiddenProduct.id,
+      cityId: cityNorth.id,
+      stock: 8,
+      minimumQuantity: 1,
+      quantityStep: 1,
+      maximumQuantity: 10,
+      unit: 'шт.',
+      isAvailable: true,
+    },
+  })
+
+  const bootstrap = await requestJson('/api/session/bootstrap', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      initData: 'query_id=abc&user=%7B%22id%22%3A700000001%2C%22first_name%22%3A%22Alice%22%2C%22username%22%3A%22alice%22%7D&auth_date=1&hash=bad',
+      telegramUser: { id: '700000001', first_name: 'Alice', username: 'alice' },
+      isTelegramEnvironment: true,
+    }),
+  })
+  assert.equal(bootstrap.response.status, 401)
+
+  const demoBootstrap = await requestJson('/api/session/bootstrap', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      initData: '',
+      telegramUser: { id: '900000001', first_name: 'Demo', username: 'demo_customer' },
+      isTelegramEnvironment: false,
+    }),
+  })
+  assert.equal(demoBootstrap.response.status, 200)
+  assert.equal(demoBootstrap.body.user.selectedCityId, null)
+  assert.equal(demoBootstrap.body.cities.map((city: any) => city.name).includes('Hidden City'), false)
+  assert.equal(demoBootstrap.body.categories.length >= 2, true)
+  assert.equal(demoBootstrap.body.sessionToken.length > 0, true)
+
+  const sessionToken = demoBootstrap.body.sessionToken as string
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'X-Session-Token': sessionToken,
+  }
+
+  const cityUpdate = await requestJson('/api/users/city', {
+    method: 'PATCH',
+    headers: authHeaders,
+    body: JSON.stringify({ cityId: cityNorth.id }),
+  })
+  assert.equal(cityUpdate.response.status, 200)
+  assert.equal(cityUpdate.body.user.selectedCityId, cityNorth.id)
+  assert.equal(cityUpdate.body.user.selectedCity.name, 'North City')
+
+  const catalogNorth = await requestJson(`/api/catalog?cityId=${cityNorth.id}&search=aurora&sort=price_desc`, {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(catalogNorth.response.status, 200)
+  assert.equal(catalogNorth.body.products.length, 1)
+  assert.equal(catalogNorth.body.products[0].productCityId, activeCityProduct.id)
+  assert.equal(catalogNorth.body.products[0].unitTranslations.en, 'шт.')
+
+  const catalogByCategory = await requestJson(`/api/catalog?cityId=${cityNorth.id}&categoryId=${categoryCoffee.id}`, {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(catalogByCategory.response.status, 200)
+  assert.equal(catalogByCategory.body.products.length, 0)
+
+  const southCatalog = await requestJson(`/api/catalog?cityId=${citySouth.id}`, {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(southCatalog.response.status, 200)
+  assert.equal(southCatalog.body.products.length, 0)
+
+  const unavailableDetail = await requestJson(`/api/products/${activeProduct.id}?cityId=${citySouth.id}`, {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(unavailableDetail.response.status, 200)
+  assert.equal(unavailableDetail.body.product.isAvailable, false)
+  assert.equal(unavailableDetail.body.product.stock, 0)
+})

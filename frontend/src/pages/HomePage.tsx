@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
 import { useTranslation } from 'react-i18next';
 import styles from './HomePage.module.css';
-import { getLocalizedCategoryName } from '../lib/localized';
+import { getLocalizedCategoryName, getLocalizedCityName } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
 
@@ -34,7 +34,7 @@ export default function HomePage() {
           <h1 className={styles.logo}>{t('home.title')}</h1>
           {user?.selectedCity ? (
             <button className={styles.cityBadge} onClick={openCityPicker}>
-              <MapPin size={14} strokeWidth={1.5} /> {user.selectedCity.name}
+              <MapPin size={14} strokeWidth={1.5} /> {getLocalizedCityName(user.selectedCity, language)}
             </button>
           ) : (
             <button className={styles.cityBadge} onClick={openCityPicker}>

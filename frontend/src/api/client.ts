@@ -94,10 +94,11 @@ export const api = {
       body: JSON.stringify(payload),
     }, { includeSessionToken: false })
   },
-  getCatalog(params: { cityId: number; search?: string; categoryId?: number | 'all' }) {
+  getCatalog(params: { cityId: number; search?: string; categoryId?: number | 'all'; sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular' }) {
     const searchParams = new URLSearchParams({ cityId: String(params.cityId) })
     if (params.search) searchParams.set('search', params.search)
     if (params.categoryId && params.categoryId !== 'all') searchParams.set('categoryId', String(params.categoryId))
+    if (params.sort) searchParams.set('sort', params.sort)
     return publicRequest<{ products: ProductSummary[] }>(`/catalog?${searchParams.toString()}`)
   },
   getCities() {

@@ -10,6 +10,7 @@ router.get('/recommended/list', async (req, res) => {
     const products = await prisma.productCity.findMany({
       where: {
         isAvailable: true,
+        stock: { gt: 0 },
         cityId: cityId || undefined,
         product: { isActive: true, isRecommended: true },
       },
@@ -35,11 +36,21 @@ router.get('/', async (req, res) => {
     const products = await prisma.productCity.findMany({
       where: {
         isAvailable: true,
+        stock: { gt: 0 },
         cityId: cityId || undefined,
         product: {
           isActive: true,
           categoryId: categoryId || undefined,
-          name: search ? { contains: search } : undefined,
+          ...(search
+            ? {
+                OR: [
+                  { name: { contains: search, mode: 'insensitive' } },
+                  { nameEn: { contains: search, mode: 'insensitive' } },
+                  { description: { contains: search, mode: 'insensitive' } },
+                  { descriptionEn: { contains: search, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
         },
       },
       include: {
@@ -47,6 +58,7 @@ router.get('/', async (req, res) => {
           include: { category: true },
         },
       },
+      orderBy: [{ product: { isRecommended: 'desc' } }, { product: { name: 'asc' } }],
     })
     res.json(products.map(mapProduct))
   } catch {
@@ -68,7 +80,6 @@ router.get('/:productId', async (request, response) => {
     where: {
       productId,
       cityId,
-      isAvailable: true,
       product: { isActive: true },
     },
     include: {
