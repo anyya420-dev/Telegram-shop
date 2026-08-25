@@ -1,12 +1,13 @@
 import { NavLink } from 'react-router-dom'
+import { ShoppingBag, Dices, Wallet, User, Headphones } from 'lucide-react'
 import { useI18n } from '../i18n'
 
 const itemDefinitions = [
-  { to: '/', labelKey: 'nav.shop', icon: '🛍' },
-  { to: '/casino', labelKey: 'nav.casino', icon: '🎰' },
-  { to: '/balance', labelKey: 'nav.balance', icon: '💰' },
-  { to: '/profile', labelKey: 'nav.profile', icon: '👤' },
-  { to: '/support', labelKey: 'nav.support', icon: '🎧' },
+  { to: '/', labelKey: 'nav.shop', Icon: ShoppingBag },
+  { to: '/casino', labelKey: 'nav.casino', Icon: Dices },
+  { to: '/balance', labelKey: 'nav.balance', Icon: Wallet },
+  { to: '/profile', labelKey: 'nav.profile', Icon: User },
+  { to: '/support', labelKey: 'nav.support', Icon: Headphones },
 ] as const
 
 export function BottomNav() {
@@ -20,7 +21,7 @@ export function BottomNav() {
           to={item.to}
           className={({ isActive }) => `bottom-nav__item ${isActive ? 'bottom-nav__item--active' : ''}`}
         >
-          <span>{item.icon}</span>
+          <item.Icon size={20} strokeWidth={1.5} />
           <span>{t(item.labelKey)}</span>
         </NavLink>
       ))}

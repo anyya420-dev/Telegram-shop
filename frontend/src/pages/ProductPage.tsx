@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Heart, Star } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api/client';
 import styles from './ProductPage.module.css';
@@ -243,7 +244,7 @@ export default function ProductPage() {
               onClick={() => void toggleWishlist()}
               disabled={wishlistLoading}
             >
-              {inWishlist ? '❤️ ' + t('product.inWishlist') : '🤍 ' + t('product.addToWishlist')}
+              {inWishlist ? <><Heart size={14} strokeWidth={1.5} fill="currentColor" style={{ verticalAlign: 'middle', marginRight: 4 }} />{t('product.inWishlist')}</> : <><Heart size={14} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 4 }} />{t('product.addToWishlist')}</>}
             </button>
           </>
         )}
@@ -254,7 +255,7 @@ export default function ProductPage() {
         <div className={styles.reviewsHeader}>
           <h3 className={styles.reviewsTitle}>{t('product.reviews')}</h3>
           {avgRating !== null && (
-            <span className={styles.avgRating}>{'⭐'.repeat(Math.round(avgRating))} {avgRating}/5 ({reviews.length})</span>
+            <span className={styles.avgRating}>{Array.from({ length: Math.round(avgRating) }).map((_, i) => <Star key={i} size={12} strokeWidth={1.5} fill="currentColor" />)} {avgRating}/5 ({reviews.length})</span>
           )}
         </div>
 
@@ -268,7 +269,7 @@ export default function ProductPage() {
                 <div className={styles.starRow}>
                   {STARS.map((s) => (
                     <button key={s} className={`${styles.star} ${myRating >= s ? styles.starActive : ''}`} onClick={() => setMyRating(s)}>
-                      ⭐
+                      <Star size={18} strokeWidth={1.5} fill={myRating >= s ? 'currentColor' : 'none'} />
                     </button>
                   ))}
                 </div>
@@ -296,7 +297,7 @@ export default function ProductPage() {
           <div key={review.id} className={styles.reviewCard}>
             <div className={styles.reviewTop}>
               <span className={styles.reviewAuthor}>{review.user.firstName}</span>
-              <span className={styles.reviewRating}>{'⭐'.repeat(review.rating)}</span>
+              <span className={styles.reviewRating}>{Array.from({ length: review.rating }).map((_, i) => <Star key={i} size={12} strokeWidth={1.5} fill="currentColor" />)}</span>
             </div>
             {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
             <span className={styles.reviewDate}>{new Date(review.createdAt).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US')}</span>

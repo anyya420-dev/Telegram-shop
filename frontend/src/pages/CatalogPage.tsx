@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MapPin, Search, ArrowUpDown, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
 import { useTranslation } from 'react-i18next';
@@ -89,7 +90,7 @@ export default function CatalogPage() {
   if (!user?.selectedCityId) {
     return (
       <div className={styles.empty}>
-        <div className={styles.emptyIcon}>📍</div>
+        <div className={styles.emptyIcon}><MapPin size={28} strokeWidth={1.5} /></div>
         <p>{t('city.subtitle')}</p>
       </div>
     );
@@ -100,7 +101,7 @@ export default function CatalogPage() {
       <div className={styles.header}>
         <h1 className={styles.title}>{t('catalog.title')}</h1>
         <button className={styles.sortBtn} onClick={() => setShowSort(true)}>
-          ⇅ {sortLabels[sort]}
+        <ArrowUpDown size={14} strokeWidth={1.5} /> {sortLabels[sort]}
         </button>
       </div>
 
@@ -180,7 +181,7 @@ export default function CatalogPage() {
         </div>
       ) : sortedProducts.length === 0 ? (
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}>🔍</div>
+          <div className={styles.emptyIcon}><Search size={28} strokeWidth={1.5} /></div>
           <p>{search ? t('catalog.nothingFound') : t('catalog.empty')}</p>
         </div>
       ) : (
@@ -202,7 +203,7 @@ export default function CatalogPage() {
                 onClick={() => { setSort(s); setShowSort(false); }}
               >
                 {sortLabels[s]}
-                {sort === s && <span className={styles.sortCheck}>✓</span>}
+                {sort === s && <span className={styles.sortCheck}><Check size={14} strokeWidth={2} /></span>}
               </button>
             ))}
           </div>

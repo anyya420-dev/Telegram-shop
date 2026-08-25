@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Package } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/format';
@@ -145,7 +146,7 @@ export default function OrderDetailPage() {
               {item.productImage ? (
                 <img src={item.productImage} alt={item.productName} />
               ) : (
-                <span>📦</span>
+                <Package size={24} strokeWidth={1.5} />
               )}
             </div>
             <div className={styles.itemInfo}>
