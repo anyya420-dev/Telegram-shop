@@ -280,6 +280,28 @@ model SupportTicketReply {
   @@map("support_ticket_replies")
 }
 
+model AdminSecurity {
+  id           Int      @id @default(autoincrement())
+  passwordHash String   @map("password_hash")
+  passwordSalt String   @map("password_salt")
+  passwordAlgo String   @default("scrypt") @map("password_algo")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_security")
+}
+
+model AdminSession {
+  id             Int      @id @default(autoincrement())
+  tokenHash      String   @unique @map("token_hash")
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  revokedAt      DateTime? @map("revoked_at")
+
+  @@index([expiresAt, revokedAt])
+  @@map("admin_sessions")
+}
+
 model AuditLog {
   id        Int      @id @default(autoincrement())
   userId    Int?     @map("user_id")

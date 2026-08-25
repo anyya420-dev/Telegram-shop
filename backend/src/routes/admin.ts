@@ -1,36 +1,105 @@
 import { Router } from 'express'
-import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError, verifySessionToken } from '../lib.js'
+import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
 import type { Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
+import {
+  createAdminSession,
+  ensureBootstrapPasswordFromEnv,
+  getActiveAdminSession,
+  revokeAdminSession,
+  verifyAdminPassword,
+} from '../services/adminSession.js'
 
 const router = Router()
+const ADMIN_SESSION_COOKIE_NAME = 'tg_shop_admin_session'
 
-const ADMIN_TELEGRAM_IDS = (process.env.ADMIN_TELEGRAM_IDS ?? '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
+function parseCookie(request: Request, name: string) {
+  const rawCookie = request.header('cookie') ?? ''
+  if (!rawCookie) return ''
+  for (const cookie of rawCookie.split(';')) {
+    const [key, ...valueParts] = cookie.trim().split('=')
+    if (key === name) {
+      return decodeURIComponent(valueParts.join('=') || '')
+    }
+  }
+  return ''
+}
+
+function writeAdminCookie(response: Response, token: string, expiresAt: Date) {
+  response.cookie(ADMIN_SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    expires: expiresAt,
+    path: '/api/admin',
+  })
+}
+
+function clearAdminCookie(response: Response) {
+  response.clearCookie(ADMIN_SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/api/admin',
+  })
+}
+
+type AdminContext = { id: number | null }
 
 async function getAdminUser(request: Request, response: Response) {
-  const authorization = request.header('authorization') ?? request.header('x-session-token') ?? ''
-  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : authorization
-  const telegramId = verifySessionToken(token)
-
-  if (!telegramId) {
-    sendError(response, 401, 'unauthorized', 'Unauthorized')
+  const token = parseCookie(request, ADMIN_SESSION_COOKIE_NAME)
+  const session = await getActiveAdminSession(token)
+  if (!session) {
+    clearAdminCookie(response)
+    sendError(response, 401, 'admin_auth_required', 'Admin authentication required')
     return null
   }
 
-  // If no ADMIN_TELEGRAM_IDS are configured, allow first registered user as admin
-  const isAdmin =
-    ADMIN_TELEGRAM_IDS.length === 0 || ADMIN_TELEGRAM_IDS.includes(telegramId)
-
-  if (!isAdmin) {
-    sendError(response, 403, 'forbidden', 'Admin access required')
-    return null
-  }
-
-  return prisma.user.findUnique({ where: { telegramId } })
+  return { id: null } satisfies AdminContext
 }
+
+router.post('/auth/login', authRateLimiter, async (request, response) => {
+  await ensureBootstrapPasswordFromEnv()
+
+  const password = typeof request.body.password === 'string' ? request.body.password : ''
+  if (!password) {
+    sendError(response, 400, 'invalid_credentials', 'Administrator password is required')
+    return
+  }
+
+  const result = await verifyAdminPassword(password)
+  if (!result.valid) {
+    if (result.reason === 'configuration_error') {
+      sendError(response, 503, 'configuration_error', 'Admin password is not configured on the server')
+      return
+    }
+    sendError(response, 401, 'invalid_credentials', 'Invalid administrator credentials')
+    return
+  }
+
+  const session = await createAdminSession()
+  writeAdminCookie(response, session.token, session.expiresAt)
+  response.json({ ok: true })
+})
+
+router.post('/auth/logout', authRateLimiter, async (request, response) => {
+  const token = parseCookie(request, ADMIN_SESSION_COOKIE_NAME)
+  await revokeAdminSession(token)
+  clearAdminCookie(response)
+  response.json({ ok: true })
+})
+
+router.get('/auth/status', authRateLimiter, async (request, response) => {
+  const token = parseCookie(request, ADMIN_SESSION_COOKIE_NAME)
+  const session = await getActiveAdminSession(token)
+  if (!session) {
+    clearAdminCookie(response)
+    sendError(response, 401, 'admin_auth_required', 'Admin authentication required')
+    return
+  }
+
+  response.json({ authenticated: true })
+})
 
 // ──── Orders ────────────────────────────────────────────────────────────────
 

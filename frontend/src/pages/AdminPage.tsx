@@ -14,6 +14,10 @@ const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'ready', 'delivere
 export default function AdminPage() {
   const { t } = useTranslation();
   const language = i18n.language as Language;
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [tab, setTab] = useState<Tab>('stats');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -38,8 +42,28 @@ export default function AdminPage() {
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        await api.adminStatus();
+        if (!mounted) return;
+        setAuthenticated(true);
+      } catch {
+        if (!mounted) return;
+        setAuthenticated(false);
+      } finally {
+        if (mounted) setAuthChecked(true);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
     void loadTab(tab);
-  }, [tab]);
+  }, [authenticated, tab]);
 
   async function loadTab(t: Tab) {
     setError(null);
@@ -110,9 +134,70 @@ export default function AdminPage() {
     }
   }
 
+  async function handleLogin() {
+    if (!password || authLoading) return;
+    setError(null);
+    setAuthLoading(true);
+    try {
+      await api.adminLogin({ password });
+      setAuthenticated(true);
+      setPassword('');
+      await loadTab(tab);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Login failed');
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    setError(null);
+    try {
+      await api.adminLogout();
+    } finally {
+      setAuthenticated(false);
+    }
+  }
+
+  if (!authChecked) {
+    return (
+      <div className={styles.page}>
+        <h1 className={styles.title}>⚙️ Admin Panel</h1>
+        <p className={styles.loading}>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return (
+      <div className={styles.page}>
+        <h1 className={styles.title}>⚙️ Admin Panel</h1>
+        {error && <p className={styles.error}>{error}</p>}
+        <div className={styles.form}>
+          <h3 className={styles.formTitle}>{t('admin.login', { defaultValue: 'Admin login' })}</h3>
+          <input
+            className={styles.input}
+            type="password"
+            placeholder={t('admin.password', { defaultValue: 'Password' })}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button className={styles.createBtn} onClick={() => void handleLogin()} disabled={authLoading || !password}>
+            {authLoading ? t('common.loading', { defaultValue: 'Loading...' }) : t('common.login', { defaultValue: 'Login' })}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <h1 className={styles.title}>⚙️ Admin Panel</h1>
+      <div className={styles.filterRow}>
+        <button className={styles.filterBtn} onClick={() => void handleLogout()}>
+          {t('common.logout', { defaultValue: 'Logout' })}
+        </button>
+      </div>
 
       {error && <p className={styles.error}>{error}</p>}
 

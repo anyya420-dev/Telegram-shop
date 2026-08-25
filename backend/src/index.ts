@@ -1,5 +1,4 @@
 import 'dotenv/config'
-import cors from 'cors'
 import express from 'express'
 import adminRouter from './routes/admin.js'
 import balanceRouter from './routes/balance.js'
@@ -17,25 +16,96 @@ import sessionRouter from './routes/session.js'
 import supportRouter from './routes/support.js'
 import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
+import { prisma } from './lib.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3001)
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL ?? 'https://telegram-shop-378j.onrender.com',
-  'http://localhost:5173',
-  'http://localhost:4173',
-]
+const productionFrontendOrigin = 'https://telegram-shop-3781.onrender.com'
+const defaultOrigins =
+  process.env.NODE_ENV === 'production'
+    ? [productionFrontendOrigin]
+    : [productionFrontendOrigin, 'http://localhost:5173', 'http://localhost:4173']
+const allowedOrigins = new Set(
+  (process.env.CORS_ALLOWED_ORIGINS
+    ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
+    : defaultOrigins),
+)
 
-app.use(cors({
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // allow requests with no origin (e.g. mobile apps, curl, Telegram WebApp)
-    if (!origin) return callback(null, true)
-    if (allowedOrigins.includes(origin)) return callback(null, true)
-    return callback(new Error(`CORS: origin ${origin} not allowed`))
-  },
-  credentials: true,
-}))
+app.use((request, response, next) => {
+  response.setHeader('Vary', 'Origin, Access-Control-Request-Method, Access-Control-Request-Headers')
+  const origin = request.headers.origin
+
+  if (!origin) {
+    if (request.method === 'OPTIONS') {
+      response.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS')
+      response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Session-Token, X-Requested-With')
+      response.status(204).end()
+      return
+    }
+    next()
+    return
+  }
+
+  if (!allowedOrigins.has(origin)) {
+    response.status(403).json({
+      code: 'cors_origin_not_allowed',
+      message: 'Origin is not allowed by the server CORS policy',
+    })
+    return
+  }
+
+  response.setHeader('Access-Control-Allow-Origin', origin)
+  response.setHeader('Access-Control-Allow-Credentials', 'true')
+  if (request.method === 'OPTIONS') {
+    response.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS')
+    response.setHeader(
+      'Access-Control-Allow-Headers',
+      typeof request.headers['access-control-request-headers'] === 'string' && request.headers['access-control-request-headers'].trim()
+        ? request.headers['access-control-request-headers']
+        : 'Content-Type, Authorization, X-Session-Token, X-Requested-With',
+    )
+    response.setHeader('Access-Control-Max-Age', '86400')
+    response.status(204).end()
+    return
+  }
+
+  next()
+})
+
+app.get('/health', (_request, response) => {
+  response.status(200).json({
+    status: 'ok',
+    service: 'telegram-shop-backend',
+    timestamp: new Date().toISOString(),
+  })
+})
+app.get('/api/health', (_request, response) => {
+  response.status(200).json({
+    status: 'ok',
+    service: 'telegram-shop-backend',
+    timestamp: new Date().toISOString(),
+  })
+})
+app.get('/ready', async (_request, response) => {
+  const timestamp = new Date().toISOString()
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    response.status(200).json({ status: 'ok', service: 'telegram-shop-backend', timestamp, dependencies: { database: 'ok' } })
+  } catch {
+    response.status(503).json({ status: 'degraded', service: 'telegram-shop-backend', timestamp, dependencies: { database: 'error' } })
+  }
+})
+app.get('/api/ready', async (_request, response) => {
+  const timestamp = new Date().toISOString()
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    response.status(200).json({ status: 'ok', service: 'telegram-shop-backend', timestamp, dependencies: { database: 'ok' } })
+  } catch {
+    response.status(503).json({ status: 'degraded', service: 'telegram-shop-backend', timestamp, dependencies: { database: 'error' } })
+  }
+})
+
 app.use(express.json())
 
 app.use('/api/session', sessionRouter)
@@ -57,10 +127,6 @@ app.use('/api/admin', adminRouter)
 
 app.get('/', (_request, response) => {
   response.json({ status: 'ok', message: 'Backend is running' })
-})
-
-app.get('/api/health', (_request, response) => {
-  response.json({ status: 'ok' })
 })
 
 app.listen(port, '0.0.0.0', () => {
