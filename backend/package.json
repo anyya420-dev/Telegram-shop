@@ -8,11 +8,11 @@
     "prebuild": "npm run db:generate",
     "build": "tsc -p tsconfig.json",
     "test": "tsx --test",
-    "prestart": "npm run db:generate && npm run db:migrate:deploy",
+    "prestart": "npm run db:generate",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://localhost/dev} npm exec -- prisma generate --schema ./prisma/schema.prisma",
-    "db:migrate:deploy": "npm exec -- prisma migrate resolve --rolled-back 20260825140000_add_admin_server_sessions --schema ./prisma/schema.prisma 2>/dev/null || true && npm exec -- prisma migrate deploy --schema ./prisma/schema.prisma",
+    "db:migrate:deploy": "npm exec -- prisma migrate deploy --schema ./prisma/schema.prisma",
     "db:push": "npm exec -- prisma db push --schema ./prisma/schema.prisma",
     "db:seed": "tsx ./prisma/seed.ts"
   },

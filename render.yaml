@@ -10,7 +10,15 @@ services:
     plan: free
     healthCheckPath: /health
     buildCommand: npm install --include=dev && npm run build --workspace backend
-    preDeployCommand: npm run db:migrate:deploy --workspace backend
+    # Recovery path for the one-time P3009 failure of 20260825140000_add_admin_server_sessions.
+    # If migrate deploy succeeds (normal case), the fallback never runs.
+    # If migrate deploy fails, the fallback resolves that specific migration as rolled-back
+    # (safe because its SQL uses IF NOT EXISTS) and retries deploy.
+    # If a *different* migration fails, resolve --rolled-back will error because the target
+    # migration is already applied; the && chain aborts and deploy fails visibly as expected.
+    # Once this migration is confirmed applied in production, simplify to:
+    #   npm run db:generate --workspace backend && npm run db:migrate:deploy --workspace backend
+    preDeployCommand: npm run db:generate --workspace backend && (cd backend && npx prisma migrate deploy --schema ./prisma/schema.prisma || (npx prisma migrate resolve --rolled-back 20260825140000_add_admin_server_sessions --schema ./prisma/schema.prisma && npx prisma migrate deploy --schema ./prisma/schema.prisma))
     startCommand: npm run start --workspace backend
     envVars:
       - key: NODE_ENV
