@@ -3,7 +3,6 @@ import {
   authRateLimiter,
   buildCartResponse,
   getAuthorizedUser,
-  isAllowedQuantity,
   normalizeQuantity,
   parsePositiveInt,
   prisma,
@@ -13,12 +12,11 @@ import { notifyOrderStatusChange } from '../services/notifier.js'
 
 const router = Router()
 
-class CheckoutConflictError extends Error {}
-
 const ORDER_INCLUDE = {
   items: true,
   city: true,
   statusHistory: { orderBy: { createdAt: 'asc' as const } },
+  paymentMethod: true,
   deliveryOption: true,
   discount: true,
 }
@@ -75,6 +73,18 @@ router.post('/', authRateLimiter, async (request, response) => {
   const comment = typeof request.body.comment === 'string' ? request.body.comment.trim() : undefined
   const discountCode = typeof request.body.discountCode === 'string' ? request.body.discountCode.trim().toUpperCase() : null
   const deliveryOptionId = parsePositiveInt(request.body.deliveryOptionId) ?? null
+  const paymentMethodId = parsePositiveInt(request.body.paymentMethodId)
+
+  if (!paymentMethodId) {
+    sendError(response, 400, 'payment_method_required', 'Payment method is required')
+    return
+  }
+
+  const paymentMethod = await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, isEnabled: true } })
+  if (!paymentMethod) {
+    sendError(response, 400, 'payment_method_unavailable', 'Selected payment method is unavailable')
+    return
+  }
 
   const cart = await prisma.cart.findUnique({
     where: { userId: user.id },
@@ -97,10 +107,6 @@ router.post('/', authRateLimiter, async (request, response) => {
     const pc = item.productCity
     if (!pc.isAvailable) {
       sendError(response, 400, 'product_unavailable', `Product "${pc.product.name}" is no longer available`)
-      return
-    }
-    if (!isAllowedQuantity(item.quantity, pc.minimumQuantity, pc.quantityStep, pc.maximumQuantity)) {
-      sendError(response, 422, 'quantity_invalid', `Quantity for "${pc.product.name}" no longer matches product rules`)
       return
     }
     if (item.quantity > pc.stock) {
@@ -143,105 +149,62 @@ router.post('/', authRateLimiter, async (request, response) => {
   const total = normalizeQuantity(Math.max(0, subtotal - discountAmount + deliveryFee))
 
   // Create order and clear cart in a transaction
-  let order
-  try {
-    order = await prisma.$transaction(async (tx) => {
-      // Reserve stock atomically to avoid concurrent checkout underflow.
-      for (const item of cart.items) {
-        const result = await tx.productCity.updateMany({
-          where: {
-            id: item.productCityId,
-            isAvailable: true,
-            stock: { gte: item.quantity },
-          },
-          data: { stock: { decrement: item.quantity } },
-        })
-
-        if (result.count !== 1) {
-          throw new CheckoutConflictError(`Insufficient stock for "${item.productCity.product.name}"`)
-        }
-      }
-
-      // Increment discount usage when a code is attached.
-      if (discountId) {
-        const discountState = await tx.discount.findUnique({
-          where: { id: discountId },
-          select: { isActive: true, usageLimit: true },
-        })
-
-        if (!discountState?.isActive) {
-          throw new CheckoutConflictError('Discount code is no longer available')
-        }
-
-        if (discountState.usageLimit === null) {
-          const discountResult = await tx.discount.updateMany({
-            where: { id: discountId, isActive: true },
-            data: { usedCount: { increment: 1 } },
-          })
-
-          if (discountResult.count !== 1) {
-            throw new CheckoutConflictError('Discount code is no longer available')
-          }
-        } else {
-          const discountResult = await tx.discount.updateMany({
-            where: {
-              id: discountId,
-              isActive: true,
-              usedCount: { lt: discountState.usageLimit },
-            },
-            data: { usedCount: { increment: 1 } },
-          })
-
-          if (discountResult.count !== 1) {
-            throw new CheckoutConflictError('Discount code is no longer available')
-          }
-        }
-      }
-
-      const newOrder = await tx.order.create({
-        data: {
-          userId: user.id,
-          cityId: user.selectedCityId!,
-          status: 'pending',
-          subtotal,
-          discountAmount,
-          deliveryFee,
-          total,
-          comment: comment || null,
-          deliveryOptionId,
-          discountId,
-          items: {
-            create: cart.items.map((item) => ({
-              productCityId: item.productCityId,
-              productName: item.productCity.product.name,
-              productImage: item.productCity.product.image,
-              unit: item.productCity.unit,
-              quantity: item.quantity,
-              price: item.productCity.product.price,
-              lineTotal: normalizeQuantity(item.productCity.product.price * item.quantity),
-            })),
-          },
+  const order = await prisma.$transaction(async (tx) => {
+    const newOrder = await tx.order.create({
+      data: {
+        userId: user.id,
+        cityId: user.selectedCityId!,
+        status: 'pending',
+        subtotal,
+        discountAmount,
+        deliveryFee,
+        total,
+        comment: comment || null,
+        paymentStatus: 'unpaid',
+        paymentMethodId,
+        deliveryOptionId,
+        discountId,
+        items: {
+          create: cart.items.map((item) => ({
+            productCityId: item.productCityId,
+            productName: item.productCity.product.name,
+            productImage: item.productCity.product.image,
+            unit: item.productCity.unit,
+            quantity: item.quantity,
+            price: item.productCity.product.price,
+            lineTotal: normalizeQuantity(item.productCity.product.price * item.quantity),
+          })),
         },
-        include: ORDER_INCLUDE,
-      })
-
-      // Record initial status history
-      await tx.orderStatusHistory.create({
-        data: { orderId: newOrder.id, status: 'pending', comment: 'Order placed' },
-      })
-
-      // Clear cart items
-      await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
-
-      return newOrder
+      },
+      include: ORDER_INCLUDE,
     })
-  } catch (error) {
-    if (error instanceof CheckoutConflictError) {
-      sendError(response, 409, 'checkout_conflict', error.message)
-      return
+
+    // Record initial status history
+    await tx.orderStatusHistory.create({
+      data: { orderId: newOrder.id, status: 'pending', comment: 'Order placed' },
+    })
+
+    // Increment discount usage
+    if (discountId) {
+      await tx.discount.update({
+        where: { id: discountId },
+        data: { usedCount: { increment: 1 } },
+      })
     }
-    throw error
-  }
+
+    // Reduce stock for each item
+    for (const item of cart.items) {
+      await tx.productCity.update({
+        where: { id: item.productCityId },
+        data: { stock: { decrement: item.quantity } },
+      })
+    }
+
+    // Clear cart items
+    await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
+
+    return newOrder
+  })
 
   await prisma.userActivityLog.create({
     data: { userId: user.id, action: 'order_placed', meta: JSON.stringify({ orderId: order.id, total }) },
@@ -338,6 +301,51 @@ router.post('/:id/refund-request', authRateLimiter, async (request, response) =>
 
   await prisma.userActivityLog.create({
     data: { userId: user.id, action: 'refund_requested', meta: JSON.stringify({ orderId }) },
+  })
+
+  response.json({ order: updated })
+})
+
+// POST /api/orders/:id/mark-paid - customer reports manual payment
+router.post('/:id/mark-paid', authRateLimiter, async (request, response) => {
+  const user = await getAuthorizedUser(request, response)
+  if (!user) return
+
+  const orderId = parsePositiveInt(request.params.id)
+  if (!orderId) {
+    sendError(response, 400, 'invalid_id', 'Invalid order id')
+    return
+  }
+
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, userId: user.id },
+    include: ORDER_INCLUDE,
+  })
+  if (!order) {
+    sendError(response, 404, 'not_found', 'Order not found')
+    return
+  }
+
+  if (!order.paymentMethodId) {
+    sendError(response, 400, 'payment_method_missing', 'Payment method is not set for this order')
+    return
+  }
+
+  if (!['pending', 'payment_pending'].includes(order.status)) {
+    sendError(response, 400, 'invalid_order_status', 'Order is not eligible for manual payment confirmation')
+    return
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.orderStatusHistory.create({
+      data: { orderId, status: 'payment_pending', comment: 'Customer confirmed manual payment' },
+    })
+
+    return tx.order.update({
+      where: { id: orderId },
+      data: { status: 'payment_pending', paymentStatus: 'pending' },
+      include: ORDER_INCLUDE,
+    })
   })
 
   response.json({ order: updated })

@@ -11,12 +11,12 @@
   },
   "home": {
     "title": "Магазин",
-    "featured": "Рекомендуем",
-    "newest": "Новинки",
-    "popular": "Популярное",
+    "featured": "🔥 Рекомендуем",
+    "newest": "✨ Новинки",
+    "popular": "⭐ Популярное",
     "viewAll": "Все →",
     "categories": "Категории",
-    "searchPlaceholder": "Поиск товаров..."
+    "searchPlaceholder": "🔍 Поиск товаров..."
   },
   "catalog": {
     "title": "Каталог",
@@ -27,14 +27,14 @@
     "sortPriceDesc": "Цена ↓",
     "sortPopular": "Популярные",
     "empty": "Товары не найдены",
-    "searchPlaceholder": "Поиск товаров...",
+    "searchPlaceholder": "🔍 Поиск товаров...",
     "clearSearch": "Очистить поиск",
     "resetFilters": "Сбросить фильтры",
     "nothingFound": "По вашему запросу ничего не найдено"
   },
   "shop": {
     "title": "Магазин",
-    "searchPlaceholder": "Поиск товаров...",
+    "searchPlaceholder": "🔍 Поиск товаров...",
     "allCategories": "Все",
     "loading": "Загрузка...",
     "empty": "Товары не найдены"
@@ -45,8 +45,8 @@
     "outOfStock": "Нет в наличии",
     "quantity": "Количество",
     "total": "Итого",
-    "addToCart": "Добавить в корзину",
-    "updateCart": "Обновить корзину",
+    "addToCart": "🛒 Добавить в корзину",
+    "updateCart": "🛒 Обновить корзину",
     "added": "✓ Добавлено",
     "adding": "Добавляем...",
     "goToCart": "Перейти в корзину →",
@@ -82,11 +82,11 @@
     "delivery": "Доставка",
     "orderTotal": "Итого",
     "soon": "— (скоро)",
-    "checkout": "Оформить заказ",
+    "checkout": "💳 Оформить заказ",
     "checkingOut": "Оформляем...",
     "checkoutFailed": "Не удалось оформить заказ. Попробуйте ещё раз.",
     "checkoutNote": "Оплата будет доступна в следующей версии",
-    "recommended": "Вам может понравиться",
+    "recommended": "🔥 Вам может понравиться",
     "discountCode": "Промокод",
     "applyCode": "Применить",
     "invalidDiscount": "Неверный или просроченный код",
@@ -96,10 +96,25 @@
   },
   "checkout": {
     "title": "Оформление заказа",
+    "paymentTitle": "Оплата заказа",
     "items": "Выбранные товары",
     "comment": "Комментарий к заказу",
     "commentPlaceholder": "Информация по доставке или пожелания",
     "confirm": "Подтвердить заказ",
+    "paymentRequired": "Пожалуйста, выберите способ оплаты",
+    "paymentMethod": "Способ оплаты",
+    "noPaymentMethods": "Нет доступных способов оплаты",
+    "currency": "Валюта",
+    "network": "Сеть",
+    "walletAddress": "Адрес кошелька",
+    "cardNumber": "Номер карты",
+    "cardholder": "Держатель карты",
+    "copyAddress": "Скопировать адрес",
+    "copiedAddress": "Адрес скопирован",
+    "iPaid": "Я оплатил",
+    "paymentPending": "Платёж на проверке у администратора",
+    "waitingForPayment": "Ожидается подтверждение оплаты",
+    "cryptoMissingNetwork": "Крипто-адрес недоступен без сети",
     "deliveryRequired": "Пожалуйста, выберите способ доставки",
     "noDeliveryOptions": "Варианты доставки пока недоступны",
     "successTitle": "Заказ создан",
@@ -122,20 +137,17 @@
     "ordersCount_many": "{{count}} заказов",
     "ordersCount_other": "{{count}} заказов",
     "language": "Язык",
-    "selectCity": "Выберите город",
+    "selectCity": "📍 Выберите город",
     "cancel": "Отмена",
-    "languageRu": "Русский",
-    "languageEn": "English",
+    "languageRu": "🇷🇺 Русский",
+    "languageEn": "🇬🇧 English",
     "telegramWebAppOnly": "Откройте магазин в Telegram Web App для полного доступа к профилю."
   },
   "city": {
     "title": "Выберите город",
     "subtitle": "Каталог товаров зависит от выбранного города",
     "loading": "Загрузка...",
-    "empty": "Пока нет доступных городов",
-    "chooseLater": "Выбрать позже",
-    "selectAction": "Выбрать город",
-    "productsAfterSelection": "Товары станут доступны после выбора города."
+    "empty": "Пока нет доступных городов"
   },
   "balance": {
     "title": "Баланс",
@@ -164,10 +176,10 @@
     "bet": "Ставка",
     "target": "Выберите число",
     "hint": "Если кубик совпадёт с вашим числом — вы выиграете 5× ставку",
-    "spin": "Бросить кубик",
+    "spin": "🎲 Бросить кубик",
     "rolling": "Бросаем...",
-    "won": "Вы выиграли {{payout}}!",
-    "lost": "Вы проиграли {{bet}}",
+    "won": "🎉 Вы выиграли {{payout}}!",
+    "lost": "😢 Вы проиграли {{bet}}",
     "history": "Последние игры",
     "error": "Ошибка"
   },
@@ -198,13 +210,11 @@
     "addToCart": "В корзину",
     "outOfStock": "Нет в наличии",
     "close": "Закрыть",
-    "retry": "Повторить",
-    "yes": "Да",
-    "no": "Нет"
+    "retry": "Повторить"
   },
   "cityPicker": {
     "badge": "Локация",
-    "title": "Выберите город",
+    "title": "📍 Выберите город",
     "helper": "Каталог, наличие и шаг количества зависят от выбранного города.",
     "changeCity": "Изменить город",
     "cityChangeNotice": "При смене города корзина очищается, чтобы не смешивать товары из разных локаций."
@@ -223,6 +233,7 @@
     "moreItems_many": "+{{count}} товаров",
     "moreItems_other": "+{{count}} товаров",
     "statusPending": "Ожидает подтверждения",
+    "statusPaymentPending": "Ожидает проверки оплаты",
     "statusConfirmed": "Подтверждён",
     "statusProcessing": "В обработке",
     "statusReady": "Готов",
@@ -250,6 +261,7 @@
     "tab_discounts": "Скидки",
     "tab_support": "Поддержка",
     "tab_audit": "Аудит",
+    "tab_payments": "Платежи",
     "totalOrders": "Всего заказов",
     "pendingOrders": "Ожидают",
     "totalUsers": "Пользователей",
@@ -257,7 +269,13 @@
     "allStatuses": "Все статусы",
     "filter": "Фильтр",
     "createDiscount": "Создать промокод",
-    "minOrder": "Мин. заказ"
+    "minOrder": "Мин. заказ",
+    "paymentSettings": "Настройки оплаты",
+    "methodTitle": "Название",
+    "confirmPayment": "Подтвердить платёж",
+    "rejectPayment": "Отклонить платёж",
+    "enable": "Включить",
+    "disable": "Выключить"
   },
   "errors": {
     "request_failed": "Не удалось выполнить запрос.",
@@ -285,25 +303,6 @@
     "language_update_failed": "Не удалось сохранить язык.",
     "checkout_failed": "Не удалось оформить заказ.",
     "orders_fetch_failed": "Не удалось загрузить заказы.",
-    "cart_empty": "Корзина пуста.",
-    "unauthorized": "Требуется авторизация. Откройте приложение заново.",
-    "forbidden": "Недостаточно прав для этого действия.",
-    "not_found": "Запрошенные данные не найдены.",
-    "conflict": "Конфликт данных. Обновите экран и попробуйте снова.",
-    "validation_failed": "Проверьте введённые данные и попробуйте снова.",
-    "server_error": "Временная ошибка сервера. Попробуйте позже.",
-    "service_unavailable": "Сервис временно недоступен. Попробуйте позже.",
-    "invalid_admin_session": "Сессия администратора истекла. Войдите снова.",
-    "cors_blocked": "Сервер отклонил запрос браузера (CORS).",
-    "api_not_configured": "Приложение собрано без адреса API. Обратитесь к администратору.",
-    "request_timeout": "Сервер не ответил вовремя. Попробуйте снова.",
-    "server_unreachable": "Сервер недоступен. Попробуйте снова через минуту.",
-    "cors_origin_not_allowed": "Сервер отклонил запрос с этого адреса. Обратитесь к администратору.",
-    "invalid_request_body": "Некорректный запрос."
-  },
-  "diagnostics": {
-    "origin": "Адрес приложения",
-    "code": "Код ошибки",
-    "config": "Конфигурация"
+    "cart_empty": "Корзина пуста."
   }
 }

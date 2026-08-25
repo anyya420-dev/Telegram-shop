@@ -9,16 +9,12 @@ if (!token) {
   process.exit(0)
 }
 
-// NOTE: In production the Telegram bot runs inside the backend service (backend/src/services/telegramBotRuntime.ts).
-// This standalone bot worker is only for local development. Do NOT deploy it as a separate service
-// alongside the backend, as two pollers on the same token will conflict.
-
 const bot = new Telegraf(token)
 
 bot.start(async (context) => {
   await context.reply(
-    '🛒 Добро пожаловать в NARCOS SHOP!\n\nОткройте магазин, чтобы выбрать товар и сделать заказ.',
-    Markup.keyboard([[Markup.button.webApp('🛍 Открыть магазин', webAppUrl)]]).resize(),
+    'Добро пожаловать в Telegram Shop. Откройте Web App, чтобы выбрать город и начать покупки.',
+    Markup.keyboard([[Markup.button.webApp('Открыть магазин', webAppUrl)]]).resize(),
   )
 })
 

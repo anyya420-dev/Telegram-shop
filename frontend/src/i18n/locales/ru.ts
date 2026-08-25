@@ -18,11 +18,11 @@ export const ru = {
     support: 'Поддержка',
   },
   placeholders: {
-    casinoTitle: 'Казино',
+    casinoTitle: '🎰 Казино',
     casinoDescription: 'Казино будет доступно позже',
-    balanceTitle: 'Баланс',
+    balanceTitle: '💰 Баланс',
     balanceDescription: 'Баланс будет доступен позже',
-    supportTitle: 'Поддержка',
+    supportTitle: '🎧 Поддержка',
     supportDescription: 'Поддержка будет доступна позже',
   },
   shop: {
@@ -41,13 +41,13 @@ export const ru = {
   },
   cityPicker: {
     badge: 'Локация',
-    title: 'Выберите город',
+    title: '📍 Выберите город',
     helper: 'Каталог, наличие и шаг количества зависят от выбранного города.',
     changeCity: 'Изменить город',
     cityChangeNotice: 'При смене города корзина очищается, чтобы не смешивать товары из разных локаций.',
   },
   product: {
-    recommended: 'Рекомендуем',
+    recommended: '🔥 Рекомендуем',
     from: 'от',
     inStock: 'В наличии: {{value}} {{unit}}',
     open: 'Открыть товар',
@@ -77,7 +77,7 @@ export const ru = {
     delivery: 'Доставка',
     total: 'Итого',
     recommendedBadge: 'Рекомендуем',
-    recommendedTitle: 'Вам может понравиться',
+    recommendedTitle: '🔥 Вам может понравиться',
   },
   profile: {
     badge: 'Профиль',

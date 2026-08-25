@@ -11,6 +11,7 @@ import styles from './OrderDetailPage.module.css';
 function statusLabel(status: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
     pending: t('orders.statusPending'),
+    payment_pending: t('orders.statusPaymentPending'),
     confirmed: t('orders.statusConfirmed'),
     processing: t('orders.statusProcessing'),
     ready: t('orders.statusReady'),
@@ -90,18 +91,18 @@ export default function OrderDetailPage() {
     return (
       <div className={styles.notFound}>
         <p>{t('orders.notFound')}</p>
-        <button onClick={() => navigate('/orders')} type="button">{t('orders.back')}</button>
+        <button onClick={() => navigate('/orders')}>{t('orders.back')}</button>
       </div>
     );
   }
 
-  const canCancel = ['pending', 'confirmed'].includes(order.status);
+  const canCancel = ['pending', 'confirmed', 'payment_pending'].includes(order.status);
   const canRefund = ['delivered', 'cancelled'].includes(order.status) && !order.refundStatus;
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button className={styles.back} onClick={() => navigate('/orders')} type="button">
+        <button className={styles.back} onClick={() => navigate('/orders')}>
           {t('common.back')}
         </button>
         <h1 className={styles.title}>{t('orders.orderTitle', { id: order.id })}</h1>
@@ -144,7 +145,7 @@ export default function OrderDetailPage() {
               {item.productImage ? (
                 <img src={item.productImage} alt={item.productName} />
               ) : (
-                <span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></svg></span>
+                <span>📦</span>
               )}
             </div>
             <div className={styles.itemInfo}>
@@ -197,12 +198,12 @@ export default function OrderDetailPage() {
 
       {/* Action buttons */}
       {canCancel && (
-        <button className={styles.cancelBtn} onClick={() => void handleCancel()} disabled={cancelling} type="button">
+        <button className={styles.cancelBtn} onClick={() => void handleCancel()} disabled={cancelling}>
           {cancelling ? t('orders.cancelling') : t('orders.cancelOrder')}
         </button>
       )}
       {canRefund && (
-        <button className={styles.refundBtn} onClick={() => void handleRefundRequest()} disabled={refunding} type="button">
+        <button className={styles.refundBtn} onClick={() => void handleRefundRequest()} disabled={refunding}>
           {refunding ? t('orders.requesting') : t('orders.requestRefund')}
         </button>
       )}

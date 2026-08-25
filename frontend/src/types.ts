@@ -82,8 +82,6 @@ export type Cart = {
 export type BootstrapResponse = {
   telegramEnvironment: boolean
   sessionToken: string
-  isAdmin: boolean
-  isOwner: boolean
   user: UserProfile
   cities: City[]
   categories: Category[]
@@ -117,22 +115,37 @@ export type DeliveryOption = {
   price: number
 }
 
+export type PaymentMethod = {
+  id: number
+  type: 'card' | 'ton' | 'crypto'
+  title: string
+  cardNumber: string | null
+  cardholderName: string | null
+  currency: string | null
+  network: string | null
+  walletAddress: string | null
+  isEnabled: boolean
+}
+
 export type Order = {
   id: number
   userId: number
   cityId: number
   status: string
+  paymentStatus: string | null
   subtotal: number
   discountAmount: number
   deliveryFee: number
   total: number
   comment: string | null
+  paymentMethodId: number | null
   cancelledAt: string | null
   refundStatus: string | null
   createdAt: string
   items: OrderItem[]
   city: { id: number; name: string; nameEn: string | null }
   statusHistory: OrderStatusEntry[]
+  paymentMethod: PaymentMethod | null
   deliveryOption: DeliveryOption | null
   discount: { id: number; code: string } | null
 }
@@ -198,54 +211,4 @@ export type AdminStats = {
   pendingOrders: number
   totalUsers: number
   totalRevenue: number
-}
-
-export type BotInfo = {
-  id: number
-  username: string
-  firstName: string
-}
-
-export type BotStatusResponse =
-  | { connected: false; bot: null; tokenMasked?: string | null }
-  | { connected: true; bot: BotInfo; lastValidatedAt: string | null; tokenMasked?: string | null }
-
-export type AdminSettingsResponse = {
-  administrators: string[]
-  passwordConfigured: boolean
-  bot: BotStatusResponse
-}
-
-export type AdminCity = {
-  id: number
-  name: string
-  nameEn: string | null
-  isActive: boolean
-  sortOrder: number
-  createdAt: string
-}
-
-export type AdminCategory = {
-  id: number
-  name: string
-  nameEn: string | null
-  isActive: boolean
-  sortOrder: number
-  createdAt: string
-}
-
-export type AdminProduct = {
-  id: number
-  name: string
-  nameEn: string | null
-  description: string
-  descriptionEn: string | null
-  price: number
-  image: string | null
-  categoryId: number
-  isActive: boolean
-  isRecommended: boolean
-  createdAt: string
-  updatedAt: string
-  category: { id: number; name: string }
 }

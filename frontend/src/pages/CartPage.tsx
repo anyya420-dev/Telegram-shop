@@ -1,55 +1,16 @@
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import styles from './CartPage.module.css';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
-import { resolveApiErrorMessage } from '../lib/errors';
 
 export default function CartPage() {
   const { cart, recommended, updateCartItem, removeCartItem } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const language = i18n.language as Language;
-  const [pendingItemId, setPendingItemId] = useState<number | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [failedItemImages, setFailedItemImages] = useState<Record<string, boolean>>({});
-
-  async function handleDecrease(itemId: number, nextDown: number, minimum: number) {
-    if (pendingItemId !== null) return;
-    setPendingItemId(itemId);
-    setActionError(null);
-    try {
-      if (nextDown >= minimum) {
-        await updateCartItem(itemId, nextDown);
-      } else {
-        await removeCartItem(itemId);
-      }
-    } catch (error) {
-      setActionError(resolveApiErrorMessage(error, t, 'cart_update_failed'));
-    } finally {
-      setPendingItemId(null);
-    }
-  }
-
-  async function handleIncrease(itemId: number, nextUp: number) {
-    if (pendingItemId !== null) return;
-    setPendingItemId(itemId);
-    setActionError(null);
-    try {
-      await updateCartItem(itemId, nextUp);
-    } catch (error) {
-      setActionError(resolveApiErrorMessage(error, t, 'cart_update_failed'));
-    } finally {
-      setPendingItemId(null);
-    }
-  }
-
-  function markImageFailed(key: string) {
-    setFailedItemImages((prev) => ({ ...prev, [key]: true }));
-  }
 
   if (!cart || cart.items.length === 0) {
     return (
@@ -84,7 +45,6 @@ export default function CartPage() {
       </div>
 
       <div className={styles.items}>
-        {actionError && <div className={styles.checkoutError}>{actionError}</div>}
         {cart.items.map((item) => {
           const pc = item.productCity;
           const step = pc.quantityStep || 1;
@@ -96,8 +56,8 @@ export default function CartPage() {
           return (
             <div key={item.id} className={styles.item}>
               <div className={styles.itemImg}>
-                {pc.image && !failedItemImages[`cart-item-${item.id}`] ? (
-                  <img src={pc.image} alt={pc.name} onError={() => markImageFailed(`cart-item-${item.id}`)} />
+                {pc.image ? (
+                  <img src={pc.image} alt={pc.name} />
                 ) : (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -118,18 +78,19 @@ export default function CartPage() {
               <div className={styles.itemActions}>
                 <button
                   className={styles.qtyBtn}
-                  onClick={() => void handleDecrease(item.id, nextDown, minimum)}
-                  disabled={pendingItemId !== null}
-                  type="button"
+                  onClick={() =>
+                    nextDown >= minimum
+                      ? void updateCartItem(item.id, nextDown)
+                      : void removeCartItem(item.id)
+                  }
                 >
                   {nextDown < minimum ? '🗑' : '−'}
                 </button>
                 <span className={styles.qty}>{item.quantity}</span>
                 <button
                   className={styles.qtyBtn}
-                  onClick={() => void handleIncrease(item.id, nextUp)}
-                  disabled={pendingItemId !== null || (maximum !== undefined && nextUp > maximum)}
-                  type="button"
+                  onClick={() => void updateCartItem(item.id, nextUp)}
+                  disabled={maximum !== undefined && nextUp > maximum}
                 >
                   +
                 </button>
@@ -150,10 +111,10 @@ export default function CartPage() {
         </div>
 
         <div className={styles.summaryActions}>
-          <button className={styles.continueBtn} onClick={() => navigate('/catalog')} type="button" disabled={pendingItemId !== null}>
+          <button className={styles.continueBtn} onClick={() => navigate('/catalog')} type="button">
             {t('cart.continueShopping')}
           </button>
-          <button className={styles.checkoutBtn} onClick={() => navigate('/checkout')} type="button" disabled={pendingItemId !== null}>
+          <button className={styles.checkoutBtn} onClick={() => navigate('/checkout')} type="button">
             {t('cart.checkout')}
           </button>
         </div>
@@ -170,8 +131,8 @@ export default function CartPage() {
                 onClick={() => navigate(`/shop/product/${p.id}`)}
               >
                 <div className={styles.recImg}>
-                  {p.image && !failedItemImages[`recommended-${p.productCityId}`] ? (
-                    <img src={p.image} alt={p.name} onError={() => markImageFailed(`recommended-${p.productCityId}`)} />
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} />
                   ) : (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />

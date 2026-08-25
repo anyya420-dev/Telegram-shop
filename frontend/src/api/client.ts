@@ -1,441 +1,268 @@
-import { resolveApiBaseUrl } from '../lib/apiConfig'
 import type {
-  AdminCategory,
-  AdminCity,
-  AdminProduct,
-  AdminSettingsResponse,
   AdminStats,
   Balance,
   BootstrapResponse,
-  BotStatusResponse,
   Cart,
   City,
   Discount,
   Language,
   Order,
+  PaymentMethod,
   ProductDetail,
   ProductSummary,
   Review,
   SupportTicket,
+  TelegramIdentity,
   UserProfile,
   WishlistItem,
 } from '../types'
 
-const IS_PRODUCTION = Boolean(import.meta.env.PROD)
-const { baseUrl: API_URL, error: API_CONFIG_ERROR } = resolveApiBaseUrl(
-  import.meta.env.VITE_API_URL,
-  IS_PRODUCTION,
-)
-
-export const apiBaseUrl = API_URL
-export const apiConfigError = API_CONFIG_ERROR
-
-// Loud, but non-fatal: throwing at module scope would abort evaluation of the
-// whole bundle and leave the user with a blank screen instead of a diagnostic.
-if (API_CONFIG_ERROR) {
-  console.error('[api] Invalid production API configuration:', API_CONFIG_ERROR)
-}
-
-/** Safe diagnostics only — never logs initData, session tokens or admin tokens. */
-export function getApiDiagnostics() {
-  return {
-    apiBaseUrl: API_URL,
-    apiConfigured: !API_CONFIG_ERROR && API_URL.length > 0,
-    apiConfigError: API_CONFIG_ERROR,
-    mode: IS_PRODUCTION ? 'production' : 'development',
-    pageOrigin: typeof window === 'undefined' ? null : window.location.origin,
-    inTelegram: typeof window !== 'undefined' && Boolean(window.Telegram?.WebApp),
-  }
-}
-
+const API_URL: string = (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL ?? ''
 let sessionToken: string | null = null
-let adminToken: string | null = null
 
 export class ApiError extends Error {
   code?: string
-  status?: number
 
-  constructor(message: string, code?: string, status?: number) {
+  constructor(message: string, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.code = code
-    this.status = status
   }
 }
 
-const FALLBACK_CODE_BY_STATUS: Record<number, string> = {
-  400: 'validation_failed',
-  401: 'unauthorized',
-  403: 'forbidden',
-  404: 'not_found',
-  409: 'conflict',
-  422: 'validation_failed',
-  429: 'too_many_requests',
-  500: 'server_error',
-  502: 'server_unreachable',
-  503: 'service_unavailable',
-  504: 'request_timeout',
-}
-
-const REQUEST_TIMEOUT_MS = 20_000
-
-/**
- * A browser reports a blocked CORS response and a genuinely offline network with
- * the exact same opaque `TypeError`. We can still distinguish the likely cause:
- * if the browser reports itself as offline it is a network problem, otherwise a
- * cross-origin request to a different origin was most likely blocked by CORS.
- */
-function classifyFetchFailure(error: unknown): { code: string; message: string } {
-  if (error instanceof DOMException && error.name === 'AbortError') {
-    return { code: 'request_timeout', message: 'Request timed out' }
-  }
-
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return { code: 'network_error', message: 'Device is offline' }
-  }
-
-  const isCrossOrigin =
-    /^https?:\/\//i.test(API_URL) &&
-    typeof window !== 'undefined' &&
-    !API_URL.toLowerCase().startsWith(window.location.origin.toLowerCase())
-
-  if (isCrossOrigin) {
-    return {
-      code: 'cors_blocked',
-      message: 'Request was blocked by the browser before a response was received',
-    }
-  }
-
-  return { code: 'network_error', message: 'Network error' }
-}
-
-async function request<T>(path: string, init?: RequestInit) {
-  if (API_CONFIG_ERROR) {
-    throw new ApiError(API_CONFIG_ERROR, 'api_not_configured')
-  }
-
-  let response: Response
-  const controller = typeof AbortController === 'undefined' ? null : new AbortController()
-  const timeout = controller
-    ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-    : null
-
-  try {
-    response = await fetch(`${API_URL}${path}`, {
-      ...init,
-      credentials: 'include',
-      signal: controller?.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}),
-        ...(adminToken ? { 'X-Admin-Token': adminToken } : {}),
-        ...(init?.headers ?? {}),
-      },
-    })
-  } catch (fetchError) {
-    const { code, message } = classifyFetchFailure(fetchError)
-    // Safe diagnostics: URL + method only. Never log initData, tokens or bodies.
-    console.error('[api] request failed before response', {
-      url: `${API_URL}${path}`,
-      method: init?.method ?? 'GET',
-      reason: code,
-      ...getApiDiagnostics(),
-    })
-    throw new ApiError(message, code)
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout)
-    }
-  }
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed', code: 'request_failed' })) as { message?: string; code?: string }
-    let code = error.code ?? FALLBACK_CODE_BY_STATUS[response.status] ?? 'request_failed'
-
-    if (response.status === 401) {
-      if (!error.code) {
-        code = path.startsWith('/admin') ? 'invalid_admin_session' : 'invalid_session_token'
-      } else if (path.startsWith('/admin') && path !== '/admin/auth/login' && error.code === 'unauthorized') {
-        code = 'invalid_admin_session'
-      }
+function createApiClient(defaults: { credentials: RequestCredentials; includeSessionToken: boolean }) {
+  return async function request<T>(
+    path: string,
+    init: RequestInit | undefined = undefined,
+    overrides?: Partial<{ credentials: RequestCredentials; includeSessionToken: boolean }>,
+  ) {
+    const options = {
+      credentials: overrides?.credentials ?? defaults.credentials,
+      includeSessionToken: overrides?.includeSessionToken ?? defaults.includeSessionToken,
     }
 
-    if (response.status >= 500 || response.status === 403) {
-      console.error('[api] request rejected', {
-        url: `${API_URL}${path}`,
-        method: init?.method ?? 'GET',
-        status: response.status,
-        code,
+    const headers = new Headers(init?.headers)
+    if (!headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json')
+    }
+    if (options.includeSessionToken && sessionToken) {
+      headers.set('Authorization', 'Bearer' + ' ' + sessionToken)
+    }
+
+    let response: Response
+    try {
+      response = await fetch(`${API_URL}${path}`, {
+        ...init,
+        credentials: options.credentials,
+        headers,
       })
+    } catch {
+      throw new ApiError('Network error', 'network_error')
     }
 
-    throw new ApiError(error.message ?? 'Request failed', code, response.status)
-  }
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Request failed', code: 'request_failed' })) as { message?: string; code?: string }
+      throw new ApiError(error.message ?? 'Request failed', error.code ?? 'request_failed')
+    }
 
-  return (await response.json()) as T
+    return (await response.json()) as T
+  }
 }
+
+const publicRequest = createApiClient({ credentials: 'omit', includeSessionToken: true })
+const adminRequest = createApiClient({ credentials: 'include', includeSessionToken: false })
 
 export const api = {
   setSessionToken(token: string | null) {
     sessionToken = token
   },
-  setAdminToken(token: string | null) {
-    adminToken = token
-  },
-  bootstrap(payload: { initData: string }) {
-    return request<BootstrapResponse>('/session/bootstrap', {
+  bootstrap(payload: { initData: string; telegramUser: TelegramIdentity; isTelegramEnvironment: boolean }) {
+    return publicRequest<BootstrapResponse>('/session/bootstrap', {
       method: 'POST',
       body: JSON.stringify(payload),
-    })
+    }, { includeSessionToken: false })
   },
   getCatalog(params: { cityId: number; search?: string; categoryId?: number | 'all' }) {
     const searchParams = new URLSearchParams({ cityId: String(params.cityId) })
     if (params.search) searchParams.set('search', params.search)
     if (params.categoryId && params.categoryId !== 'all') searchParams.set('categoryId', String(params.categoryId))
-    return request<{ products: ProductSummary[] }>(`/catalog?${searchParams.toString()}`)
+    return publicRequest<{ products: ProductSummary[] }>(`/catalog?${searchParams.toString()}`)
   },
   getCities() {
-    return request<City[]>('/cities')
+    return publicRequest<City[]>('/cities', undefined, { includeSessionToken: false })
   },
   getProduct(productId: number, cityId: number) {
-    return request<{ product: ProductDetail }>(`/products/${productId}?cityId=${cityId}`)
+    return publicRequest<{ product: ProductDetail }>(`/products/${productId}?cityId=${cityId}`, undefined, { includeSessionToken: false })
   },
   getCart() {
-    return request<{ cart: Cart; recommended: ProductSummary[] }>('/cart')
+    return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>('/cart')
   },
   updateCity(cityId: number) {
-    return request<{ user: UserProfile }>('/users/city', { method: 'PATCH', body: JSON.stringify({ cityId }) })
+    return publicRequest<{ user: UserProfile }>('/users/city', { method: 'PATCH', body: JSON.stringify({ cityId }) })
   },
   updateLanguage(language: Language) {
-    return request<{ user: UserProfile }>('/users/language', { method: 'PATCH', body: JSON.stringify({ language }) })
+    return publicRequest<{ user: UserProfile }>('/users/language', { method: 'PATCH', body: JSON.stringify({ language }) })
   },
   addCartItem(payload: { productCityId: number; quantity: number }) {
-    return request<{ cart: Cart; recommended: ProductSummary[] }>('/cart/items', { method: 'POST', body: JSON.stringify(payload) })
+    return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>('/cart/items', { method: 'POST', body: JSON.stringify(payload) })
   },
   updateCartItem(itemId: number, payload: { quantity: number }) {
-    return request<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(payload) })
+    return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(payload) })
   },
   removeCartItem(itemId: number) {
-    return request<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
+    return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
   },
-  checkout(payload?: { comment?: string; discountCode?: string; deliveryOptionId?: number }) {
-    return request<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload ?? {}) })
+  checkout(payload?: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number }) {
+    return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload ?? {}) })
+  },
+  markOrderPaid(id: number) {
+    return publicRequest<{ order: Order }>(`/orders/${id}/mark-paid`, { method: 'POST' })
   },
   getOrders() {
-    return request<{ orders: Order[] }>('/orders')
+    return publicRequest<{ orders: Order[] }>('/orders')
   },
   getOrder(id: number) {
-    return request<{ order: Order }>(`/orders/${id}`)
+    return publicRequest<{ order: Order }>(`/orders/${id}`)
   },
   cancelOrder(id: number) {
-    return request<{ order: Order }>(`/orders/${id}/cancel`, { method: 'POST' })
+    return publicRequest<{ order: Order }>(`/orders/${id}/cancel`, { method: 'POST' })
   },
   requestRefund(id: number) {
-    return request<{ order: Order }>(`/orders/${id}/refund-request`, { method: 'POST' })
+    return publicRequest<{ order: Order }>(`/orders/${id}/refund-request`, { method: 'POST' })
   },
 
-  // Profile
   getProfile() {
-    return request<{ user: UserProfile }>('/users/me')
+    return publicRequest<{ user: UserProfile }>('/users/me')
   },
 
-  // Balance
   getBalance() {
-    return request<{ balance: Balance }>('/balance')
+    return publicRequest<{ balance: Balance }>('/balance')
   },
   topupBalance(amount: number) {
-    return request<{ balance: Balance }>('/balance/topup', { method: 'POST', body: JSON.stringify({ amount }) })
+    return publicRequest<{ balance: Balance }>('/balance/topup', { method: 'POST', body: JSON.stringify({ amount }) })
   },
 
-  // Casino
   casinoSpin(bet: number, target: number) {
-    return request<{ dice: number; target: number; win: boolean; bet: number; payout: number; balance: { amount: number } }>('/casino/spin', { method: 'POST', body: JSON.stringify({ bet, target }) })
+    return publicRequest<{ dice: number; target: number; win: boolean; bet: number; payout: number; balance: { amount: number } }>('/casino/spin', { method: 'POST', body: JSON.stringify({ bet, target }) })
   },
   getCasinoHistory() {
-    return request<{ history: { id: number; type: string; amount: number; comment: string | null; createdAt: string }[] }>('/casino/history')
+    return publicRequest<{ history: { id: number; type: string; amount: number; comment: string | null; createdAt: string }[] }>('/casino/history')
   },
 
-  // Support
   getSupportTickets() {
-    return request<{ tickets: SupportTicket[] }>('/support')
+    return publicRequest<{ tickets: SupportTicket[] }>('/support')
   },
   createSupportTicket(subject: string, message: string) {
-    return request<{ ticket: SupportTicket }>('/support', { method: 'POST', body: JSON.stringify({ subject, message }) })
+    return publicRequest<{ ticket: SupportTicket }>('/support', { method: 'POST', body: JSON.stringify({ subject, message }) })
   },
   replySupportTicket(ticketId: number, message: string) {
-    return request<{ ticket: SupportTicket }>(`/support/${ticketId}/reply`, { method: 'POST', body: JSON.stringify({ message }) })
+    return publicRequest<{ ticket: SupportTicket }>(`/support/${ticketId}/reply`, { method: 'POST', body: JSON.stringify({ message }) })
   },
 
-  // Discounts
   validateDiscount(code: string, orderAmount: number) {
-    return request<{ discount: Discount; discountAmount: number }>('/discounts/validate', { method: 'POST', body: JSON.stringify({ code, orderAmount }) })
+    return publicRequest<{ discount: Discount; discountAmount: number }>('/discounts/validate', { method: 'POST', body: JSON.stringify({ code, orderAmount }) })
   },
 
-  // Reviews
   getReviews(productId: number) {
-    return request<{ reviews: Review[]; avgRating: number | null; count: number }>(`/reviews?productId=${productId}`)
+    return publicRequest<{ reviews: Review[]; avgRating: number | null; count: number }>(`/reviews?productId=${productId}`)
   },
   submitReview(productId: number, rating: number, comment?: string) {
-    return request<{ review: Review }>('/reviews', { method: 'POST', body: JSON.stringify({ productId, rating, comment }) })
+    return publicRequest<{ review: Review }>('/reviews', { method: 'POST', body: JSON.stringify({ productId, rating, comment }) })
   },
   deleteReview(productId: number) {
-    return request<{ ok: boolean }>(`/reviews/${productId}`, { method: 'DELETE' })
+    return publicRequest<{ ok: boolean }>(`/reviews/${productId}`, { method: 'DELETE' })
   },
 
-  // Wishlist
   getWishlist() {
-    return request<{ items: WishlistItem[] }>('/wishlist')
+    return publicRequest<{ items: WishlistItem[] }>('/wishlist')
   },
   addToWishlist(productCityId: number) {
-    return request<{ item: WishlistItem }>('/wishlist', { method: 'POST', body: JSON.stringify({ productCityId }) })
+    return publicRequest<{ item: WishlistItem }>('/wishlist', { method: 'POST', body: JSON.stringify({ productCityId }) })
   },
   removeFromWishlist(productCityId: number) {
-    return request<{ ok: boolean }>(`/wishlist/${productCityId}`, { method: 'DELETE' })
+    return publicRequest<{ ok: boolean }>(`/wishlist/${productCityId}`, { method: 'DELETE' })
   },
 
-  // Delivery
   getDeliveryOptions() {
-    return request<{ options: { id: number; name: string; nameEn: string | null; type: string; price: number }[] }>('/delivery')
+    return publicRequest<{ options: { id: number; name: string; nameEn: string | null; type: string; price: number }[] }>('/delivery')
+  },
+  getPaymentMethods() {
+    return publicRequest<{ methods: PaymentMethod[] }>('/payments/methods')
   },
 
-
-  // Admin auth/settings
   adminLogin(data: { password: string }) {
-    return request<{ adminToken: string; expiresAt: string; settings: AdminSettingsResponse }>('/admin/auth/login', {
+    return adminRequest<{ ok: boolean }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     })
   },
   adminLogout() {
-    return request<{ ok: boolean }>('/admin/auth/logout', { method: 'POST' })
+    return adminRequest<{ ok: boolean }>('/admin/auth/logout', { method: 'POST' })
   },
-  getAdminSettings() {
-    return request<AdminSettingsResponse>('/admin/settings')
+  adminStatus() {
+    return adminRequest<{ authenticated: boolean }>('/admin/auth/status')
   },
-  updateAdminPassword(data: { currentPassword: string; newPassword: string }) {
-    return request<{ saved: boolean; adminToken: string; expiresAt: string }>('/admin/settings/password', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-  },
-  addAdministrator(telegramId: string) {
-    return request<{ administrators: string[] }>('/admin/settings/administrators', {
-      method: 'POST',
-      body: JSON.stringify({ telegramId }),
-    })
-  },
-  changeAdministrator(currentTelegramId: string, telegramId: string) {
-    return request<{ administrators: string[] }>(`/admin/settings/administrators/${currentTelegramId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ telegramId }),
-    })
-  },
-  removeAdministrator(telegramId: string) {
-    return request<{ administrators: string[] }>(`/admin/settings/administrators/${telegramId}`, {
-      method: 'DELETE',
-    })
-  },
-
-  // Admin
   getAdminStats() {
-    return request<AdminStats>('/admin/stats')
+    return adminRequest<AdminStats>('/admin/stats')
   },
   getAdminOrders(page = 1, status?: string) {
     const params = new URLSearchParams({ page: String(page) })
     if (status) params.set('status', status)
-    return request<{ orders: Order[]; total: number; page: number; pages: number }>(`/admin/orders?${params}`)
+    return adminRequest<{ orders: Order[]; total: number; page: number; pages: number }>(`/admin/orders?${params}`)
   },
   updateAdminOrderStatus(orderId: number, status: string, comment?: string) {
-    return request<{ order: Order }>(`/admin/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status, comment }) })
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status, comment }) })
   },
   processRefund(orderId: number, refundStatus: 'approved' | 'rejected') {
-    return request<{ order: Order }>(`/admin/orders/${orderId}/refund`, { method: 'PATCH', body: JSON.stringify({ refundStatus }) })
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/refund`, { method: 'PATCH', body: JSON.stringify({ refundStatus }) })
+  },
+  confirmAdminOrderPayment(orderId: number) {
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/payment`, { method: 'PATCH', body: JSON.stringify({ action: 'confirm' }) })
+  },
+  rejectAdminOrderPayment(orderId: number) {
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/payment`, { method: 'PATCH', body: JSON.stringify({ action: 'reject' }) })
   },
   getAdminUsers(page = 1) {
-    return request<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)
+    return adminRequest<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)
   },
   getAdminProducts() {
-    return request<{ products: AdminProduct[] }>('/admin/products')
+    return adminRequest<{ products: ProductDetail[] }>('/admin/products')
   },
-  updateAdminProduct(id: number, data: Partial<{ name: string; nameEn: string; description: string; descriptionEn: string; price: number; image: string; isActive: boolean; isRecommended: boolean }>) {
-    return request<{ product: AdminProduct }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  updateAdminProduct(id: number, data: Partial<{ name: string; price: number; isActive: boolean; isRecommended: boolean }>) {
+    return adminRequest<{ product: ProductDetail }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean }>) {
-    return request<{ productCity: unknown }>(`/admin/product-cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    return adminRequest<{ productCity: unknown }>(`/admin/product-cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminDiscounts() {
-    return request<{ discounts: Discount[] }>('/admin/discounts')
+    return adminRequest<{ discounts: Discount[] }>('/admin/discounts')
   },
   createAdminDiscount(data: { code: string; type: string; value: number; minOrderAmount?: number; usageLimit?: number }) {
-    return request<{ discount: Discount }>('/admin/discounts', { method: 'POST', body: JSON.stringify(data) })
+    return adminRequest<{ discount: Discount }>('/admin/discounts', { method: 'POST', body: JSON.stringify(data) })
   },
   getAdminSupportTickets(status?: string) {
     const params = status ? `?status=${status}` : ''
-    return request<{ tickets: SupportTicket[] }>(`/admin/support${params}`)
+    return adminRequest<{ tickets: SupportTicket[] }>(`/admin/support${params}`)
   },
   adminReplySupportTicket(ticketId: number, message: string) {
-    return request<{ ticket: SupportTicket }>(`/admin/support/${ticketId}/reply`, { method: 'POST', body: JSON.stringify({ message }) })
+    return adminRequest<{ ticket: SupportTicket }>(`/admin/support/${ticketId}/reply`, { method: 'POST', body: JSON.stringify({ message }) })
   },
   getAuditLogs(page = 1) {
-    return request<{ logs: { id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[] }>(`/admin/audit-logs?page=${page}`)
+    return adminRequest<{ logs: { id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[] }>(`/admin/audit-logs?page=${page}`)
   },
-
-  // Admin – Bot configuration
-  getAdminBot() {
-    return request<BotStatusResponse>('/admin/bot')
+  getAdminPaymentSettings() {
+    return adminRequest<{ methods: PaymentMethod[] }>('/admin/payment-settings')
   },
-  connectAdminBot(token: string) {
-    return request<BotStatusResponse>('/admin/bot/connect', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    })
+  createAdminPaymentSetting(data: Partial<PaymentMethod> & { type: PaymentMethod['type']; title: string }) {
+    return adminRequest<{ method: PaymentMethod }>('/admin/payment-settings', { method: 'POST', body: JSON.stringify(data) })
   },
-  testAdminBot() {
-    return request<BotStatusResponse>('/admin/bot/test', { method: 'POST' })
+  updateAdminPaymentSetting(id: number, data: Partial<PaymentMethod>) {
+    return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
-  changeAdminBot(token: string) {
-    return request<BotStatusResponse>('/admin/bot/change', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    })
+  deleteAdminPaymentSetting(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/payment-settings/${id}`, { method: 'DELETE' })
   },
-  disconnectAdminBot() {
-    return request<BotStatusResponse>('/admin/bot/disconnect', { method: 'POST' })
-  },
-
-  // Admin – Cities
-  getAdminCities() {
-    return request<{ cities: AdminCity[] }>('/admin/cities')
-  },
-  createAdminCity(data: { name: string; nameEn?: string; sortOrder?: number; isActive?: boolean }) {
-    return request<{ city: AdminCity }>('/admin/cities', { method: 'POST', body: JSON.stringify(data) })
-  },
-  updateAdminCity(id: number, data: Partial<{ name: string; nameEn: string; isActive: boolean; sortOrder: number }>) {
-    return request<{ city: AdminCity }>(`/admin/cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
-  },
-  deleteAdminCity(id: number) {
-    return request<{ ok?: boolean; city?: AdminCity; deactivated?: boolean }>(`/admin/cities/${id}`, { method: 'DELETE' })
-  },
-
-  // Admin – Categories
-  getAdminCategories() {
-    return request<{ categories: AdminCategory[] }>('/admin/categories')
-  },
-  createAdminCategory(data: { name: string; nameEn?: string; sortOrder?: number }) {
-    return request<{ category: AdminCategory }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
-  },
-  updateAdminCategory(id: number, data: Partial<{ name: string; nameEn: string; isActive: boolean; sortOrder: number }>) {
-    return request<{ category: AdminCategory }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
-  },
-  deleteAdminCategory(id: number) {
-    return request<{ ok?: boolean; category?: AdminCategory; deactivated?: boolean }>(`/admin/categories/${id}`, { method: 'DELETE' })
-  },
-
-  // Admin – Products (create / delete)
-  createAdminProduct(data: { name: string; nameEn?: string; description: string; descriptionEn?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean }) {
-    return request<{ product: AdminProduct }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
-  },
-  deleteAdminProduct(id: number) {
-    return request<{ ok?: boolean; product?: AdminProduct; deactivated?: boolean }>(`/admin/products/${id}`, { method: 'DELETE' })
+  toggleAdminPaymentSetting(id: number) {
+    return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}/toggle`, { method: 'PATCH' })
   },
 }

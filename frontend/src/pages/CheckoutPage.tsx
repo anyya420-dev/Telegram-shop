@@ -1,106 +1,203 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
-import { api } from '../api/client';
-import styles from './CheckoutPage.module.css';
-import { useTranslation } from 'react-i18next';
-import { formatCurrency } from '../lib/format';
-import { getLocalizedCityName } from '../lib/localized';
-import i18n from '../lib/i18n';
-import type { DeliveryOption, Language } from '../types';
-import { resolveApiErrorMessage } from '../lib/errors';
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
+import { api } from '../api/client'
+import styles from './CheckoutPage.module.css'
+import { useTranslation } from 'react-i18next'
+import { formatCurrency } from '../lib/format'
+import { getLocalizedCityName } from '../lib/localized'
+import i18n from '../lib/i18n'
+import type { DeliveryOption, Language, Order, PaymentMethod } from '../types'
 
 export default function CheckoutPage() {
-  const { cart, user, checkout } = useApp();
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  const language = i18n.language as Language;
-  const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
-  const [deliveryLoading, setDeliveryLoading] = useState(true);
-  const [deliveryError, setDeliveryError] = useState<string | null>(null);
-  const [selectedDeliveryId, setSelectedDeliveryId] = useState<number | null>(null);
-  const [discountCode, setDiscountCode] = useState('');
-  const [discountAmount, setDiscountAmount] = useState(0);
-  const [discountError, setDiscountError] = useState<string | null>(null);
-  const [validatingDiscount, setValidatingDiscount] = useState(false);
-  const [comment, setComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [successOrderId, setSuccessOrderId] = useState<number | null>(null);
+  const { cart, user, checkout } = useApp()
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+  const language = i18n.language as Language
+  const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([])
+  const [deliveryLoading, setDeliveryLoading] = useState(true)
+  const [deliveryError, setDeliveryError] = useState<string | null>(null)
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<number | null>(null)
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+  const [paymentLoading, setPaymentLoading] = useState(true)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<number | null>(null)
+  const [discountCode, setDiscountCode] = useState('')
+  const [discountAmount, setDiscountAmount] = useState(0)
+  const [discountError, setDiscountError] = useState<string | null>(null)
+  const [validatingDiscount, setValidatingDiscount] = useState(false)
+  const [comment, setComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [order, setOrder] = useState<Order | null>(null)
+  const [markingPaid, setMarkingPaid] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const loadDelivery = useCallback(async () => {
     try {
-      setDeliveryLoading(true);
-      setDeliveryError(null);
-      const response = await api.getDeliveryOptions();
-      setDeliveryOptions(response.options);
+      setDeliveryLoading(true)
+      setDeliveryError(null)
+      const response = await api.getDeliveryOptions()
+      setDeliveryOptions(response.options)
     } catch (err) {
-      setDeliveryError(resolveApiErrorMessage(err, t, 'request_failed'));
+      setDeliveryError(err instanceof Error ? err.message : t('errors.request_failed'))
     } finally {
-      setDeliveryLoading(false);
+      setDeliveryLoading(false)
     }
-  }, [t]);
+  }, [t])
+
+  const loadPaymentMethods = useCallback(async () => {
+    try {
+      setPaymentLoading(true)
+      setPaymentError(null)
+      const response = await api.getPaymentMethods()
+      setPaymentMethods(response.methods)
+      setSelectedPaymentMethodId((prev) => prev ?? response.methods[0]?.id ?? null)
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : t('errors.request_failed'))
+    } finally {
+      setPaymentLoading(false)
+    }
+  }, [t])
 
   useEffect(() => {
-    void loadDelivery();
-  }, [loadDelivery]);
+    void Promise.all([loadDelivery(), loadPaymentMethods()])
+  }, [loadDelivery, loadPaymentMethods])
 
   const selectedDelivery = useMemo(
     () => deliveryOptions.find((option) => option.id === selectedDeliveryId) ?? null,
     [deliveryOptions, selectedDeliveryId],
-  );
+  )
 
-  const cityLabel = user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('profile.cityNotSelected');
-  const safeSubtotal = cart?.subtotal ?? 0;
-  const total = Math.max(0, safeSubtotal - discountAmount + (selectedDelivery?.price ?? 0));
+  const cityLabel = user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('profile.cityNotSelected')
+  const safeSubtotal = cart?.subtotal ?? 0
+  const total = Math.max(0, safeSubtotal - discountAmount + (selectedDelivery?.price ?? 0))
 
   async function applyDiscount() {
-    if (!discountCode.trim() || validatingDiscount || !cart) return;
-    setValidatingDiscount(true);
-    setDiscountError(null);
+    if (!discountCode.trim() || validatingDiscount || !cart) return
+    setValidatingDiscount(true)
+    setDiscountError(null)
     try {
-      const response = await api.validateDiscount(discountCode.trim().toUpperCase(), cart.subtotal);
-      setDiscountAmount(response.discountAmount);
+      const response = await api.validateDiscount(discountCode.trim().toUpperCase(), cart.subtotal)
+      setDiscountAmount(response.discountAmount)
     } catch (err) {
-      setDiscountAmount(0);
-      setDiscountError(resolveApiErrorMessage(err, t, 'request_failed'));
+      setDiscountAmount(0)
+      setDiscountError(err instanceof Error ? err.message : t('cart.invalidDiscount'))
     } finally {
-      setValidatingDiscount(false);
+      setValidatingDiscount(false)
     }
   }
 
   async function submitCheckout() {
-    if (!cart || cart.items.length === 0 || !user?.selectedCityId || submitting) return;
+    if (!cart || cart.items.length === 0 || !user?.selectedCityId || submitting) return
     if (deliveryOptions.length > 0 && !selectedDeliveryId) {
-      setSubmitError(t('checkout.deliveryRequired'));
-      return;
+      setSubmitError(t('checkout.deliveryRequired'))
+      return
     }
-    setSubmitting(true);
-    setSubmitError(null);
+    if (!selectedPaymentMethodId) {
+      setSubmitError(t('checkout.paymentRequired'))
+      return
+    }
+    setSubmitting(true)
+    setSubmitError(null)
     try {
-      const order = await checkout({
+      const createdOrder = await checkout({
         comment: comment.trim() || undefined,
         discountCode: discountAmount > 0 ? discountCode.trim().toUpperCase() : undefined,
         deliveryOptionId: selectedDeliveryId ?? undefined,
-      });
-      setSuccessOrderId(order.id);
+        paymentMethodId: selectedPaymentMethodId,
+      })
+      setOrder(createdOrder)
     } catch (err) {
-      setSubmitError(resolveApiErrorMessage(err, t, 'checkout_failed'));
+      setSubmitError(err instanceof Error ? err.message : t('cart.checkoutFailed'))
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
   }
 
-  if (successOrderId) {
+  async function copyAddress(address: string) {
+    try {
+      await navigator.clipboard.writeText(address)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  async function markPaid() {
+    if (!order || markingPaid) return
+    setMarkingPaid(true)
+    setSubmitError(null)
+    try {
+      const response = await api.markOrderPaid(order.id)
+      setOrder(response.order)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : t('errors.request_failed'))
+    } finally {
+      setMarkingPaid(false)
+    }
+  }
+
+  if (order) {
+    const method = order.paymentMethod
+    const isCryptoLike = method?.type === 'crypto' || method?.type === 'ton'
+    const canShowCryptoAddress = Boolean(isCryptoLike && method?.network && method?.walletAddress)
     return (
-      <div className={styles.empty}>
-        <h1 className={styles.title}>{t('checkout.successTitle')}</h1>
-        <p className={styles.emptyText}>{t('checkout.successText')}</p>
-        <button className={styles.primaryBtn} onClick={() => navigate(`/orders/${successOrderId}`)} type="button">
-          {t('checkout.viewOrder')}
-        </button>
+      <div className={styles.page}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>{t('checkout.paymentTitle')}</h1>
+        </div>
+
+        <div className={styles.card}>
+          <p className={styles.sectionTitle}>{t('orders.orderTitle', { id: order.id })}</p>
+          <div className={styles.line}>
+            <span>{t('cart.orderTotal')}</span>
+            <span>{formatCurrency(order.total, language)}</span>
+          </div>
+          {method && (
+            <div className={styles.line}>
+              <span>{t('checkout.paymentMethod')}</span>
+              <span>{method.title}</span>
+            </div>
+          )}
+          {method?.currency && (
+            <div className={styles.line}>
+              <span>{t('checkout.currency')}</span>
+              <span>{method.currency}</span>
+            </div>
+          )}
+          {method?.type === 'card' && method.cardNumber && (
+            <>
+              <div className={styles.line}><span>{t('checkout.cardNumber')}</span><span>{method.cardNumber}</span></div>
+              {method.cardholderName && <div className={styles.line}><span>{t('checkout.cardholder')}</span><span>{method.cardholderName}</span></div>}
+            </>
+          )}
+          {canShowCryptoAddress && (
+            <>
+              <div className={styles.line}><span>{t('checkout.network')}</span><span>{method?.network}</span></div>
+              <div className={styles.line}><span>{t('checkout.walletAddress')}</span><span>{method?.walletAddress}</span></div>
+              <button className={styles.secondaryBtn} type="button" onClick={() => method?.walletAddress && void copyAddress(method.walletAddress)}>
+                {copied ? t('checkout.copiedAddress') : t('checkout.copyAddress')}
+              </button>
+            </>
+          )}
+          {isCryptoLike && !canShowCryptoAddress && (
+            <p className={styles.error}>{t('checkout.cryptoMissingNetwork')}</p>
+          )}
+          <p className={styles.value}>{order.paymentStatus === 'pending' ? t('checkout.paymentPending') : t('checkout.waitingForPayment')}</p>
+          {submitError && <p className={styles.error}>{submitError}</p>}
+          {order.paymentStatus !== 'pending' && (
+            <button className={styles.primaryBtn} onClick={() => void markPaid()} disabled={markingPaid} type="button">
+              {markingPaid ? t('common.loading') : t('checkout.iPaid')}
+            </button>
+          )}
+          <button className={styles.secondaryBtn} onClick={() => navigate(`/orders/${order.id}`)} type="button">
+            {t('checkout.viewOrder')}
+          </button>
+        </div>
       </div>
-    );
+    )
   }
 
   if (!cart || cart.items.length === 0) {
@@ -112,7 +209,7 @@ export default function CheckoutPage() {
           {t('cart.continueShopping')}
         </button>
       </div>
-    );
+    )
   }
 
   return (
@@ -146,9 +243,9 @@ export default function CheckoutPage() {
             className={styles.input}
             value={discountCode}
             onChange={(event) => {
-              setDiscountCode(event.target.value.toUpperCase());
-              setDiscountAmount(0);
-              setDiscountError(null);
+              setDiscountCode(event.target.value.toUpperCase())
+              setDiscountAmount(0)
+              setDiscountError(null)
             }}
             placeholder={t('cart.discountCode')}
           />
@@ -188,6 +285,34 @@ export default function CheckoutPage() {
       </div>
 
       <div className={styles.card}>
+        <p className={styles.sectionTitle}>{t('checkout.paymentMethod')}</p>
+        {paymentLoading && <p className={styles.value}>{t('common.loading')}</p>}
+        {paymentError && (
+          <div className={styles.errorRow}>
+            <p className={styles.error}>{paymentError}</p>
+            <button className={styles.secondaryBtn} onClick={() => void loadPaymentMethods()} type="button">
+              {t('common.retry')}
+            </button>
+          </div>
+        )}
+        {!paymentLoading && !paymentError && paymentMethods.length === 0 && (
+          <p className={styles.value}>{t('checkout.noPaymentMethods')}</p>
+        )}
+        {paymentMethods.map((method) => (
+          <label key={method.id} className={styles.option}>
+            <input
+              type="radio"
+              checked={selectedPaymentMethodId === method.id}
+              onChange={() => setSelectedPaymentMethodId(method.id)}
+              name="payment"
+            />
+            <span>{method.title}</span>
+            <span>{method.currency ?? method.type.toUpperCase()}</span>
+          </label>
+        ))}
+      </div>
+
+      <div className={styles.card}>
         <p className={styles.sectionTitle}>{t('checkout.comment')}</p>
         <textarea
           className={styles.textarea}
@@ -204,10 +329,10 @@ export default function CheckoutPage() {
         <div className={styles.line}><span>{t('cart.delivery')}</span><span>{formatCurrency(selectedDelivery?.price ?? 0, language)}</span></div>
         <div className={styles.total}><span>{t('cart.orderTotal')}</span><span>{formatCurrency(total, language)}</span></div>
         {submitError && <p className={styles.error}>{submitError}</p>}
-        <button className={styles.primaryBtn} onClick={() => void submitCheckout()} disabled={submitting} type="button">
+        <button className={styles.primaryBtn} onClick={() => void submitCheckout()} disabled={submitting || paymentMethods.length === 0} type="button">
           {submitting ? t('cart.checkingOut') : t('checkout.confirm')}
         </button>
       </div>
     </div>
-  );
+  )
 }

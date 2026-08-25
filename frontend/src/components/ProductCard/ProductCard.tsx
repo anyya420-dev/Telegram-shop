@@ -17,23 +17,15 @@ export default function ProductCard({ product, onClick }: Props) {
   const { addToCart } = useApp();
   const language = i18n.language as Language;
   const [quantity, setQuantity] = useState(product.minimumQuantity || 1);
-  const [adding, setAdding] = useState(false);
-  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     setQuantity(product.minimumQuantity || 1);
-    setImageError(false);
   }, [product.productCityId, product.minimumQuantity]);
 
   async function handleAdd(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!product.isAvailable || adding) return;
-    setAdding(true);
-    try {
-      await addToCart(product.productCityId, quantity);
-    } finally {
-      setAdding(false);
-    }
+    if (!product.isAvailable) return;
+    await addToCart(product.productCityId, quantity);
   }
 
   const step = product.quantityStep || 1;
@@ -53,8 +45,8 @@ export default function ProductCard({ product, onClick }: Props) {
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
     >
       <div className={styles.imageWrap}>
-        {product.image && !imageError ? (
-          <img src={product.image} alt={localizedName} className={styles.image} loading="lazy" onError={() => setImageError(true)} />
+        {product.image ? (
+          <img src={product.image} alt={localizedName} className={styles.image} loading="lazy" />
         ) : (
           <div className={styles.noImage}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -87,7 +79,7 @@ export default function ProductCard({ product, onClick }: Props) {
               <button
                 className={styles.qtyBtn}
                 onClick={() => setQuantity((prev) => Math.max(minimum, prev - step))}
-                disabled={quantity <= minimum || adding}
+                disabled={quantity <= minimum}
                 type="button"
               >
                 −
@@ -96,7 +88,7 @@ export default function ProductCard({ product, onClick }: Props) {
               <button
                 className={styles.qtyBtn}
                 onClick={() => setQuantity((prev) => Math.min(maximum, prev + step))}
-                disabled={quantity >= maximum || adding}
+                disabled={quantity >= maximum}
                 type="button"
               >
                 +
@@ -106,17 +98,14 @@ export default function ProductCard({ product, onClick }: Props) {
                 onClick={(e) => void handleAdd(e)}
                 title={t('common.addToCart')}
                 aria-label={t('common.addToCart')}
-                disabled={adding}
                 type="button"
               >
-                {adding ? '…' : (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <path d="M12 10v6" />
-                    <path d="M9 13h6" />
-                  </svg>
-                )}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <path d="M12 10v6" />
+                  <path d="M9 13h6" />
+                </svg>
               </button>
             </div>
           )}

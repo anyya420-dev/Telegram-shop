@@ -117,11 +117,13 @@ model Order {
   userId           Int         @map("user_id")
   cityId           Int         @map("city_id")
   status           String      @default("pending")
+  paymentStatus    String?     @map("payment_status") // unpaid | pending | confirmed | rejected
   subtotal         Float
   discountAmount   Float       @default(0) @map("discount_amount")
   deliveryFee      Float       @default(0) @map("delivery_fee")
   total            Float
   comment          String?
+  paymentMethodId  Int?        @map("payment_method_id")
   deliveryOptionId Int?        @map("delivery_option_id")
   discountId       Int?        @map("discount_id")
   cancelledAt      DateTime?   @map("cancelled_at")
@@ -133,11 +135,30 @@ model Order {
   user           User                 @relation(fields: [userId], references: [id])
   city           City                 @relation(fields: [cityId], references: [id])
   items          OrderItem[]
+  paymentMethod  PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
   deliveryOption DeliveryOption?      @relation(fields: [deliveryOptionId], references: [id])
   discount       Discount?            @relation(fields: [discountId], references: [id])
   statusHistory  OrderStatusHistory[]
 
   @@map("orders")
+}
+
+model PaymentMethod {
+  id             Int      @id @default(autoincrement())
+  type           String   // card | ton | crypto
+  title          String
+  cardNumber     String?  @map("card_number")
+  cardholderName String?  @map("cardholder_name")
+  currency       String?
+  network        String?
+  walletAddress  String?  @map("wallet_address")
+  isEnabled      Boolean  @default(true) @map("is_enabled")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@map("payment_methods")
 }
 
 model OrderItem {
@@ -280,6 +301,28 @@ model SupportTicketReply {
   @@map("support_ticket_replies")
 }
 
+model AdminSecurity {
+  id           Int      @id @default(autoincrement())
+  passwordHash String   @map("password_hash")
+  passwordSalt String   @map("password_salt")
+  passwordAlgo String   @default("scrypt") @map("password_algo")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_security")
+}
+
+model AdminSession {
+  id             Int      @id @default(autoincrement())
+  tokenHash      String   @unique @map("token_hash")
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  revokedAt      DateTime? @map("revoked_at")
+
+  @@index([expiresAt, revokedAt])
+  @@map("admin_sessions")
+}
+
 model AuditLog {
   id        Int      @id @default(autoincrement())
   userId    Int?     @map("user_id")
@@ -302,57 +345,6 @@ model UserActivityLog {
   user User @relation(fields: [userId], references: [id])
 
   @@map("user_activity_logs")
-}
-
-model Administrator {
-  id         Int      @id @default(autoincrement())
-  telegramId String   @unique @map("telegram_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  sessions AdminSession[]
-
-  @@map("administrators")
-}
-
-model AdminSecurity {
-  id             Int      @id @default(autoincrement())
-  passwordHash   String   @map("password_hash")
-  passwordSalt   String   @map("password_salt")
-  passwordAlgo   String   @default("scrypt") @map("password_algo")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  updatedByAdmin Int?     @map("updated_by_admin")
-
-  @@map("admin_security")
-}
-
-model AdminSession {
-  id             Int           @id @default(autoincrement())
-  adminId        Int           @map("admin_id")
-  tokenHash      String        @unique @map("token_hash")
-  expiresAt      DateTime      @map("expires_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  lastActivityAt DateTime      @default(now()) @map("last_activity_at")
-  revokedAt      DateTime?     @map("revoked_at")
-
-  admin Administrator @relation(fields: [adminId], references: [id], onDelete: Cascade)
-
-  @@index([adminId, expiresAt])
-  @@map("admin_sessions")
-}
-
-model BotConfig {
-  id              Int       @id @default(autoincrement())
-  botId           String    @map("bot_id")
-  botUsername     String    @map("bot_username")
-  botFirstName    String    @map("bot_first_name")
-  encryptedToken  String    @map("encrypted_token")
-  enabled         Boolean   @default(true)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  lastValidatedAt DateTime? @map("last_validated_at")
-
-  @@map("bot_configs")
 }
 
 model DeliveryOption {

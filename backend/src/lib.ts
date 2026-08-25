@@ -2,11 +2,8 @@ import { PrismaClient } from '@prisma/client'
 import type { Request, Response } from 'express'
 import rateLimit from 'express-rate-limit'
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { getSessionSecret } from './services/runtimeConfig.js'
 
-if (!process.env.DATABASE_URL && process.env.NODE_ENV !== 'production') {
-  process.env.DATABASE_URL = 'postgresql://localhost/dev'
-}
+process.env.DATABASE_URL ??= 'postgresql://localhost/dev'
 
 export const prisma = new PrismaClient()
 export const DEMO_TELEGRAM_USER = {
@@ -15,18 +12,15 @@ export const DEMO_TELEGRAM_USER = {
   first_name: 'Demo',
 }
 
+const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
+
 export type AppLanguage = 'ru' | 'en'
 
 type TelegramUserPayload = {
   id: string
   username?: string
   first_name: string
-  last_name?: string
 }
-
-const TELEGRAM_ID_PATTERN = /^\d{1,20}$/
-const DEFAULT_TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = 60 * 60 * 24
-const MAX_TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS = 300
 
 type TranslationShape = {
   name: string
@@ -59,7 +53,7 @@ export const authRateLimiter = rateLimit({
 })
 
 export function createSessionToken(telegramId: string) {
-  const signature = createHmac('sha256', getSessionSecret()).update(telegramId).digest('hex')
+  const signature = createHmac('sha256', SESSION_SECRET).update(telegramId).digest('hex')
   return `${telegramId}.${signature}`
 }
 
@@ -74,7 +68,7 @@ export function verifySessionToken(token: string | undefined) {
     return null
   }
 
-  const expectedSignature = createHmac('sha256', getSessionSecret()).update(telegramId).digest('hex')
+  const expectedSignature = createHmac('sha256', SESSION_SECRET).update(telegramId).digest('hex')
   const received = Buffer.from(signature)
   const expected = Buffer.from(expectedSignature)
 
@@ -109,26 +103,6 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
     return null
   }
 
-  const authDateRaw = params.get('auth_date')
-  const authDate = Number(authDateRaw)
-  if (!authDateRaw || !Number.isInteger(authDate) || authDate <= 0) {
-    return null
-  }
-
-  const nowSeconds = Math.floor(Date.now() / 1000)
-  const maxAge = Number(process.env.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS ?? DEFAULT_TELEGRAM_INIT_DATA_MAX_AGE_SECONDS)
-  if (!Number.isFinite(maxAge) || maxAge <= 0) {
-    return null
-  }
-
-  if ((nowSeconds - authDate) > maxAge) {
-    return null
-  }
-
-  if (authDate - nowSeconds > MAX_TELEGRAM_INIT_DATA_FUTURE_SKEW_SECONDS) {
-    return null
-  }
-
   const rawUser = params.get('user')
 
   if (!rawUser) {
@@ -136,44 +110,17 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
   }
 
   try {
-    const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string; last_name?: string }
-    const normalizedTelegramId = normalizeTelegramUserId(parsedUser.id)
+    const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string }
 
-    if (!normalizedTelegramId || !parsedUser.first_name) {
+    if (!parsedUser.id || !parsedUser.first_name) {
       return null
     }
 
     return {
-      id: normalizedTelegramId,
+      id: String(parsedUser.id),
       username: parsedUser.username,
       first_name: parsedUser.first_name,
-      last_name: parsedUser.last_name,
     } satisfies TelegramUserPayload
-  } catch {
-    return null
-  }
-}
-
-function normalizeTelegramUserId(value: unknown) {
-  if (typeof value === 'bigint') {
-    return value > 0n ? value.toString() : null
-  }
-  if (typeof value === 'number') {
-    if (!Number.isSafeInteger(value) || value <= 0) {
-      return null
-    }
-    return value.toString()
-  }
-  if (typeof value !== 'string') {
-    return null
-  }
-  const normalized = value.trim()
-  if (!TELEGRAM_ID_PATTERN.test(normalized)) {
-    return null
-  }
-  try {
-    const asBigInt = BigInt(normalized)
-    return asBigInt > 0n ? asBigInt.toString() : null
   } catch {
     return null
   }
