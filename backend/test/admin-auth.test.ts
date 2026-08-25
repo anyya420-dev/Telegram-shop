@@ -96,6 +96,9 @@ test('admin session flow keeps public endpoints independent', async () => {
   const cookieHeader = loginGood.headers.get('set-cookie')
   assert.ok(cookieHeader)
   assert.match(cookieHeader, /HttpOnly/i)
+  assert.match(cookieHeader, /Secure/i)
+  assert.match(cookieHeader, /SameSite=None/i)
+  assert.match(cookieHeader, /Path=\/api\/admin/i)
 
   const loginBad = await request('/api/admin/auth/login', {
     method: 'POST',

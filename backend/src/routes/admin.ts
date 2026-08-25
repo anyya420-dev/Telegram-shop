@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
-import type { Request, Response } from 'express'
+import type { CookieOptions, Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import {
   createAdminSession,
@@ -12,6 +12,17 @@ import {
 
 const router = Router()
 const ADMIN_SESSION_COOKIE_NAME = 'tg_shop_admin_session'
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+
+function getAdminCookieOptions() {
+  const sameSite: CookieOptions['sameSite'] = IS_PRODUCTION ? 'none' : 'lax'
+  return {
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite,
+    path: '/api/admin',
+  }
+}
 
 function parseCookie(request: Request, name: string) {
   const rawCookie = request.header('cookie') ?? ''
@@ -27,20 +38,14 @@ function parseCookie(request: Request, name: string) {
 
 function writeAdminCookie(response: Response, token: string, expiresAt: Date) {
   response.cookie(ADMIN_SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    ...getAdminCookieOptions(),
     expires: expiresAt,
-    path: '/api/admin',
   })
 }
 
 function clearAdminCookie(response: Response) {
   response.clearCookie(ADMIN_SESSION_COOKIE_NAME, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/api/admin',
+    ...getAdminCookieOptions(),
   })
 }
 
