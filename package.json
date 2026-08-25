@@ -17,7 +17,7 @@
     "typecheck": "npm run db:generate && npm run typecheck --workspace frontend && npm run typecheck --workspace backend && npm run typecheck --workspace bot",
     "db:generate": "npm run db:generate --workspace backend",
     "test": "npm run test --workspace backend && npm run test --workspace frontend",
-    "verify": "npm run db:generate && npm run typecheck && npm run test && VITE_API_URL=${VITE_API_URL:-https://narcos-shop.onrender.com/api} npm run build",
+    "verify": "npm run db:generate && npm run typecheck && npm run test && node -e \"const { spawnSync } = require('node:child_process'); const env = { ...process.env, VITE_API_URL: process.env.VITE_API_URL || 'https://narcos-shop.onrender.com/api' }; const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'; const result = spawnSync(npmCmd, ['run', 'build'], { stdio: 'inherit', env }); process.exit(result.status ?? 1);\"",
     "smoke:production": "node scripts/production-smoke-test.mjs",
     "db:push": "npm run db:push --workspace backend",
     "db:seed": "npm run db:seed --workspace backend"

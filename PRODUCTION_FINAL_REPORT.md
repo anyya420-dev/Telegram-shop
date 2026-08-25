@@ -4,16 +4,18 @@
 - No new reproducible code/config/test defects were found in this final pass.
 
 ## Fixes
-- No additional code fixes were required in this pass.
+- Made `npm run verify` cross-platform in `package.json` by replacing POSIX-only env default syntax with a Node-based launcher that sets `VITE_API_URL` fallback safely on all OSes.
 - Previous hardening changes were re-validated against current repository state.
 
 ## Changed files
+- `package.json`
 - `PRODUCTION_FINAL_REPORT.md`
 
 ## Tests
 - `npm install` → PASS
 - `npm run verify` → PASS
   - includes db generate, typecheck, backend tests, frontend tests, and workspace build
+- `npm run smoke:production` → BLOCKED (external environment reachability)
 - Existing backend test suite passed, including coverage for CORS/preflight and `/api/session/bootstrap` behavior.
 
 ## Build
