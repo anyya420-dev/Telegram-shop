@@ -11,7 +11,7 @@ import {
 import { startHttpServer } from './startup.js'
 import { initializeTelegramBot } from './services/telegramBotRuntime.js'
 
-const port = Number(process.env.PORT ?? 10000)
+const port = Number(process.env.PORT ?? 3001)
 const allowedOrigins = getAllowedCorsOrigins()
 const app = createApp({ allowedOrigins })
 

@@ -620,7 +620,6 @@ export default function AdminPage() {
     }
 
     if (!isAdmin) {
-      api.setAdminToken(null)
       setAuthLoading(false)
       setAuthenticated(false)
       setSettings(null)
@@ -644,7 +643,6 @@ export default function AdminPage() {
               stats: statsResponse,
             } satisfies AdminRestoreState
           } catch {
-            api.setAdminToken(null)
             return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
           }
         })()
@@ -667,7 +665,6 @@ export default function AdminPage() {
         setStats(state.stats)
       } catch {
         if (cancelled) return
-        api.setAdminToken(null)
         setAuthenticated(false)
         setSettings(null)
         setStats(null)
@@ -690,7 +687,6 @@ export default function AdminPage() {
     setStatus(null)
     try {
       const response = await api.adminLogin({ password })
-      api.setAdminToken(response.adminToken)
       setSettings(response.settings)
       setAuthenticated(true)
       setPassword('')
@@ -723,7 +719,6 @@ export default function AdminPage() {
     } catch {
       // no-op
     } finally {
-      api.setAdminToken(null)
       setAuthenticated(false)
       setSettings(null)
       setLoading(false)
@@ -742,8 +737,7 @@ export default function AdminPage() {
     setLoading(true)
     setStatus(null)
     try {
-      const response = await api.updateAdminPassword({ currentPassword, newPassword })
-      api.setAdminToken(response.adminToken)
+      await api.updateAdminPassword({ currentPassword, newPassword })
       setCurrentPassword('')
       setNewPassword('')
       await refreshSettings('Password saved successfully.')

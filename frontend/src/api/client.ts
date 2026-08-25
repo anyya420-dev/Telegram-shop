@@ -37,13 +37,10 @@ const { baseUrl: API_URL, error: API_CONFIG_ERROR } = resolveApiBaseUrl(
 export const apiBaseUrl = API_URL
 export const apiConfigError = API_CONFIG_ERROR
 
-// Loud, but non-fatal: throwing at module scope would abort evaluation of the
-// whole bundle and leave the user with a blank screen instead of a diagnostic.
 if (API_CONFIG_ERROR) {
   console.error('[api] Invalid production API configuration:', API_CONFIG_ERROR)
 }
 
-/** Safe diagnostics only — never logs initData, session tokens or admin tokens. */
 export function getApiDiagnostics() {
   const telegramWebApp =
     typeof window === 'undefined'
@@ -61,7 +58,6 @@ export function getApiDiagnostics() {
 }
 
 let sessionToken: string | null = null
-let adminToken: string | null = null
 
 export class ApiError extends Error {
   code?: string
@@ -91,12 +87,6 @@ const FALLBACK_CODE_BY_STATUS: Record<number, string> = {
 
 const REQUEST_TIMEOUT_MS = 20_000
 
-/**
- * A browser reports a blocked CORS response and a genuinely offline network with
- * the exact same opaque `TypeError`. We can still distinguish the likely cause:
- * if the browser reports itself as offline it is a network problem, otherwise a
- * cross-origin request to a different origin was most likely blocked by CORS.
- */
 function classifyFetchFailure(error: unknown): { code: string; message: string } {
   if (error instanceof DOMException && error.name === 'AbortError') {
     return { code: 'request_timeout', message: 'Request timed out' }
@@ -121,7 +111,7 @@ function classifyFetchFailure(error: unknown): { code: string; message: string }
   return { code: 'network_error', message: 'Network error' }
 }
 
-async function request<T>(path: string, init: RequestInit | undefined, transport: 'public' | 'admin') {
+async function executeRequest<T>(path: string, init: RequestInit | undefined, credentials: RequestCredentials) {
   if (API_CONFIG_ERROR) {
     throw new ApiError(API_CONFIG_ERROR, 'api_not_configured')
   }
@@ -132,7 +122,6 @@ async function request<T>(path: string, init: RequestInit | undefined, transport
     ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     : null
 
-  const adminRequest = transport === 'admin'
   const headers = new Headers(init?.headers)
   if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
@@ -140,20 +129,16 @@ async function request<T>(path: string, init: RequestInit | undefined, transport
   if (sessionToken) {
     headers.set('Authorization', 'Bearer ' + sessionToken)
   }
-  if (adminRequest && adminToken) {
-    headers.set('X-Admin-Token', adminToken)
-  }
 
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
-      credentials: adminRequest ? 'include' : 'omit',
+      credentials,
       signal: controller?.signal,
       headers,
     })
   } catch (fetchError) {
     const { code, message } = classifyFetchFailure(fetchError)
-    // Safe diagnostics: URL + method only. Never log initData, tokens or bodies.
     console.error('[api] request failed before response', {
       url: `${API_URL}${path}`,
       method: init?.method ?? 'GET',
@@ -169,15 +154,7 @@ async function request<T>(path: string, init: RequestInit | undefined, transport
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed', code: 'request_failed' })) as { message?: string; code?: string }
-    let code = error.code ?? FALLBACK_CODE_BY_STATUS[response.status] ?? 'request_failed'
-
-    if (response.status === 401) {
-      if (!error.code) {
-        code = adminRequest ? 'invalid_admin_session' : 'invalid_session_token'
-      } else if (adminRequest && path !== '/admin/auth/login' && error.code === 'unauthorized') {
-        code = 'invalid_admin_session'
-      }
-    }
+    const code = error.code ?? FALLBACK_CODE_BY_STATUS[response.status] ?? 'request_failed'
 
     if (response.status >= 500 || response.status === 403) {
       console.error('[api] request rejected', {
@@ -196,22 +173,19 @@ async function request<T>(path: string, init: RequestInit | undefined, transport
 
 export const publicApiClient = {
   request<T>(path: string, init?: RequestInit) {
-    return request<T>(path, init, 'public')
+    return executeRequest<T>(path, init, 'omit')
   },
 }
 
 export const adminApiClient = {
   request<T>(path: string, init?: RequestInit) {
-    return request<T>(path, init, 'admin')
+    return executeRequest<T>(path, init, 'include')
   },
 }
 
 export const api = {
   setSessionToken(token: string | null) {
     sessionToken = token
-  },
-  setAdminToken(token: string | null) {
-    adminToken = token
   },
   bootstrap(payload: { initData: string }) {
     return publicApiClient.request<BootstrapResponse>('/session/bootstrap', {
@@ -265,12 +239,10 @@ export const api = {
     return publicApiClient.request<{ order: Order }>(`/orders/${id}/refund-request`, { method: 'POST' })
   },
 
-  // Profile
   getProfile() {
     return publicApiClient.request<{ user: UserProfile }>('/users/me')
   },
 
-  // Balance
   getBalance() {
     return publicApiClient.request<{ balance: Balance }>('/balance')
   },
@@ -278,7 +250,6 @@ export const api = {
     return publicApiClient.request<{ balance: Balance }>('/balance/topup', { method: 'POST', body: JSON.stringify({ amount }) })
   },
 
-  // Casino
   casinoSpin(bet: number, target: number) {
     return publicApiClient.request<{ dice: number; target: number; win: boolean; bet: number; payout: number; balance: { amount: number } }>('/casino/spin', { method: 'POST', body: JSON.stringify({ bet, target }) })
   },
@@ -286,7 +257,6 @@ export const api = {
     return publicApiClient.request<{ history: { id: number; type: string; amount: number; comment: string | null; createdAt: string }[] }>('/casino/history')
   },
 
-  // Support
   getSupportTickets() {
     return publicApiClient.request<{ tickets: SupportTicket[] }>('/support')
   },
@@ -297,12 +267,10 @@ export const api = {
     return publicApiClient.request<{ ticket: SupportTicket }>(`/support/${ticketId}/reply`, { method: 'POST', body: JSON.stringify({ message }) })
   },
 
-  // Discounts
   validateDiscount(code: string, orderAmount: number) {
     return publicApiClient.request<{ discount: Discount; discountAmount: number }>('/discounts/validate', { method: 'POST', body: JSON.stringify({ code, orderAmount }) })
   },
 
-  // Reviews
   getReviews(productId: number) {
     return publicApiClient.request<{ reviews: Review[]; avgRating: number | null; count: number }>(`/reviews?productId=${productId}`)
   },
@@ -313,7 +281,6 @@ export const api = {
     return publicApiClient.request<{ ok: boolean }>(`/reviews/${productId}`, { method: 'DELETE' })
   },
 
-  // Wishlist
   getWishlist() {
     return publicApiClient.request<{ items: WishlistItem[] }>('/wishlist')
   },
@@ -324,15 +291,12 @@ export const api = {
     return publicApiClient.request<{ ok: boolean }>(`/wishlist/${productCityId}`, { method: 'DELETE' })
   },
 
-  // Delivery
   getDeliveryOptions() {
     return publicApiClient.request<{ options: { id: number; name: string; nameEn: string | null; type: string; price: number }[] }>('/delivery')
   },
 
-
-  // Admin auth/settings
   adminLogin(data: { password: string }) {
-    return adminApiClient.request<{ adminToken: string; expiresAt: string; settings: AdminSettingsResponse }>('/admin/auth/login', {
+    return adminApiClient.request<{ settings: AdminSettingsResponse }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     })
@@ -344,7 +308,7 @@ export const api = {
     return adminApiClient.request<AdminSettingsResponse>('/admin/settings')
   },
   updateAdminPassword(data: { currentPassword: string; newPassword: string }) {
-    return adminApiClient.request<{ saved: boolean; adminToken: string; expiresAt: string }>('/admin/settings/password', {
+    return adminApiClient.request<{ saved: boolean }>('/admin/settings/password', {
       method: 'POST',
       body: JSON.stringify(data),
     })
@@ -367,7 +331,6 @@ export const api = {
     })
   },
 
-  // Admin
   getAdminStats() {
     return adminApiClient.request<AdminStats>('/admin/stats')
   },
@@ -411,7 +374,6 @@ export const api = {
     return adminApiClient.request<{ logs: { id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[] }>(`/admin/audit-logs?page=${page}`)
   },
 
-  // Admin – Bot configuration
   getAdminBot() {
     return adminApiClient.request<BotStatusResponse>('/admin/bot')
   },
@@ -434,7 +396,6 @@ export const api = {
     return adminApiClient.request<BotStatusResponse>('/admin/bot/disconnect', { method: 'POST' })
   },
 
-  // Admin – Cities
   getAdminCities() {
     return adminApiClient.request<{ cities: AdminCity[] }>('/admin/cities')
   },
@@ -448,7 +409,6 @@ export const api = {
     return adminApiClient.request<{ ok?: boolean; city?: AdminCity; deactivated?: boolean }>(`/admin/cities/${id}`, { method: 'DELETE' })
   },
 
-  // Admin – Categories
   getAdminCategories() {
     return adminApiClient.request<{ categories: AdminCategory[] }>('/admin/categories')
   },
@@ -462,7 +422,6 @@ export const api = {
     return adminApiClient.request<{ ok?: boolean; category?: AdminCategory; deactivated?: boolean }>(`/admin/categories/${id}`, { method: 'DELETE' })
   },
 
-  // Admin – Products (create / delete)
   createAdminProduct(data: { name: string; nameEn?: string; description: string; descriptionEn?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean }) {
     return adminApiClient.request<{ product: AdminProduct }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
   },

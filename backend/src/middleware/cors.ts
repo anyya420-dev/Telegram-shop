@@ -5,7 +5,6 @@ export const DEFAULT_ALLOWED_CORS_HEADERS = [
   'Content-Type',
   'Authorization',
   'X-Session-Token',
-  'X-Admin-Token',
   'X-Requested-With',
 ].join(',')
 

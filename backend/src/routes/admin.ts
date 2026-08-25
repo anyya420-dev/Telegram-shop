@@ -33,11 +33,6 @@ const botRateLimiter = rateLimit({
 })
 
 function getAdminSessionToken(request: Request) {
-  const headerToken = request.header('x-admin-token') ?? request.header('x-admin-session') ?? ''
-  if (headerToken) {
-    return headerToken
-  }
-
   const rawCookie = request.header('cookie') ?? ''
   if (!rawCookie) {
     return ''
@@ -184,8 +179,6 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   writeAdminSessionCookie(response, session.token, session.expiresAt)
 
   response.json({
-    adminToken: session.token,
-    expiresAt: session.expiresAt.toISOString(),
     settings: await getAdminSettingsPayload(),
   })
 })
@@ -299,8 +292,6 @@ router.post('/settings/password', authRateLimiter, async (request, response) => 
 
   response.json({
     saved: true,
-    adminToken: newSession.token,
-    expiresAt: newSession.expiresAt.toISOString(),
   })
 })
 

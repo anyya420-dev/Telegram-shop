@@ -80,70 +80,23 @@ test('normalizeTelegramId normalizes string/number/bigint consistently', () => {
   assert.equal(normalizeTelegramId('owner'), null)
 })
 
-test('verifyAdminPassword returns configuration_error when ADMIN_PASSWORD is missing', async () => {
-  delete process.env.ADMIN_PASSWORD
+test('verifyAdminPassword returns configuration_error when admin security is missing', async () => {
   prismaAny.adminSecurity.findFirst = async () => null
 
   const result = await verifyAdminPassword('secret')
   assert.deepEqual(result, { valid: false, reason: 'configuration_error' })
 })
 
-test('verifyAdminPassword validates against ADMIN_PASSWORD when no AdminSecurity row exists', async () => {
-  process.env.ADMIN_PASSWORD = 'correct-pass'
-  prismaAny.adminSecurity.findFirst = async () => null
-  prismaAny.adminSecurity.create = async () => ({ id: 1 })
-
-  const ok = await verifyAdminPassword('correct-pass')
-  const fail = await verifyAdminPassword('wrong-pass')
-
-  assert.deepEqual(ok, { valid: true })
-  assert.deepEqual(fail, { valid: false, reason: 'invalid_credentials' })
-})
-
-test('verifyAdminPassword creates AdminSecurity row when missing and env password is correct', async () => {
-  process.env.ADMIN_PASSWORD = 'correct-pass'
-  let created = false
-  prismaAny.adminSecurity.findFirst = async () => null
-  prismaAny.adminSecurity.create = async ({ data }: { data: { passwordHash: string; passwordSalt: string; passwordAlgo: string } }) => {
-    created = true
-    assert.equal(typeof data.passwordHash, 'string')
-    assert.equal(typeof data.passwordSalt, 'string')
-    assert.equal(data.passwordAlgo, 'scrypt')
-    return { id: 1 }
-  }
-
-  const result = await verifyAdminPassword('correct-pass')
-  assert.deepEqual(result, { valid: true })
-  assert.equal(created, true)
-})
-
-test('verifyAdminPassword re-syncs stale AdminSecurity hash when env password matches', async () => {
-  process.env.ADMIN_PASSWORD = 'new-password'
-  const staleSalt = randomBytes(16).toString('hex')
-  const staleHash = scryptSync('old-password', staleSalt, 64).toString('hex')
-  let updated = false
-
-  prismaAny.adminSecurity.findFirst = async () =>
-    ({ id: 1, passwordHash: staleHash, passwordSalt: staleSalt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null })
-  prismaAny.adminSecurity.update = async () => {
-    updated = true
-    return {}
-  }
-
-  const result = await verifyAdminPassword('new-password')
-  assert.deepEqual(result, { valid: true })
-  assert.equal(updated, true)
-})
-
-test('verifyAdminPassword returns configuration_error when ADMIN_PASSWORD is missing even if DB hash exists', async () => {
-  delete process.env.ADMIN_PASSWORD
+test('verifyAdminPassword validates against stored admin security hash', async () => {
   const salt = randomBytes(16).toString('hex')
-  const hash = scryptSync('db-password', salt, 64).toString('hex')
+  const hash = scryptSync('correct-password', salt, 64).toString('hex')
   prismaAny.adminSecurity.findFirst = async () =>
     ({ id: 1, passwordHash: hash, passwordSalt: salt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null })
 
-  const result = await verifyAdminPassword('db-password')
-  assert.deepEqual(result, { valid: false, reason: 'configuration_error' })
+  const ok = await verifyAdminPassword('correct-password')
+  const fail = await verifyAdminPassword('wrong-password')
+  assert.deepEqual(ok, { valid: true })
+  assert.deepEqual(fail, { valid: false, reason: 'invalid_credentials' })
 })
 
 test('seedAdminConfigForFreshInstall upserts owner and keeps bootstrap idempotent', async () => {
@@ -183,11 +136,16 @@ test('seedAdminConfigForFreshInstall upserts owner and keeps bootstrap idempoten
   assert.equal(securityCreateCount, 1)
 })
 
-test('hasAdminPasswordConfigured is false when ADMIN_PASSWORD is missing', async () => {
-  delete process.env.ADMIN_PASSWORD
-
+test('hasAdminPasswordConfigured is false when admin security row is missing', async () => {
+  prismaAny.adminSecurity.findFirst = async () => null
   const configured = await hasAdminPasswordConfigured()
   assert.equal(configured, false)
+})
+
+test('hasAdminPasswordConfigured is true when admin security row exists', async () => {
+  prismaAny.adminSecurity.findFirst = async () => ({ id: 1 })
+  const configured = await hasAdminPasswordConfigured()
+  assert.equal(configured, true)
 })
 
 test('createAdminSession stores only token hash', async () => {
@@ -305,8 +263,7 @@ test('isAdminTelegramId: normalizes numeric and bigint telegram ID input', async
 
 // ── Verify admin password success (owner auth) ────────────────────────────────
 
-test('verifyAdminPassword succeeds for owner when env password matches DB hash', async () => {
-  process.env.ADMIN_PASSWORD = 'owner-secret'
+test('verifyAdminPassword succeeds when submitted password matches DB hash', async () => {
   const salt = randomBytes(16).toString('hex')
   const hash = scryptSync('owner-secret', salt, 64).toString('hex')
   prismaAny.adminSecurity.findFirst = async () =>
@@ -316,19 +273,12 @@ test('verifyAdminPassword succeeds for owner when env password matches DB hash',
   assert.deepEqual(result, { valid: true })
 })
 
-test('verifyAdminPassword rejects a password not matching ADMIN_PASSWORD even if DB hash would match', async () => {
-  // This verifies the env password is authoritative: even if someone forges a DB hash,
-  // the submitted password must still match ADMIN_PASSWORD.
-  process.env.ADMIN_PASSWORD = 'correct-env-pass'
+test('verifyAdminPassword rejects submitted password that does not match stored hash', async () => {
+  // A wrong submitted password must fail when compared with the stored hash.
   const salt = randomBytes(16).toString('hex')
-  // DB hash is for 'wrong-pass' (simulating a compromised/tampered DB row)
-  const hash = scryptSync('wrong-pass', salt, 64).toString('hex')
+  const hash = scryptSync('correct-pass', salt, 64).toString('hex')
   prismaAny.adminSecurity.findFirst = async () =>
     ({ id: 1, passwordHash: hash, passwordSalt: salt, passwordAlgo: 'scrypt', updatedAt: new Date(), updatedByAdmin: null })
-  prismaAny.adminSecurity.update = async () => ({})
-
-  // Even though the DB hash matches 'wrong-pass', the env password is 'correct-env-pass'.
-  // Submitting 'wrong-pass' must fail the env-password check first.
   const result = await verifyAdminPassword('wrong-pass')
   assert.deepEqual(result, { valid: false, reason: 'invalid_credentials' })
 })
@@ -364,4 +314,3 @@ test('getAuthorizedAdminSession returns null for empty string token', async () =
   const result = await getAuthorizedAdminSession('')
   assert.equal(result, null)
 })
-

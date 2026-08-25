@@ -10,6 +10,7 @@
  */
 
 const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'])
+const REQUIRED_PRODUCTION_API_HOST = 'narcos-shop.onrender.com'
 
 export type ApiBaseResolution = {
   baseUrl: string
@@ -77,6 +78,15 @@ export function resolveApiBaseUrl(
     return {
       baseUrl: '',
       error: `VITE_API_URL must use HTTPS in production (received "${configured}")`,
+    }
+  }
+
+  if (parsedUrl.hostname.toLowerCase() !== REQUIRED_PRODUCTION_API_HOST) {
+    return {
+      baseUrl: '',
+      error:
+        `VITE_API_URL points to a retired backend host (` +
+        `"${parsedUrl.hostname}"). Use https://${REQUIRED_PRODUCTION_API_HOST}/api`,
     }
   }
 
