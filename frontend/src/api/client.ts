@@ -3,6 +3,7 @@ import type {
   Balance,
   BootstrapResponse,
   Cart,
+  Category,
   City,
   Discount,
   Language,
@@ -264,5 +265,14 @@ export const api = {
   },
   toggleAdminPaymentSetting(id: number) {
     return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}/toggle`, { method: 'PATCH' })
+  },
+  getAdminCategories() {
+    return adminRequest<{ categories: (Category & { _count: { products: number } })[] }>('/admin/categories')
+  },
+  createAdminCategory(data: { name: string; nameEn?: string; sortOrder?: number }) {
+    return adminRequest<{ category: Category & { _count: { products: number } } }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCategory(id: number, data: { name?: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ category: Category & { _count: { products: number } } }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
 }

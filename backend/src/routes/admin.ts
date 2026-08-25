@@ -868,4 +868,82 @@ router.get('/stats', authRateLimiter, async (request, response) => {
   })
 })
 
+// ──── Categories ────────────────────────────────────────────────────────────
+
+// GET /api/admin/categories
+router.get('/categories', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const categories = await prisma.category.findMany({
+    include: { _count: { select: { products: true } } },
+    orderBy: { sortOrder: 'asc' },
+  })
+
+  response.json({ categories })
+})
+
+// POST /api/admin/categories
+router.post('/categories', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const { name, nameEn, sortOrder } = request.body
+  if (typeof name !== 'string' || !name.trim()) {
+    sendError(response, 400, 'invalid_name', 'Category name is required')
+    return
+  }
+
+  const category = await prisma.category.create({
+    data: {
+      name: name.trim(),
+      nameEn: typeof nameEn === 'string' && nameEn.trim() ? nameEn.trim() : null,
+      sortOrder: typeof sortOrder === 'number' ? sortOrder : 0,
+    },
+    include: { _count: { select: { products: true } } },
+  })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'category_created', entity: 'category', entityId: category.id, meta: JSON.stringify({ name: category.name }) },
+  })
+
+  response.status(201).json({ category })
+})
+
+// PATCH /api/admin/categories/:id
+router.patch('/categories/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid category id')
+    return
+  }
+
+  const { name, nameEn, isActive, sortOrder } = request.body
+  const data: Record<string, unknown> = {}
+  if (typeof name === 'string' && name.trim()) data.name = name.trim()
+  if (typeof nameEn === 'string') data.nameEn = nameEn.trim() || null
+  if (typeof isActive === 'boolean') data.isActive = isActive
+  if (typeof sortOrder === 'number') data.sortOrder = sortOrder
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
+
+  const category = await prisma.category.update({
+    where: { id },
+    data,
+    include: { _count: { select: { products: true } } },
+  })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'category_updated', entity: 'category', entityId: id, meta: JSON.stringify(data) },
+  })
+
+  response.json({ category })
+})
+
 export default router
