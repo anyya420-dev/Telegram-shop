@@ -3,6 +3,7 @@ import type {
   Balance,
   BootstrapResponse,
   Cart,
+  Category,
   City,
   Discount,
   Language,
@@ -228,6 +229,12 @@ export const api = {
   getAdminProducts() {
     return adminRequest<{ products: ProductDetail[] }>('/admin/products')
   },
+  createAdminProduct(data: { name: string; nameEn?: string; description?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean }[] }) {
+    return adminRequest<{ product: unknown }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
+  },
+  createAdminProductCity(data: { productId: number; cityId: number; stock?: number; isAvailable?: boolean }) {
+    return adminRequest<{ productCity: unknown }>('/admin/product-cities', { method: 'POST', body: JSON.stringify(data) })
+  },
   updateAdminProduct(id: number, data: Partial<{ name: string; price: number; isActive: boolean; isRecommended: boolean }>) {
     return adminRequest<{ product: ProductDetail }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
@@ -264,5 +271,14 @@ export const api = {
   },
   toggleAdminPaymentSetting(id: number) {
     return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}/toggle`, { method: 'PATCH' })
+  },
+  getAdminCategories() {
+    return adminRequest<{ categories: (Category & { _count: { products: number } })[] }>('/admin/categories')
+  },
+  createAdminCategory(data: { name: string; nameEn?: string; sortOrder?: number }) {
+    return adminRequest<{ category: Category & { _count: { products: number } } }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCategory(id: number, data: { name?: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ category: Category & { _count: { products: number } } }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
 }

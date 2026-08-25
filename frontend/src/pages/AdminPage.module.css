@@ -238,3 +238,15 @@
 .auditEntity { color: var(--tg-theme-button-color, #7C3AED); margin-right: 8px; }
 .auditMeta { color: var(--tg-theme-hint-color, #888); display: block; margin-top: 2px; }
 .auditDate { display: block; color: var(--tg-theme-hint-color, #888); margin-top: 2px; }
+
+/* Product / Category management */
+.tagActive { background: #c6f6d5; color: #276749; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.tagInactive { background: #fed7d7; color: #9b2c2c; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+
+.checkLabel { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--tg-theme-text-color, #000); cursor: pointer; }
+
+.cityStockList { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.cityStockRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--tg-theme-bg-color, #fff); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+.cityName { font-weight: 600; color: var(--tg-theme-text-color, #000); min-width: 60px; }
+
+.inputSmall { padding: 4px 8px; border-radius: 8px; border: 1px solid var(--tg-theme-hint-color, #ccc); font-size: 12px; width: 80px; background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #000); }

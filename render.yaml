@@ -10,7 +10,7 @@ services:
     plan: free
     healthCheckPath: /health
     buildCommand: npm install --include=dev && npm run build --workspace backend
-    preDeployCommand: npm run db:migrate:deploy --workspace backend
+    preDeployCommand: npm run db:generate --workspace backend && npm run db:migrate:deploy --workspace backend
     startCommand: npm run start --workspace backend
     envVars:
       - key: NODE_ENV
@@ -44,6 +44,9 @@ services:
       - key: VITE_API_URL
         value: https://narcos-shop.onrender.com/api
     routes:
+      - type: redirect
+        source: /admin
+        destination: /#/admin
       - type: rewrite
         source: /*
         destination: /index.html

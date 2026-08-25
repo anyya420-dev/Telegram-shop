@@ -1,13 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
-import type { AdminStats, Order, SupportTicket, Discount, PaymentMethod } from '../types';
+import type { AdminStats, Category, City, Order, SupportTicket, Discount, PaymentMethod, UserProfile } from '../types';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'discounts' | 'support' | 'audit' | 'payments';
+type Tab = 'stats' | 'orders' | 'products' | 'users' | 'categories' | 'discounts' | 'support' | 'audit' | 'payments';
+
+type AdminProduct = {
+  id: number;
+  name: string;
+  nameEn: string | null;
+  description: string;
+  price: number;
+  isActive: boolean;
+  isRecommended: boolean;
+  image: string | null;
+  category: { name: string };
+  productCities: { id: number; cityId: number; stock: number; isAvailable: boolean; city: { name: string } }[];
+};
+
+type AdminCategory = Category & { nameEn?: string | null; _count: { products: number } };
 
 const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
 
@@ -23,6 +38,11 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [orderFilter, setOrderFilter] = useState('');
+  const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
@@ -43,11 +63,40 @@ export default function AdminPage() {
   const [newPaymentCardNumber, setNewPaymentCardNumber] = useState('');
   const [newPaymentCardholderName, setNewPaymentCardholderName] = useState('');
 
+  // New category form
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatNameEn, setNewCatNameEn] = useState('');
+  const [newCatOrder, setNewCatOrder] = useState('0');
+  const [creatingCat, setCreatingCat] = useState(false);
+
+  // New product form
+  const [showNewProduct, setShowNewProduct] = useState(false);
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdNameEn, setNewProdNameEn] = useState('');
+  const [newProdDescription, setNewProdDescription] = useState('');
+  const [newProdPrice, setNewProdPrice] = useState('');
+  const [newProdCategoryId, setNewProdCategoryId] = useState('');
+  const [newProdImage, setNewProdImage] = useState('');
+  const [newProdIsActive, setNewProdIsActive] = useState(true);
+  const [newProdIsRecommended, setNewProdIsRecommended] = useState(false);
+  const [newProdCities, setNewProdCities] = useState<{ cityId: number; stock: string; isAvailable: boolean }[]>([]);
+  const [creatingProd, setCreatingProd] = useState(false);
+
   // Support reply
   const [replyText, setReplyText] = useState<Record<number, string>>({});
 
   // Status update
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
+
+  // Product edit
+  const [editingProduct, setEditingProduct] = useState<number | null>(null);
+  const [productEdits, setProductEdits] = useState<Record<number, Partial<{ name: string; price: string; isActive: boolean; isRecommended: boolean }>>>({});
+  const [editingProductCity, setEditingProductCity] = useState<number | null>(null);
+  const [productCityEdits, setProductCityEdits] = useState<Record<number, Partial<{ stock: string; isAvailable: boolean }>>>({});
+
+  // Category edit
+  const [editingCat, setEditingCat] = useState<number | null>(null);
+  const [catEdits, setCatEdits] = useState<Record<number, Partial<{ name: string; nameEn: string; isActive: boolean; sortOrder: string }>>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -73,6 +122,18 @@ export default function AdminPage() {
     void loadTab(tab);
   }, [authenticated, tab]);
 
+  // Load cities once for the product creation form
+  useEffect(() => {
+    if (!authenticated) return;
+    api.getCities().then((cs) => setCities(cs)).catch(() => undefined);
+  }, [authenticated]);
+  // Load categories for the product creation form whenever products tab is active
+  useEffect(() => {
+    if (authenticated && tab === 'products' && categories.length === 0) {
+      api.getAdminCategories().then((r) => setCategories(r.categories)).catch(() => undefined);
+    }
+  }, [authenticated, tab]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   async function loadTab(tabName: Tab) {
     setError(null);
     try {
@@ -84,6 +145,15 @@ export default function AdminPage() {
         const r = await api.getAdminOrders(1, orderFilter || undefined);
         setOrders(r.orders);
         setOrdersLoading(false);
+      } else if (tabName === 'products') {
+        const r = await api.getAdminProducts() as unknown as { products: AdminProduct[] };
+        setProducts(r.products);
+      } else if (tabName === 'users') {
+        const r = await api.getAdminUsers(1);
+        setUsers(r.users);
+      } else if (tabName === 'categories') {
+        const r = await api.getAdminCategories();
+        setCategories(r.categories);
       } else if (tabName === 'discounts') {
         const r = await api.getAdminDiscounts();
         setDiscounts(r.discounts);
@@ -99,6 +169,7 @@ export default function AdminPage() {
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error loading data');
+      if (tab === 'orders') setOrdersLoading(false);
     }
   }
 
@@ -111,6 +182,105 @@ export default function AdminPage() {
       setError(e instanceof Error ? e.message : 'Failed to update status');
     } finally {
       setUpdatingOrder(null);
+    }
+  }
+
+  async function handleSaveProduct(productId: number) {
+    const edits = productEdits[productId];
+    if (!edits) return;
+    try {
+      const data: Parameters<typeof api.updateAdminProduct>[1] = {};
+      if (typeof edits.name === 'string') data.name = edits.name;
+      if (typeof edits.price === 'string' && edits.price) data.price = Number(edits.price);
+      if (typeof edits.isActive === 'boolean') data.isActive = edits.isActive;
+      if (typeof edits.isRecommended === 'boolean') data.isRecommended = edits.isRecommended;
+      await api.updateAdminProduct(productId, data);
+      setEditingProduct(null);
+      const r = await api.getAdminProducts() as unknown as { products: AdminProduct[] };
+      setProducts(r.products);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to update product');
+    }
+  }
+
+  async function handleSaveProductCity(pcId: number) {
+    const edits = productCityEdits[pcId];
+    if (!edits) return;
+    try {
+      const data: { stock?: number; isAvailable?: boolean } = {};
+      if (typeof edits.stock === 'string' && edits.stock !== '') data.stock = Number(edits.stock);
+      if (typeof edits.isAvailable === 'boolean') data.isAvailable = edits.isAvailable;
+      await api.updateProductCity(pcId, data);
+      setEditingProductCity(null);
+      const r = await api.getAdminProducts() as unknown as { products: AdminProduct[] };
+      setProducts(r.products);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to update stock');
+    }
+  }
+
+  async function handleCreateProduct() {
+    if (creatingProd || !newProdName.trim() || !newProdPrice || !newProdCategoryId) return;
+    const price = Number(newProdPrice);
+    if (isNaN(price) || price <= 0) { setError('Price must be a positive number'); return; }
+    setCreatingProd(true);
+    setError(null);
+    try {
+      await api.createAdminProduct({
+        name: newProdName.trim(),
+        nameEn: newProdNameEn.trim() || undefined,
+        description: newProdDescription.trim() || undefined,
+        price,
+        categoryId: Number(newProdCategoryId),
+        image: newProdImage.trim() || undefined,
+        isActive: newProdIsActive,
+        isRecommended: newProdIsRecommended,
+        cities: newProdCities.map((c) => ({ cityId: c.cityId, stock: Number(c.stock) || 0, isAvailable: c.isAvailable })),
+      });
+      setNewProdName(''); setNewProdNameEn(''); setNewProdDescription(''); setNewProdPrice('');
+      setNewProdCategoryId(''); setNewProdImage(''); setNewProdIsActive(true); setNewProdIsRecommended(false);
+      setNewProdCities([]); setShowNewProduct(false);
+      const r = await api.getAdminProducts() as unknown as { products: AdminProduct[] };
+      setProducts(r.products);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create product');
+    } finally {
+      setCreatingProd(false);
+    }
+  }
+
+  async function handleCreateCategory() {
+    if (creatingCat || !newCatName.trim()) return;
+    setCreatingCat(true);
+    try {
+      const r = await api.createAdminCategory({
+        name: newCatName.trim(),
+        nameEn: newCatNameEn.trim() || undefined,
+        sortOrder: Number(newCatOrder) || 0,
+      });
+      setCategories((prev) => [...prev, r.category]);
+      setNewCatName(''); setNewCatNameEn(''); setNewCatOrder('0');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create category');
+    } finally {
+      setCreatingCat(false);
+    }
+  }
+
+  async function handleSaveCategory(catId: number) {
+    const edits = catEdits[catId];
+    if (!edits) return;
+    try {
+      const data: Parameters<typeof api.updateAdminCategory>[1] = {};
+      if (typeof edits.name === 'string') data.name = edits.name;
+      if (typeof edits.nameEn === 'string') data.nameEn = edits.nameEn;
+      if (typeof edits.isActive === 'boolean') data.isActive = edits.isActive;
+      if (typeof edits.sortOrder === 'string') data.sortOrder = Number(edits.sortOrder);
+      const r = await api.updateAdminCategory(catId, data);
+      setCategories((prev) => prev.map((c) => (c.id === catId ? r.category : c)));
+      setEditingCat(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to update category');
     }
   }
 
@@ -253,6 +423,7 @@ export default function AdminPage() {
             placeholder={t('admin.password', { defaultValue: 'Password' })}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void handleLogin()}
           />
           <button className={styles.createBtn} onClick={() => void handleLogin()} disabled={authLoading || !password}>
             {authLoading ? t('common.loading', { defaultValue: 'Loading...' }) : t('common.login', { defaultValue: 'Login' })}
@@ -274,7 +445,7 @@ export default function AdminPage() {
       {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.tabs}>
-        {(['stats', 'orders', 'discounts', 'support', 'audit', 'payments'] as Tab[]).map((tabName) => (
+        {(['stats', 'orders', 'products', 'users', 'categories', 'discounts', 'support', 'audit', 'payments'] as Tab[]).map((tabName) => (
           <button
             key={tabName}
             className={`${styles.tab} ${tab === tabName ? styles.tabActive : ''}`}
@@ -313,7 +484,7 @@ export default function AdminPage() {
                     <span className={styles.orderId}>#{order.id}</span>
                     <span className={styles.orderTotal}>{formatCurrency(order.total, language)}</span>
                   </div>
-                  <p className={styles.orderMeta}>{new Date(order.createdAt).toLocaleString()} • {order.items.length} items</p>
+                  <p className={styles.orderMeta}>{new Date(order.createdAt).toLocaleString()} • {order.city?.name ?? ''}</p>
                   {order.paymentMethod && (
                     <p className={styles.orderMeta}>
                       {t('checkout.paymentMethod')}: {order.paymentMethod.title}
@@ -343,10 +514,329 @@ export default function AdminPage() {
                       </button>
                     </div>
                   )}
+                  {order.items.length > 0 && (
+                    <div>
+                      <button
+                        className={styles.replyBtn}
+                        style={{ marginTop: 6, fontSize: 11 }}
+                        onClick={() => setExpandedOrder((prev) => (prev === order.id ? null : order.id))}
+                      >
+                        {expandedOrder === order.id ? '▲ Hide items' : `▼ ${order.items.length} items`}
+                      </button>
+                      {expandedOrder === order.id && (
+                        <div className={styles.cityStockList}>
+                          {order.items.map((item) => (
+                            <div key={item.id} className={styles.cityStockRow}>
+                              <span className={styles.cityName}>{item.productName}</span>
+                              <span>×{item.quantity}</span>
+                              <span>{formatCurrency(item.lineTotal, language)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'products' && (
+        <div>
+          <div className={styles.filterRow}>
+            <button className={styles.filterBtn} onClick={() => void loadTab('products')}>
+              {t('admin.refresh', { defaultValue: 'Refresh' })}
+            </button>
+            <button className={styles.createBtn} onClick={() => setShowNewProduct((v) => !v)}>
+              {showNewProduct ? '✕ Cancel' : '+ New Product'}
+            </button>
+          </div>
+
+          {showNewProduct && (
+            <div className={styles.form}>
+              <p className={styles.formTitle}>New Product</p>
+              <div className={styles.formRow}>
+                <input className={styles.input} placeholder="Name *" value={newProdName} onChange={(e) => setNewProdName(e.target.value)} />
+                <input className={styles.input} placeholder="Name EN" value={newProdNameEn} onChange={(e) => setNewProdNameEn(e.target.value)} />
+              </div>
+              <div className={styles.formRow}>
+                <input className={styles.input} type="number" placeholder="Price *" value={newProdPrice} onChange={(e) => setNewProdPrice(e.target.value)} />
+                <select className={styles.select} value={newProdCategoryId} onChange={(e) => setNewProdCategoryId(e.target.value)}>
+                  <option value="">Category *</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className={styles.formRow}>
+                <input className={styles.input} placeholder="Description" value={newProdDescription} onChange={(e) => setNewProdDescription(e.target.value)} />
+                <input className={styles.input} placeholder="Image URL" value={newProdImage} onChange={(e) => setNewProdImage(e.target.value)} />
+              </div>
+              <div className={styles.formRow}>
+                <label className={styles.checkLabel}><input type="checkbox" checked={newProdIsActive} onChange={(e) => setNewProdIsActive(e.target.checked)} /> Active</label>
+                <label className={styles.checkLabel}><input type="checkbox" checked={newProdIsRecommended} onChange={(e) => setNewProdIsRecommended(e.target.checked)} /> Recommended</label>
+              </div>
+              {cities.length > 0 && (
+                <div>
+                  <p className={styles.formTitle} style={{ fontSize: 12 }}>City availability</p>
+                  {cities.map((city) => {
+                    const entry = newProdCities.find((c) => c.cityId === city.id);
+                    return (
+                      <div key={city.id} className={styles.cityStockRow}>
+                        <label className={styles.checkLabel}>
+                          <input
+                            type="checkbox"
+                            checked={!!entry}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewProdCities((prev) => [...prev, { cityId: city.id, stock: '0', isAvailable: true }]);
+                              } else {
+                                setNewProdCities((prev) => prev.filter((c) => c.cityId !== city.id));
+                              }
+                            }}
+                          />
+                          <span className={styles.cityName}>{city.name}</span>
+                        </label>
+                        {entry && (
+                          <>
+                            <input
+                              className={styles.inputSmall}
+                              type="number"
+                              placeholder="Stock"
+                              value={entry.stock}
+                              onChange={(e) => setNewProdCities((prev) => prev.map((c) => c.cityId === city.id ? { ...c, stock: e.target.value } : c))}
+                            />
+                            <label className={styles.checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={entry.isAvailable}
+                                onChange={(e) => setNewProdCities((prev) => prev.map((c) => c.cityId === city.id ? { ...c, isAvailable: e.target.checked } : c))}
+                              /> Available
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <button
+                className={styles.createBtn}
+                onClick={() => void handleCreateProduct()}
+                disabled={creatingProd || !newProdName.trim() || !newProdPrice || !newProdCategoryId}
+              >
+                {creatingProd ? 'Creating…' : 'Create Product'}
+              </button>
+            </div>
+          )}
+          <div className={styles.orderList}>
+            {products.map((product) => (
+              <div key={product.id} className={styles.orderCard}>
+                <div className={styles.orderHeader}>
+                  <span className={styles.orderId}>#{product.id} {product.name}</span>
+                  <span className={`${styles.refundTag} ${product.isActive ? styles.tagActive : styles.tagInactive}`}>
+                    {product.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <p className={styles.orderMeta}>
+                  {product.category.name} • {formatCurrency(product.price, language)}
+                  {product.isRecommended ? ' ⭐' : ''}
+                </p>
+
+                {editingProduct === product.id ? (
+                  <div className={styles.form}>
+                    <div className={styles.formRow}>
+                      <input
+                        className={styles.input}
+                        placeholder="Name"
+                        value={productEdits[product.id]?.name ?? product.name}
+                        onChange={(e) => setProductEdits((prev) => ({ ...prev, [product.id]: { ...prev[product.id], name: e.target.value } }))}
+                      />
+                      <input
+                        className={styles.input}
+                        type="number"
+                        placeholder="Price"
+                        value={productEdits[product.id]?.price ?? String(product.price)}
+                        onChange={(e) => setProductEdits((prev) => ({ ...prev, [product.id]: { ...prev[product.id], price: e.target.value } }))}
+                      />
+                    </div>
+                    <div className={styles.formRow}>
+                      <label className={styles.checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={productEdits[product.id]?.isActive ?? product.isActive}
+                          onChange={(e) => setProductEdits((prev) => ({ ...prev, [product.id]: { ...prev[product.id], isActive: e.target.checked } }))}
+                        />
+                        {' Active'}
+                      </label>
+                      <label className={styles.checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={productEdits[product.id]?.isRecommended ?? product.isRecommended}
+                          onChange={(e) => setProductEdits((prev) => ({ ...prev, [product.id]: { ...prev[product.id], isRecommended: e.target.checked } }))}
+                        />
+                        {' Recommended'}
+                      </label>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleSaveProduct(product.id)}>Save</button>
+                      <button className={styles.replyBtn} onClick={() => setEditingProduct(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.replyRow}>
+                    <button className={styles.replyBtn} onClick={() => { setEditingProduct(product.id); setProductEdits((prev) => ({ ...prev, [product.id]: {} })); }}>
+                      {t('admin.editProduct', { defaultValue: 'Edit' })}
+                    </button>
+                  </div>
+                )}
+
+                {product.productCities.length > 0 && (
+                  <div className={styles.cityStockList}>
+                    {product.productCities.map((pc) => (
+                      <div key={pc.id} className={styles.cityStockRow}>
+                        <span className={styles.cityName}>{pc.city.name}</span>
+                        {editingProductCity === pc.id ? (
+                          <>
+                            <input
+                              className={styles.inputSmall}
+                              type="number"
+                              placeholder="Stock"
+                              value={productCityEdits[pc.id]?.stock ?? String(pc.stock)}
+                              onChange={(e) => setProductCityEdits((prev) => ({ ...prev, [pc.id]: { ...prev[pc.id], stock: e.target.value } }))}
+                            />
+                            <label className={styles.checkLabel}>
+                              <input
+                                type="checkbox"
+                                checked={productCityEdits[pc.id]?.isAvailable ?? pc.isAvailable}
+                                onChange={(e) => setProductCityEdits((prev) => ({ ...prev, [pc.id]: { ...prev[pc.id], isAvailable: e.target.checked } }))}
+                              />
+                              {' Available'}
+                            </label>
+                            <button className={styles.replyBtn} onClick={() => void handleSaveProductCity(pc.id)}>Save</button>
+                            <button className={styles.replyBtn} onClick={() => setEditingProductCity(null)}>✕</button>
+                          </>
+                        ) : (
+                          <>
+                            <span>Stock: {pc.stock} • {pc.isAvailable ? '✓ Available' : '✗ Unavailable'}</span>
+                            <button className={styles.replyBtn} onClick={() => { setEditingProductCity(pc.id); setProductCityEdits((prev) => ({ ...prev, [pc.id]: {} })); }}>Edit stock</button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {products.length === 0 && <p className={styles.loading}>{t('admin.noProducts', { defaultValue: 'No products found.' })}</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'users' && (
+        <div>
+          <div className={styles.filterRow}>
+            <button className={styles.filterBtn} onClick={() => void loadTab('users')}>
+              {t('admin.refresh', { defaultValue: 'Refresh' })}
+            </button>
+          </div>
+          <div className={styles.orderList}>
+            {users.map((user) => {
+              const balance = (user as unknown as { balance?: { amount: number } | null }).balance;
+              return (
+                <div key={user.id} className={styles.orderCard}>
+                  <div className={styles.orderHeader}>
+                    <span className={styles.orderId}>
+                      {user.firstName}{user.username ? ` @${user.username}` : ''}
+                    </span>
+                    {user.language && <span className={styles.orderMeta}>{user.language.toUpperCase()}</span>}
+                  </div>
+                  <p className={styles.orderMeta}>TG: {user.telegramId}{user.selectedCity ? ` • 📍 ${user.selectedCity.name}` : ''}</p>
+                  {balance != null && (
+                    <p className={styles.orderMeta}>Balance: {formatCurrency(balance.amount, language)}</p>
+                  )}
+                </div>
+              );
+            })}
+            {users.length === 0 && <p className={styles.loading}>{t('admin.noUsers', { defaultValue: 'No users found.' })}</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'categories' && (
+        <div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>{t('admin.createCategory', { defaultValue: 'Create category' })}</h3>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Name (RU)" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} />
+              <input className={styles.input} placeholder="Name (EN)" value={newCatNameEn} onChange={(e) => setNewCatNameEn(e.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} type="number" placeholder="Sort order" value={newCatOrder} onChange={(e) => setNewCatOrder(e.target.value)} />
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleCreateCategory()} disabled={creatingCat || !newCatName.trim()}>
+              {creatingCat ? 'Creating...' : t('admin.createCategory', { defaultValue: 'Create' })}
+            </button>
+          </div>
+
+          <div className={styles.discountList}>
+            {categories.map((cat) => (
+              <div key={cat.id} className={styles.discountCard}>
+                {editingCat === cat.id ? (
+                  <div className={styles.form}>
+                    <div className={styles.formRow}>
+                      <input
+                        className={styles.input}
+                        placeholder="Name (RU)"
+                        value={catEdits[cat.id]?.name ?? cat.name}
+                        onChange={(e) => setCatEdits((prev) => ({ ...prev, [cat.id]: { ...prev[cat.id], name: e.target.value } }))}
+                      />
+                      <input
+                        className={styles.input}
+                        placeholder="Name (EN)"
+                        value={catEdits[cat.id]?.nameEn ?? (cat.nameEn ?? '')}
+                        onChange={(e) => setCatEdits((prev) => ({ ...prev, [cat.id]: { ...prev[cat.id], nameEn: e.target.value } }))}
+                      />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input
+                        className={styles.input}
+                        type="number"
+                        placeholder="Sort order"
+                        value={catEdits[cat.id]?.sortOrder ?? String(cat.sortOrder ?? 0)}
+                        onChange={(e) => setCatEdits((prev) => ({ ...prev, [cat.id]: { ...prev[cat.id], sortOrder: e.target.value } }))}
+                      />
+                      <label className={styles.checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={catEdits[cat.id]?.isActive ?? cat.isActive}
+                          onChange={(e) => setCatEdits((prev) => ({ ...prev, [cat.id]: { ...prev[cat.id], isActive: e.target.checked } }))}
+                        />
+                        {' Active'}
+                      </label>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleSaveCategory(cat.id)}>Save</button>
+                      <button className={styles.replyBtn} onClick={() => setEditingCat(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <span className={styles.discountCode}>{cat.name}</span>
+                      {cat.nameEn && <span> / {cat.nameEn}</span>}
+                      <span className={`${styles.refundTag} ${cat.isActive ? styles.tagActive : styles.tagInactive}`}>
+                        {cat.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      <span className={styles.orderMeta}> • {cat._count.products} products</span>
+                    </div>
+                    <button className={styles.replyBtn} onClick={() => { setEditingCat(cat.id); setCatEdits((prev) => ({ ...prev, [cat.id]: {} })); }}>Edit</button>
+                  </>
+                )}
+              </div>
+            ))}
+            {categories.length === 0 && <p className={styles.loading}>{t('admin.noCategories', { defaultValue: 'No categories found.' })}</p>}
+          </div>
         </div>
       )}
 
@@ -475,3 +965,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
