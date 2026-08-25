@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  REQUIRED_PRODUCTION_FRONTEND_ORIGIN,
   assertProductionRuntimeConfig,
   getAllowedCorsOrigins,
   getRuntimeConfigSummary,
@@ -8,8 +9,6 @@ import {
   getSessionSecret,
   isDemoModeEnabled,
 } from './runtimeConfig.js'
-
-const KNOWN_PRODUCTION_FRONTEND_ORIGIN = 'https://telegram-shop-3781.onrender.com'
 
 type EnvSnapshot = Record<string, string | undefined>
 
@@ -48,8 +47,8 @@ function setProductionBaseline() {
   process.env.OWNER_TELEGRAM_ID = '8405501187'
   process.env.ADMIN_PASSWORD = 'admin-password'
   process.env.BOT_TOKEN_ENCRYPTION_KEY = 'bot-encryption-secret-key-1234567890'
-  process.env.FRONTEND_URL = 'https://frontend.example.com'
-  process.env.WEB_APP_URL = 'https://frontend.example.com'
+  process.env.FRONTEND_URL = REQUIRED_PRODUCTION_FRONTEND_ORIGIN
+  process.env.WEB_APP_URL = REQUIRED_PRODUCTION_FRONTEND_ORIGIN
   process.env.ALLOW_DEMO_MODE = 'false'
 }
 
@@ -87,30 +86,17 @@ test('assertProductionRuntimeConfig succeeds with valid production config', () =
 test('getAllowedCorsOrigins keeps production origins explicit and never adds localhost', () => {
   setProductionBaseline()
   const origins = getAllowedCorsOrigins()
-  assert.ok(origins.some((origin) => origin === 'https://frontend.example.com'))
-  assert.ok(origins.some((origin) => origin === KNOWN_PRODUCTION_FRONTEND_ORIGIN))
+  assert.deepEqual(origins, [REQUIRED_PRODUCTION_FRONTEND_ORIGIN])
   assert.ok(origins.every((origin) => !origin.includes('localhost')))
   assert.ok(origins.every((origin) => !origin.endsWith('/')))
 })
 
 test('getAllowedCorsOrigins normalizes trailing slashes and casing', () => {
   setProductionBaseline()
-  process.env.FRONTEND_URL = 'https://Frontend.Example.com/'
-  process.env.WEB_APP_URL = 'HTTPS://FRONTEND.EXAMPLE.COM'
-
-  const origins = getAllowedCorsOrigins()
-  assert.equal(origins.filter((origin) => origin === 'https://frontend.example.com').length, 1)
-  assert.ok(origins.some((origin) => origin === 'https://frontend.example.com'))
-})
-
-test('getAllowedCorsOrigins honours CORS_ALLOWED_ORIGINS', () => {
-  setProductionBaseline()
-  process.env.CORS_ALLOWED_ORIGINS = 'https://preview-a.example.com, https://preview-b.example.com/'
-
-  const origins = getAllowedCorsOrigins()
-  assert.ok(origins.some((origin) => origin === 'https://preview-a.example.com'))
-  assert.ok(origins.some((origin) => origin === 'https://preview-b.example.com'))
-  delete process.env.CORS_ALLOWED_ORIGINS
+  process.env.FRONTEND_URL = 'https://telegram-shop-3781.onrender.com/'
+  process.env.WEB_APP_URL = 'HTTPS://TELEGRAM-SHOP-3781.ONRENDER.COM'
+  assert.doesNotThrow(() => assertProductionRuntimeConfig())
+  assert.deepEqual(getAllowedCorsOrigins(), [REQUIRED_PRODUCTION_FRONTEND_ORIGIN])
 })
 
 test('getSessionSecret throws in production when missing', () => {
@@ -152,13 +138,11 @@ test('getAllowedCorsOrigins excludes localhost in production', () => {
   assert.equal(hasLocalhost, false)
 })
 
-test('getAllowedCorsOrigins includes both FRONTEND_URL and WEB_APP_URL when distinct', () => {
+test('assertProductionRuntimeConfig rejects unexpected production frontend origins', () => {
   setProductionBaseline()
   process.env.FRONTEND_URL = 'https://frontend.example.com'
-  process.env.WEB_APP_URL = 'https://webapp.example.com'
-  const origins = getAllowedCorsOrigins()
-  assert.ok(origins.some((o) => o === 'https://frontend.example.com'), 'FRONTEND_URL should be in CORS origins')
-  assert.ok(origins.some((o) => o === 'https://webapp.example.com'), 'WEB_APP_URL should be in CORS origins')
+  process.env.WEB_APP_URL = 'https://frontend.example.com'
+  assert.throws(() => assertProductionRuntimeConfig(), /FRONTEND_URL|WEB_APP_URL/)
 })
 
 test('assertProductionRuntimeConfig fails when OWNER_TELEGRAM_ID is numeric but invalid format', () => {
@@ -174,7 +158,7 @@ test('getAllowedCorsOrigins falls back to the known production frontend origin',
   delete process.env.WEB_APP_URL
 
   const origins = getAllowedCorsOrigins()
-  assert.deepEqual(origins, [KNOWN_PRODUCTION_FRONTEND_ORIGIN])
+  assert.deepEqual(origins, [REQUIRED_PRODUCTION_FRONTEND_ORIGIN])
 })
 
 test('ALLOW_DEMO_MODE must be a boolean string', () => {

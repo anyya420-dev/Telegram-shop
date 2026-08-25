@@ -19,9 +19,7 @@ const BOOLEAN_CONFIG_KEYS = ['ALLOW_DEMO_MODE'] as const
  * It ensures the Telegram Mini App keeps working even if FRONTEND_URL/WEB_APP_URL
  * is temporarily misconfigured in the hosting dashboard.
  */
-const KNOWN_PRODUCTION_FRONTEND_ORIGINS = [
-  'https://telegram-shop-3781.onrender.com',
-] as const
+export const REQUIRED_PRODUCTION_FRONTEND_ORIGIN = 'https://telegram-shop-3781.onrender.com'
 
 const REQUIRED_PRODUCTION_KEYS = [
   'DATABASE_URL',
@@ -105,13 +103,17 @@ export function getWebAppUrl() {
 
   if (isProductionRuntime()) {
     // Never hand out a localhost Web App URL to real Telegram users.
-    return KNOWN_PRODUCTION_FRONTEND_ORIGINS[0]
+    return REQUIRED_PRODUCTION_FRONTEND_ORIGIN
   }
 
   return 'http://localhost:5173'
 }
 
 export function getAllowedCorsOrigins() {
+  if (isProductionRuntime()) {
+    return [REQUIRED_PRODUCTION_FRONTEND_ORIGIN]
+  }
+
   const origins = new Set<string>()
 
   const add = (value: string) => {
@@ -124,21 +126,14 @@ export function getAllowedCorsOrigins() {
   add(getFrontendUrl())
   add(readEnv('WEB_APP_URL'))
 
-  // Optional comma-separated escape hatch for additional deploy previews.
+  // Optional comma-separated extra origins for local/dev checks.
   for (const extra of readEnv('CORS_ALLOWED_ORIGINS').split(',')) {
     add(extra)
   }
-
-  if (isProductionRuntime()) {
-    for (const knownOrigin of KNOWN_PRODUCTION_FRONTEND_ORIGINS) {
-      add(knownOrigin)
-    }
-  } else {
-    add('http://localhost:5173')
-    add('http://localhost:4173')
-    add('http://127.0.0.1:5173')
-    add('http://127.0.0.1:4173')
-  }
+  add('http://localhost:5173')
+  add('http://localhost:4173')
+  add('http://127.0.0.1:5173')
+  add('http://127.0.0.1:4173')
 
   return [...origins]
 }
@@ -154,6 +149,14 @@ function getConfigStatusForKey(key: string): ConfigStatus {
   }
 
   if ((URL_CONFIG_KEYS as readonly string[]).includes(key) && !normalizeOrigin(value)) {
+    return 'INVALID'
+  }
+
+  if (
+    isProductionRuntime() &&
+    (key === 'FRONTEND_URL' || key === 'WEB_APP_URL') &&
+    normalizeOrigin(value) !== REQUIRED_PRODUCTION_FRONTEND_ORIGIN
+  ) {
     return 'INVALID'
   }
 
