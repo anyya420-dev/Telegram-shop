@@ -16,7 +16,7 @@ import type {
   WishlistItem,
 } from '../types'
 
-const API_URL: string = import.meta.env.VITE_API_URL ?? ''
+const API_URL: string = (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL ?? ''
 let sessionToken: string | null = null
 
 export class ApiError extends Error {

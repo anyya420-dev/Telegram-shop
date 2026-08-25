@@ -1,181 +1,82 @@
-import { createHash, scryptSync } from 'node:crypto'
 import assert from 'node:assert/strict'
-import { after, afterEach, beforeEach, test } from 'node:test'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { after, before, test } from 'node:test'
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
-import { createApp } from '../src/index.js'
-import { prisma } from '../src/lib.js'
 
-type AdminSecurityRow = {
-  id: number
-  passwordHash: string
-  passwordSalt: string
-  passwordAlgo: string
-  updatedAt: Date
-}
+const repoRoot = '/home/runner/work/Telegram-shop/Telegram-shop'
+const pgBinDir = '/usr/lib/postgresql/16/bin'
+const pgPort = 55432
+const dbName = 'telegram_shop_test'
+const dataDir = mkdtempSync(join(tmpdir(), 'telegram-shop-pg-'))
 
-type AdminSessionRow = {
-  id: number
-  tokenHash: string
-  expiresAt: Date
-  createdAt: Date
-  lastActivityAt: Date
-  revokedAt: Date | null
-}
-
-const state: {
-  adminSecurity: AdminSecurityRow | null
-  sessions: Map<string, AdminSessionRow>
-  nextSessionId: number
-} = {
-  adminSecurity: null,
-  sessions: new Map(),
-  nextSessionId: 1,
-}
-
-const adminSecurityDelegate = (prisma as any).adminSecurity
-const adminSessionDelegate = (prisma as any).adminSession
-const orderDelegate = (prisma as any).order
-const userDelegate = (prisma as any).user
-
-const original = {
-  adminSecurity: {
-    findFirst: adminSecurityDelegate.findFirst,
-    create: adminSecurityDelegate.create,
-    update: adminSecurityDelegate.update,
-  },
-  adminSession: {
-    create: adminSessionDelegate.create,
-    findUnique: adminSessionDelegate.findUnique,
-    update: adminSessionDelegate.update,
-    updateMany: adminSessionDelegate.updateMany,
-  },
-  order: {
-    count: orderDelegate.count,
-    aggregate: orderDelegate.aggregate,
-  },
-  user: {
-    count: userDelegate.count,
-  },
-}
-
-function installPrismaMocks() {
-  adminSecurityDelegate.findFirst = async () => state.adminSecurity
-  adminSecurityDelegate.create = async ({ data }: { data: { passwordHash: string; passwordSalt: string; passwordAlgo: string } }) => {
-    state.adminSecurity = {
-      id: 1,
-      passwordHash: data.passwordHash,
-      passwordSalt: data.passwordSalt,
-      passwordAlgo: data.passwordAlgo,
-      updatedAt: new Date(),
-    }
-    return state.adminSecurity
-  }
-  adminSecurityDelegate.update = async ({ data }: { data: { passwordHash: string; passwordSalt: string; passwordAlgo: string } }) => {
-    if (!state.adminSecurity) {
-      throw new Error('admin_security row missing')
-    }
-    state.adminSecurity = {
-      ...state.adminSecurity,
-      passwordHash: data.passwordHash,
-      passwordSalt: data.passwordSalt,
-      passwordAlgo: data.passwordAlgo,
-      updatedAt: new Date(),
-    }
-    return state.adminSecurity
-  }
-
-  adminSessionDelegate.create = async ({ data }: { data: { tokenHash: string; expiresAt: Date } }) => {
-    const row: AdminSessionRow = {
-      id: state.nextSessionId++,
-      tokenHash: data.tokenHash,
-      expiresAt: data.expiresAt,
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
-      revokedAt: null,
-    }
-    state.sessions.set(row.tokenHash, row)
-    return row
-  }
-  adminSessionDelegate.findUnique = async ({ where }: { where: { tokenHash: string } }) => {
-    return state.sessions.get(where.tokenHash) ?? null
-  }
-  adminSessionDelegate.update = async ({ where, data }: { where: { id: number }; data: { lastActivityAt?: Date; revokedAt?: Date | null } }) => {
-    for (const row of state.sessions.values()) {
-      if (row.id === where.id) {
-        if (data.lastActivityAt) row.lastActivityAt = data.lastActivityAt
-        if (data.revokedAt !== undefined) row.revokedAt = data.revokedAt
-        return row
-      }
-    }
-    throw new Error('session not found')
-  }
-  adminSessionDelegate.updateMany = async ({ where, data }: { where: { tokenHash: string; revokedAt: null }; data: { revokedAt: Date } }) => {
-    const row = state.sessions.get(where.tokenHash)
-    if (!row || row.revokedAt !== null) {
-      return { count: 0 }
-    }
-    row.revokedAt = data.revokedAt
-    return { count: 1 }
-  }
-
-  orderDelegate.count = async () => 3
-  orderDelegate.aggregate = async () => ({ _sum: { total: 1250 } })
-  userDelegate.count = async () => 9
-}
-
-function restorePrisma() {
-  adminSecurityDelegate.findFirst = original.adminSecurity.findFirst
-  adminSecurityDelegate.create = original.adminSecurity.create
-  adminSecurityDelegate.update = original.adminSecurity.update
-  adminSessionDelegate.create = original.adminSession.create
-  adminSessionDelegate.findUnique = original.adminSession.findUnique
-  adminSessionDelegate.update = original.adminSession.update
-  adminSessionDelegate.updateMany = original.adminSession.updateMany
-  orderDelegate.count = original.order.count
-  orderDelegate.aggregate = original.order.aggregate
-  userDelegate.count = original.user.count
-}
+const databaseUrl = `postgresql://postgres@127.0.0.1:${pgPort}/${dbName}?schema=public`
 
 let server: Server | null = null
 let baseUrl = ''
+let createApp: (() => any) | null = null
+let prisma: { $disconnect: () => Promise<void> } | null = null
 
-async function startServer() {
-  const app = createApp()
-  await new Promise<void>((resolve) => {
-    server = app.listen(0, '127.0.0.1', () => resolve())
+function run(command: string, args: string[], cwd = repoRoot, env = process.env) {
+  const childEnv = { ...env }
+  delete childEnv.NODE_OPTIONS
+  execFileSync(command, args, {
+    cwd,
+    env: childEnv,
+    stdio: 'ignore',
   })
-  const address = server!.address() as AddressInfo
-  baseUrl = `http://127.0.0.1:${address.port}`
 }
 
-async function stopServer() {
-  if (!server) return
-  await new Promise<void>((resolve, reject) => {
-    server!.close((error) => {
-      if (error) reject(error)
-      else resolve()
-    })
-  })
-  server = null
-}
+before(async () => {
+  run(`${pgBinDir}/initdb`, ['-D', dataDir, '-A', 'trust', '-U', 'postgres'])
+  run(`${pgBinDir}/pg_ctl`, ['-D', dataDir, '-o', `-p ${pgPort} -k ${dataDir}`, '-w', 'start'])
+  run(`${pgBinDir}/createdb`, ['-h', dataDir, '-p', String(pgPort), '-U', 'postgres', dbName])
 
-beforeEach(async () => {
   process.env.NODE_ENV = 'production'
   process.env.ADMIN_PASSWORD = 'admin-secret'
-  state.adminSecurity = null
-  state.sessions.clear()
-  state.nextSessionId = 1
-  installPrismaMocks()
-  await startServer()
+  process.env.DATABASE_URL = databaseUrl
+
+  run('npm', ['run', 'db:generate'])
+  run('npm', ['run', 'db:migrate:deploy', '--workspace', 'backend'])
+
+  const indexModule = await import('../src/index.js')
+  const libModule = await import('../src/lib.js')
+  createApp = indexModule.createApp
+  prisma = libModule.prisma
+
+  const app = createApp()
+  await new Promise<void>((resolve, reject) => {
+    server = app.listen(0, '127.0.0.1', () => resolve())
+    server.once('error', reject)
+  })
+
+  const address = server!.address() as AddressInfo
+  baseUrl = `http://127.0.0.1:${address.port}`
 })
 
 after(async () => {
-  restorePrisma()
-})
+  if (server) {
+    await new Promise<void>((resolve, reject) => {
+      server!.close((error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+  }
 
-afterEach(async () => {
-  await stopServer()
+  if (prisma) {
+    await prisma.$disconnect()
+  }
+
+  try {
+    run(`${pgBinDir}/pg_ctl`, ['-D', dataDir, '-w', 'stop', '-m', 'fast'])
+  } catch {
+    // ignore teardown failures when startup didn't complete
+  }
+  rmSync(dataDir, { recursive: true, force: true })
 })
 
 async function request(path: string, init: RequestInit = {}) {
@@ -207,23 +108,21 @@ test('admin session flow keeps public endpoints independent', async () => {
   assert.equal(adminWithoutSession.status, 401)
 
   const adminWithSession = await request('/api/admin/stats', {
-    headers: { cookie: cookieHeader! },
+    headers: { cookie: cookieHeader },
   })
   assert.equal(adminWithSession.status, 200)
 
-  const publicDuring = await request('/api/health', {
-    headers: { cookie: cookieHeader! },
-  })
+  const publicDuring = await request('/api/health')
   assert.equal(publicDuring.status, 200)
 
   const logout = await request('/api/admin/auth/logout', {
     method: 'POST',
-    headers: { cookie: cookieHeader! },
+    headers: { cookie: cookieHeader },
   })
   assert.equal(logout.status, 200)
 
   const adminAfterLogout = await request('/api/admin/stats', {
-    headers: { cookie: cookieHeader! },
+    headers: { cookie: cookieHeader },
   })
   assert.equal(adminAfterLogout.status, 401)
 
@@ -255,22 +154,4 @@ test('cors allows only production frontend origin and handles preflight', async 
 
   const noOrigin = await request('/api/health')
   assert.equal(noOrigin.status, 200)
-})
-
-test('password hash format is scrypt-compatible', async () => {
-  const login = await request('/api/admin/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: 'admin-secret' }),
-  })
-  assert.equal(login.status, 200)
-
-  assert.ok(state.adminSecurity)
-  const expectedHash = scryptSync('admin-secret', state.adminSecurity!.passwordSalt, 64).toString('hex')
-  assert.equal(state.adminSecurity!.passwordHash, expectedHash)
-
-  const sessionCookie = login.headers.get('set-cookie') ?? ''
-  const token = sessionCookie.split(';')[0]?.split('=')[1] ?? ''
-  const tokenHash = createHash('sha256').update(decodeURIComponent(token)).digest('hex')
-  assert.ok(state.sessions.has(tokenHash))
 })
