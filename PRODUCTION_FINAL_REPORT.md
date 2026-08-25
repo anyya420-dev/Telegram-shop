@@ -19,12 +19,12 @@
   - `npm run verify` runs generate + typecheck + tests + build with explicit production API default
 
 ## Files changed
-- `/home/runner/work/Telegram-shop/Telegram-shop/backend/src/routes/orders.ts`
-- `/home/runner/work/Telegram-shop/Telegram-shop/backend/src/app.ts`
-- `/home/runner/work/Telegram-shop/Telegram-shop/backend/src/app.smoke.test.ts`
-- `/home/runner/work/Telegram-shop/Telegram-shop/package.json`
-- `/home/runner/work/Telegram-shop/Telegram-shop/README.md`
-- `/home/runner/work/Telegram-shop/Telegram-shop/PRODUCTION_FINAL_REPORT.md`
+- `backend/src/routes/orders.ts`
+- `backend/src/app.ts`
+- `backend/src/app.smoke.test.ts`
+- `package.json`
+- `README.md`
+- `PRODUCTION_FINAL_REPORT.md`
 
 ## Configuration status (repository side)
 - Frontend production URL: `https://telegram-shop-3781.onrender.com`
