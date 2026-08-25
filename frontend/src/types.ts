@@ -82,8 +82,6 @@ export type Cart = {
 export type BootstrapResponse = {
   telegramEnvironment: boolean
   sessionToken: string
-  isAdmin: boolean
-  isOwner: boolean
   user: UserProfile
   cities: City[]
   categories: Category[]
@@ -198,54 +196,4 @@ export type AdminStats = {
   pendingOrders: number
   totalUsers: number
   totalRevenue: number
-}
-
-export type BotInfo = {
-  id: number
-  username: string
-  firstName: string
-}
-
-export type BotStatusResponse =
-  | { connected: false; bot: null; tokenMasked?: string | null }
-  | { connected: true; bot: BotInfo; lastValidatedAt: string | null; tokenMasked?: string | null }
-
-export type AdminSettingsResponse = {
-  administrators: string[]
-  passwordConfigured: boolean
-  bot: BotStatusResponse
-}
-
-export type AdminCity = {
-  id: number
-  name: string
-  nameEn: string | null
-  isActive: boolean
-  sortOrder: number
-  createdAt: string
-}
-
-export type AdminCategory = {
-  id: number
-  name: string
-  nameEn: string | null
-  isActive: boolean
-  sortOrder: number
-  createdAt: string
-}
-
-export type AdminProduct = {
-  id: number
-  name: string
-  nameEn: string | null
-  description: string
-  descriptionEn: string | null
-  price: number
-  image: string | null
-  categoryId: number
-  isActive: boolean
-  isRecommended: boolean
-  createdAt: string
-  updatedAt: string
-  category: { id: number; name: string }
 }

@@ -18,7 +18,6 @@ export default function HomePage() {
   const cartCount = cart?.items.length ?? 0;
   const featuredProducts = products.filter((p) => p.isRecommended).slice(0, 6);
   const allProducts = products.slice(0, 6);
-  const hasAnyContent = categories.length > 0 || featuredProducts.length > 0 || recommended.length > 0 || allProducts.length > 0;
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -33,16 +32,16 @@ export default function HomePage() {
         <div className={styles.topLeft}>
           <h1 className={styles.logo}>{t('home.title')}</h1>
           {user?.selectedCity ? (
-            <button className={styles.cityBadge} onClick={openCityPicker} type="button">
-              {user.selectedCity.name}
+            <button className={styles.cityBadge} onClick={openCityPicker}>
+              📍 {user.selectedCity.name}
             </button>
           ) : (
-            <button className={styles.cityBadge} onClick={openCityPicker} type="button">
-              {t('profile.cityNotSelected')}
+            <button className={styles.cityBadge} onClick={openCityPicker}>
+              📍 {t('profile.cityNotSelected')}
             </button>
           )}
         </div>
-        <button className={styles.cartBtn} onClick={() => navigate('/shop/cart')} type="button" aria-label={t('nav.cart')}>
+        <button className={styles.cartBtn} onClick={() => navigate('/shop/cart')}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
             <line x1="3" y1="6" x2="21" y2="6" />
@@ -81,7 +80,7 @@ export default function HomePage() {
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
                 <span className={styles.sectionTitle}>{t('home.categories')}</span>
-                <button className={styles.viewAll} onClick={() => navigate('/catalog')} type="button">
+                <button className={styles.viewAll} onClick={() => navigate('/catalog')}>
                   {t('home.viewAll')}
                 </button>
               </div>
@@ -103,7 +102,7 @@ export default function HomePage() {
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
                 <span className={styles.sectionTitle}>{t('home.featured')}</span>
-                <button className={styles.viewAll} onClick={() => navigate('/shop')} type="button">
+                <button className={styles.viewAll} onClick={() => navigate('/shop')}>
                   {t('home.viewAll')}
                 </button>
               </div>
@@ -121,7 +120,7 @@ export default function HomePage() {
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
                 <span className={styles.sectionTitle}>{t('home.popular')}</span>
-                <button className={styles.viewAll} onClick={() => navigate('/shop')} type="button">
+                <button className={styles.viewAll} onClick={() => navigate('/shop')}>
                   {t('home.viewAll')}
                 </button>
               </div>
@@ -141,7 +140,7 @@ export default function HomePage() {
             <section className={styles.section}>
               <div className={styles.sectionHeader}>
                 <span className={styles.sectionTitle}>{t('home.newest')}</span>
-                <button className={styles.viewAll} onClick={() => navigate('/shop')} type="button">
+                <button className={styles.viewAll} onClick={() => navigate('/shop')}>
                   {t('home.viewAll')}
                 </button>
               </div>
@@ -155,20 +154,6 @@ export default function HomePage() {
                 ))}
               </div>
             </section>
-          )}
-
-          {!hasAnyContent && (
-            <div className={styles.noCityWrap}>
-              <div className={styles.noCityIcon}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                </svg>
-              </div>
-              <p className={styles.noCityText}>{t('catalog.empty')}</p>
-              <button className={styles.noCityBtn} onClick={() => navigate('/catalog')} type="button">
-                {t('home.viewAll')}
-              </button>
-            </div>
           )}
         </>
       )}

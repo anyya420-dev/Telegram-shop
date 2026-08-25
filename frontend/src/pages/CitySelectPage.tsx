@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getLocalizedCityName } from '../lib/localized';
 import styles from './CitySelectPage.module.css';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
+import { api } from '../api/client';
 import type { City } from '../types';
-import { resolveApiErrorMessage } from '../lib/errors';
 
 export default function CitySelectPage() {
-  const { authStatus, cities, refreshCities, selectCity, skipCitySelection, user } = useApp();
+  const { cities, selectCity, user } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [selecting, setSelecting] = useState<number | null>(null);
@@ -23,53 +23,31 @@ export default function CitySelectPage() {
     }
   }, [navigate, user]);
 
-  useEffect(() => {
-    setCityList(cities);
-  }, [cities]);
-
-  const loadCities = useCallback(async () => {
+  async function loadCities() {
     try {
       setLoading(true);
       setError(null);
-      const response = await refreshCities();
+      const response = await api.getCities();
       setCityList(response);
     } catch (err) {
-      setError(resolveApiErrorMessage(err, t, 'request_failed'));
+      setError(err instanceof Error ? err.message : t('errors.request_failed'));
     } finally {
       setLoading(false);
     }
-  }, [refreshCities, t]);
+  }
 
   useEffect(() => {
     void loadCities();
-  }, [loadCities]);
+  }, []);
 
   async function handleSelect(cityId: number) {
-    setError(null);
     setSelecting(cityId);
     try {
       await selectCity(cityId);
       navigate('/shop', { replace: true });
-    } catch (err) {
-      setError(resolveApiErrorMessage(err, t, 'city_not_found'));
     } finally {
       setSelecting(null);
     }
-  }
-
-  function handleSkipSelection() {
-    skipCitySelection();
-    navigate('/shop', { replace: true });
-  }
-
-  if (authStatus === 'AUTHENTICATION_FAILED' && !user) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.stateCard}>
-          <p>{t('errors.shop_load_failed')}</p>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -99,32 +77,22 @@ export default function CitySelectPage() {
       ) : cityList.length === 0 ? (
         <div className={styles.stateCard}>
           <p>{t('city.empty')}</p>
-          <button className={styles.laterBtn} onClick={handleSkipSelection} type="button">
-            {t('city.chooseLater')}
-          </button>
         </div>
       ) : (
-        <>
-          <div className={styles.list}>
-            {cityList.map((city) => (
-              <button
-                key={city.id}
-                className={`${styles.cityBtn} ${selecting === city.id ? styles.selected : ''}`}
-                onClick={() => handleSelect(city.id)}
-                disabled={selecting !== null}
-                type="button"
-              >
-                <span className={styles.cityName}>{getLocalizedCityName(city, i18n.language as 'ru' | 'en')}</span>
-                <span className={styles.arrow}>→</span>
-              </button>
-            ))}
-          </div>
-          {!user?.selectedCityId && (
-            <button className={styles.laterBtn} onClick={handleSkipSelection} type="button">
-              {t('city.chooseLater')}
+        <div className={styles.list}>
+          {cityList.map((city) => (
+            <button
+              key={city.id}
+              className={`${styles.cityBtn} ${selecting === city.id ? styles.selected : ''}`}
+              onClick={() => handleSelect(city.id)}
+              disabled={selecting !== null}
+              type="button"
+            >
+              <span className={styles.cityName}>{getLocalizedCityName(city, i18n.language as 'ru' | 'en')}</span>
+              <span className={styles.arrow}>→</span>
             </button>
-          )}
-        </>
+          ))}
+        </div>
       )}
     </div>
   );

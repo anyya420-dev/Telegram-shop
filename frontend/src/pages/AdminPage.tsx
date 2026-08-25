@@ -1,1007 +1,255 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { ApiError, api } from '../api/client'
-import { useApp } from '../context/AppContext'
-import { resolveApiErrorMessage } from '../lib/errors'
-import type { AdminCategory, AdminCity, AdminProduct, AdminSettingsResponse, AdminStats } from '../types'
-import styles from './AdminPage.module.css'
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { api } from '../api/client';
+import type { AdminStats, Order, SupportTicket, Discount } from '../types';
+import { formatCurrency } from '../lib/format';
+import i18n from '../lib/i18n';
+import type { Language } from '../types';
+import styles from './AdminPage.module.css';
 
-type StatusTone = 'success' | 'error' | 'info'
-type AdminTab = 'dashboard' | 'cities' | 'categories' | 'products' | 'security' | 'administrators' | 'bot'
-type AdminRestoreState = {
-  authenticated: boolean
-  settings: AdminSettingsResponse | null
-  stats: AdminStats | null
-}
+type Tab = 'stats' | 'orders' | 'discounts' | 'support' | 'audit';
 
-let adminRestoreInFlight: Promise<AdminRestoreState> | null = null
-
-function ShieldIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3l8 4v5c0 5-3.5 8.8-8 10-4.5-1.2-8-5-8-10V7l8-4z" />
-    </svg>
-  )
-}
-
-function BotIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="8" width="16" height="11" rx="3" />
-      <path d="M12 8V4" />
-      <circle cx="9" cy="13" r="1" />
-      <circle cx="15" cy="13" r="1" />
-    </svg>
-  )
-}
-
-function MapPinIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  )
-}
-
-function TagIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-      <line x1="7" y1="7" x2="7.01" y2="7" />
-    </svg>
-  )
-}
-
-function BoxIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-      <line x1="12" y1="22.08" x2="12" y2="12" />
-    </svg>
-  )
-}
-
-// ── City Management ──────────────────────────────────────────────────────────
-
-function CitiesSection({ setStatus, loading, setLoading }: {
-  setStatus: (s: { tone: StatusTone; message: string } | null) => void
-  loading: boolean
-  setLoading: (v: boolean) => void
-}) {
-  const { t } = useTranslation()
-  const [cities, setCities] = useState<AdminCity[]>([])
-  const [sectionLoading, setSectionLoading] = useState(true)
-  const [sectionError, setSectionError] = useState<string | null>(null)
-  const [newName, setNewName] = useState('')
-  const [newNameEn, setNewNameEn] = useState('')
-  const [newIsActive, setNewIsActive] = useState(true)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editNameEn, setEditNameEn] = useState('')
-  const [editIsActive, setEditIsActive] = useState(true)
-
-  async function refresh() {
-    setSectionLoading(true)
-    setSectionError(null)
-    try {
-      const r = await api.getAdminCities()
-      setCities(r.cities)
-    } catch (error) {
-      setSectionError(error instanceof Error ? error.message : 'Failed to load cities')
-    } finally {
-      setSectionLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void refresh()
-  }, [])
-
-  async function handleCreate() {
-    if (!newName.trim()) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.createAdminCity({ name: newName.trim(), nameEn: newNameEn.trim() || undefined, isActive: newIsActive })
-      setNewName('')
-      setNewNameEn('')
-      setNewIsActive(true)
-      await refresh()
-      setStatus({ tone: 'success', message: 'City created.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to create city' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleToggleActive(city: AdminCity) {
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.updateAdminCity(city.id, { isActive: !city.isActive })
-      await refresh()
-      setStatus({ tone: 'success', message: city.isActive ? 'City deactivated.' : 'City activated.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update city' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleSaveEdit() {
-    if (!editingId) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      const data: { name?: string; nameEn?: string; isActive?: boolean } = {}
-      if (editName.trim()) data.name = editName.trim()
-      data.nameEn = editNameEn.trim() || ''
-      data.isActive = editIsActive
-      await api.updateAdminCity(editingId, data)
-      setEditingId(null)
-      await refresh()
-      setStatus({ tone: 'success', message: 'City updated.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update city' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function handleStartEdit(city: AdminCity) {
-    setEditingId(city.id)
-    setEditName(city.name)
-    setEditNameEn(city.nameEn ?? '')
-    setEditIsActive(city.isActive ?? true)
-  }
-
-  async function handleDelete(city: AdminCity) {
-    if (!confirm(`Delete city "${city.name}"?`)) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      const r = await api.deleteAdminCity(city.id)
-      await refresh()
-      setStatus({ tone: 'success', message: r.deactivated ? `City deactivated (has orders).` : 'City deleted.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to delete city' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-  return (
-    <section className={styles.card}>
-      <h2 className={styles.cardTitle}><MapPinIcon /> Cities / Города</h2>
-      {sectionLoading && <p className={styles.help}>{t('common.loading')}</p>}
-      {sectionError && (
-        <div className={styles.actions}>
-          <p className={styles.help}>{sectionError}</p>
-          <button className={styles.ghostButton} onClick={() => void refresh()} type="button">Retry</button>
-        </div>
-      )}
-      {!sectionLoading && !sectionError && (
-        <>
-      <ul className={styles.adminList}>
-        {cities.length === 0 && <li className={styles.help}>No cities yet.</li>}
-        {cities.map((city) => (
-          <li key={city.id} className={styles.adminItem}>
-            {editingId === city.id ? (
-              <div className={styles.editRow} style={{ flex: 1 }}>
-                <div className={styles.formRow}>
-                  <input className={styles.input} placeholder="Name (RU)" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                  <input className={styles.input} placeholder="Name (EN)" value={editNameEn} onChange={(e) => setEditNameEn(e.target.value)} />
-                  <label className={styles.checkboxLabel}>
-                    <input type="checkbox" checked={editIsActive} onChange={(e) => setEditIsActive(e.target.checked)} />
-                    <span>Active</span>
-                  </label>
-                </div>
-                <div className={styles.actions}>
-                  <button className={styles.primaryButton} onClick={() => void handleSaveEdit()} disabled={loading}>Save</button>
-                  <button className={styles.ghostButton} onClick={() => setEditingId(null)} disabled={loading}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <span>
-                  {city.name}{city.nameEn ? ` / ${city.nameEn}` : ''}
-                  {' '}<span className={city.isActive ? styles.badge : styles.badgeOff}>{city.isActive ? 'active' : 'inactive'}</span>
-                </span>
-                <div className={styles.itemActions}>
-                  <button className={styles.ghostButton} onClick={() => handleStartEdit(city)} disabled={loading}>Edit</button>
-                  <button className={city.isActive ? styles.warnButton : styles.ghostButton} onClick={() => void handleToggleActive(city)} disabled={loading}>{city.isActive ? 'Deactivate' : 'Activate'}</button>
-                  <button className={styles.removeButton} onClick={() => void handleDelete(city)} disabled={loading}>Delete</button>
-                </div>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-      <div className={styles.formRow}>
-        <input className={styles.input} placeholder="City name (RU) *" value={newName} onChange={(e) => setNewName(e.target.value)} />
-        <input className={styles.input} placeholder="City name (EN)" value={newNameEn} onChange={(e) => setNewNameEn(e.target.value)} />
-        <label className={styles.checkboxLabel}>
-          <input type="checkbox" checked={newIsActive} onChange={(e) => setNewIsActive(e.target.checked)} />
-          <span>Active</span>
-        </label>
-        <button className={styles.primaryButton} onClick={() => void handleCreate()} disabled={loading || !newName.trim()}>Add city</button>
-      </div>
-        </>
-      )}
-    </section>
-  )
-}
-
-// ── Category Management ──────────────────────────────────────────────────────
-
-function CategoriesSection({ setStatus, loading, setLoading }: {
-  setStatus: (s: { tone: StatusTone; message: string } | null) => void
-  loading: boolean
-  setLoading: (v: boolean) => void
-}) {
-  const [categories, setCategories] = useState<AdminCategory[]>([])
-  const [sectionLoading, setSectionLoading] = useState(true)
-  const [sectionError, setSectionError] = useState<string | null>(null)
-  const [newName, setNewName] = useState('')
-  const [newNameEn, setNewNameEn] = useState('')
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editNameEn, setEditNameEn] = useState('')
-
-  async function refresh() {
-    setSectionLoading(true)
-    setSectionError(null)
-    try {
-      const r = await api.getAdminCategories()
-      setCategories(r.categories)
-    } catch (error) {
-      setSectionError(error instanceof Error ? error.message : 'Failed to load categories')
-    } finally {
-      setSectionLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void refresh()
-  }, [])
-
-  async function handleCreate() {
-    if (!newName.trim()) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.createAdminCategory({ name: newName.trim(), nameEn: newNameEn.trim() || undefined })
-      setNewName('')
-      setNewNameEn('')
-      await refresh()
-      setStatus({ tone: 'success', message: 'Category created.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to create category' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleToggleActive(cat: AdminCategory) {
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.updateAdminCategory(cat.id, { isActive: !cat.isActive })
-      await refresh()
-      setStatus({ tone: 'success', message: cat.isActive ? 'Category deactivated.' : 'Category activated.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update category' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleSaveEdit() {
-    if (!editingId) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      const data: { name?: string; nameEn?: string } = {}
-      if (editName.trim()) data.name = editName.trim()
-      data.nameEn = editNameEn.trim() || ''
-      await api.updateAdminCategory(editingId, data)
-      setEditingId(null)
-      await refresh()
-      setStatus({ tone: 'success', message: 'Category updated.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update category' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleDelete(cat: AdminCategory) {
-    if (!confirm(`Delete category "${cat.name}"?`)) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      const r = await api.deleteAdminCategory(cat.id)
-      await refresh()
-      setStatus({ tone: 'success', message: r.deactivated ? `Category deactivated (has products).` : 'Category deleted.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to delete category' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-  return (
-    <section className={styles.card}>
-      <h2 className={styles.cardTitle}><TagIcon /> Categories</h2>
-      {sectionLoading && <p className={styles.help}>Loading…</p>}
-      {sectionError && (
-        <div className={styles.actions}>
-          <p className={styles.help}>{sectionError}</p>
-          <button className={styles.ghostButton} onClick={() => void refresh()} type="button">Retry</button>
-        </div>
-      )}
-      {!sectionLoading && !sectionError && (
-        <>
-      <ul className={styles.adminList}>
-        {categories.length === 0 && <li className={styles.help}>No categories yet.</li>}
-        {categories.map((cat) => (
-          <li key={cat.id} className={styles.adminItem}>
-            {editingId === cat.id ? (
-              <div className={styles.editRow} style={{ flex: 1 }}>
-                <div className={styles.formRow}>
-                  <input className={styles.input} placeholder="Name (RU)" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                  <input className={styles.input} placeholder="Name (EN)" value={editNameEn} onChange={(e) => setEditNameEn(e.target.value)} />
-                </div>
-                <div className={styles.actions}>
-                  <button className={styles.primaryButton} onClick={() => void handleSaveEdit()} disabled={loading}>Save</button>
-                  <button className={styles.ghostButton} onClick={() => setEditingId(null)} disabled={loading}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <span>
-                  {cat.name}{cat.nameEn ? ` / ${cat.nameEn}` : ''}
-                  {' '}<span className={cat.isActive ? styles.badge : styles.badgeOff}>{cat.isActive ? 'active' : 'inactive'}</span>
-                </span>
-                <div className={styles.itemActions}>
-                  <button className={styles.ghostButton} onClick={() => { setEditingId(cat.id); setEditName(cat.name); setEditNameEn(cat.nameEn ?? '') }} disabled={loading}>Edit</button>
-                  <button className={cat.isActive ? styles.warnButton : styles.ghostButton} onClick={() => void handleToggleActive(cat)} disabled={loading}>{cat.isActive ? 'Deactivate' : 'Activate'}</button>
-                  <button className={styles.removeButton} onClick={() => void handleDelete(cat)} disabled={loading}>Delete</button>
-                </div>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-      <div className={styles.formRow}>
-        <input className={styles.input} placeholder="Category name (RU) *" value={newName} onChange={(e) => setNewName(e.target.value)} />
-        <input className={styles.input} placeholder="Category name (EN)" value={newNameEn} onChange={(e) => setNewNameEn(e.target.value)} />
-        <button className={styles.primaryButton} onClick={() => void handleCreate()} disabled={loading || !newName.trim()}>Add category</button>
-      </div>
-        </>
-      )}
-    </section>
-  )
-}
-
-// ── Product Management ───────────────────────────────────────────────────────
-
-function ProductsSection({ setStatus, loading, setLoading }: {
-  setStatus: (s: { tone: StatusTone; message: string } | null) => void
-  loading: boolean
-  setLoading: (v: boolean) => void
-}) {
-  const [products, setProducts] = useState<AdminProduct[]>([])
-  const [categories, setCategories] = useState<AdminCategory[]>([])
-  const [sectionLoading, setSectionLoading] = useState(true)
-  const [sectionError, setSectionError] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<number | null>(null)
-
-  // new product form
-  const [newName, setNewName] = useState('')
-  const [newDesc, setNewDesc] = useState('')
-  const [newPrice, setNewPrice] = useState('')
-  const [newCatId, setNewCatId] = useState('')
-  const [newImage, setNewImage] = useState('')
-
-  // edit fields
-  const [editName, setEditName] = useState('')
-  const [editDesc, setEditDesc] = useState('')
-  const [editPrice, setEditPrice] = useState('')
-  const [editImage, setEditImage] = useState('')
-
-  async function refresh() {
-    setSectionLoading(true)
-    setSectionError(null)
-    try {
-      const [pr, cr] = await Promise.all([api.getAdminProducts(), api.getAdminCategories()])
-      setProducts(pr.products)
-      setCategories(cr.categories)
-    } catch (error) {
-      setSectionError(error instanceof Error ? error.message : 'Failed to load products')
-    } finally {
-      setSectionLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void refresh()
-  }, [])
-
-  async function handleCreate() {
-    const price = parseFloat(newPrice)
-    const categoryId = parseInt(newCatId, 10)
-    if (!newName.trim() || !newDesc.trim() || isNaN(price) || price <= 0 || isNaN(categoryId)) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.createAdminProduct({ name: newName.trim(), description: newDesc.trim(), price, categoryId, image: newImage.trim() || undefined })
-      setNewName(''); setNewDesc(''); setNewPrice(''); setNewCatId(''); setNewImage('')
-      await refresh()
-      setStatus({ tone: 'success', message: 'Product created.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to create product' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleToggleActive(p: AdminProduct) {
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.updateAdminProduct(p.id, { isActive: !p.isActive })
-      await refresh()
-      setStatus({ tone: 'success', message: p.isActive ? 'Product deactivated.' : 'Product activated.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update product' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleSaveEdit() {
-    if (!editingId) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      const data: Record<string, unknown> = {}
-      if (editName.trim()) data.name = editName.trim()
-      if (editDesc.trim()) data.description = editDesc.trim()
-      const p = parseFloat(editPrice)
-      if (!isNaN(p) && p > 0) data.price = p
-      if (editImage.trim()) data.image = editImage.trim()
-      await api.updateAdminProduct(editingId, data)
-      setEditingId(null)
-      await refresh()
-      setStatus({ tone: 'success', message: 'Product updated.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update product' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleDelete(p: AdminProduct) {
-    if (!confirm(`Delete product "${p.name}"?`)) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      const r = await api.deleteAdminProduct(p.id)
-      await refresh()
-      setStatus({ tone: 'success', message: r.deactivated ? 'Product deactivated (has orders).' : 'Product deleted.' })
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to delete product' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-  return (
-    <section className={styles.card}>
-      <h2 className={styles.cardTitle}><BoxIcon /> Products</h2>
-      {sectionLoading && <p className={styles.help}>Loading…</p>}
-      {sectionError && (
-        <div className={styles.actions}>
-          <p className={styles.help}>{sectionError}</p>
-          <button className={styles.ghostButton} onClick={() => void refresh()} type="button">Retry</button>
-        </div>
-      )}
-      {!sectionLoading && !sectionError && (
-        <>
-      <ul className={styles.adminList}>
-        {products.length === 0 && <li className={styles.help}>No products yet.</li>}
-        {products.map((p) => (
-          <li key={p.id} className={styles.adminItem}>
-            {editingId === p.id ? (
-              <div className={styles.editRow} style={{ flex: 1 }}>
-                <div className={styles.formRow}>
-                  <input className={styles.input} placeholder="Name" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                  <input className={styles.input} placeholder="Price" type="number" step="0.01" min="0.01" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} />
-                </div>
-                <textarea className={styles.textarea} placeholder="Description" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
-                <input className={styles.input} placeholder="Image URL" value={editImage} onChange={(e) => setEditImage(e.target.value)} />
-                <div className={styles.actions}>
-                  <button className={styles.primaryButton} onClick={() => void handleSaveEdit()} disabled={loading}>Save</button>
-                  <button className={styles.ghostButton} onClick={() => setEditingId(null)} disabled={loading}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <span>
-                  {p.name} — <strong>{p.price.toFixed(2)}</strong> ({p.category?.name ?? '–'})
-                  {' '}<span className={p.isActive ? styles.badge : styles.badgeOff}>{p.isActive ? 'active' : 'inactive'}</span>
-                </span>
-                <div className={styles.itemActions}>
-                  <button className={styles.ghostButton} onClick={() => { setEditingId(p.id); setEditName(p.name); setEditDesc(p.description); setEditPrice(String(p.price)); setEditImage(p.image ?? '') }} disabled={loading}>Edit</button>
-                  <button className={p.isActive ? styles.warnButton : styles.ghostButton} onClick={() => void handleToggleActive(p)} disabled={loading}>{p.isActive ? 'Deactivate' : 'Activate'}</button>
-                  <button className={styles.removeButton} onClick={() => void handleDelete(p)} disabled={loading}>Delete</button>
-                </div>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-      <div className={styles.formRow}>
-        <input className={styles.input} placeholder="Product name *" value={newName} onChange={(e) => setNewName(e.target.value)} />
-        <input className={styles.input} placeholder="Price *" type="number" step="0.01" min="0.01" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} />
-      </div>
-      <textarea className={styles.textarea} placeholder="Description *" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
-      <div className={styles.formRow}>
-        <select
-          className={styles.input}
-          value={newCatId}
-          onChange={(e) => setNewCatId(e.target.value)}
-        >
-          <option value="">Category *</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <input className={styles.input} placeholder="Image URL (optional)" value={newImage} onChange={(e) => setNewImage(e.target.value)} />
-      </div>
-      <button
-        className={styles.primaryButton}
-        onClick={() => void handleCreate()}
-        disabled={loading || !newName.trim() || !newDesc.trim() || !newPrice || !newCatId}
-      >
-        Add product
-      </button>
-        </>
-      )}
-    </section>
-  )
-}
-
-// ── Main AdminPage ────────────────────────────────────────────────────────────
+const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
 
 export default function AdminPage() {
-  const { t } = useTranslation()
-  const { authStatus, isAdmin, user } = useApp()
-  const [password, setPassword] = useState('')
-  const [authenticated, setAuthenticated] = useState(false)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [loading, setLoading] = useState(false)
-  const [authActionLoading, setAuthActionLoading] = useState(false)
-  const [settings, setSettings] = useState<AdminSettingsResponse | null>(null)
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [status, setStatus] = useState<{ tone: StatusTone; message: string } | null>(null)
+  const { t } = useTranslation();
+  const language = i18n.language as Language;
+  const [tab, setTab] = useState<Tab>('stats');
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [orderFilter, setOrderFilter] = useState('');
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  const [newPassword, setNewPassword] = useState('')
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [addAdminId, setAddAdminId] = useState('')
-  const [changeFromId, setChangeFromId] = useState('')
-  const [changeToId, setChangeToId] = useState('')
-  const [botToken, setBotToken] = useState('')
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard')
+  // New discount form
+  const [newCode, setNewCode] = useState('');
+  const [newType, setNewType] = useState('percent');
+  const [newValue, setNewValue] = useState('');
+  const [newMin, setNewMin] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  const canManage = authenticated && settings
+  // Support reply
+  const [replyText, setReplyText] = useState<Record<number, string>>({});
 
-  async function loadProtectedData() {
-    const [settingsResponse, statsResponse] = await Promise.all([api.getAdminSettings(), api.getAdminStats()])
-    return { settingsResponse, statsResponse }
-  }
+  // Status update
+  const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
 
   useEffect(() => {
-    let cancelled = false
+    void loadTab(tab);
+  }, [tab]);
 
-    if (authStatus !== 'AUTHENTICATED') {
-      setAuthLoading(authStatus === 'AUTH_LOADING')
-      setAuthenticated(false)
-      setSettings(null)
-      setStats(null)
-      return () => {
-        cancelled = true
-      }
-    }
-
-    if (!isAdmin) {
-      setAuthLoading(false)
-      setAuthenticated(false)
-      setSettings(null)
-      setStats(null)
-      return () => {
-        cancelled = true
-      }
-    }
-
-    setAuthLoading(true)
-
-    async function restoreAdminSession() {
-      let activeRestore = adminRestoreInFlight
-      if (!activeRestore) {
-        const restorePromise = (async () => {
-          try {
-            const { settingsResponse, statsResponse } = await loadProtectedData()
-            return {
-              authenticated: true,
-              settings: settingsResponse,
-              stats: statsResponse,
-            } satisfies AdminRestoreState
-          } catch {
-            return { authenticated: false, settings: null, stats: null } satisfies AdminRestoreState
-          }
-        })()
-
-        adminRestoreInFlight = restorePromise
-        void restorePromise.finally(() => {
-          if (adminRestoreInFlight === restorePromise) {
-            adminRestoreInFlight = null
-          }
-        })
-        activeRestore = restorePromise
-      }
-
-      try {
-        const state = await activeRestore
-        if (cancelled) return
-
-        setAuthenticated(state.authenticated)
-        setSettings(state.settings)
-        setStats(state.stats)
-      } catch {
-        if (cancelled) return
-        setAuthenticated(false)
-        setSettings(null)
-        setStats(null)
-      } finally {
-        if (!cancelled) {
-          setAuthLoading(false)
-        }
-      }
-    }
-
-    void restoreAdminSession()
-    return () => {
-      cancelled = true
-    }
-  }, [authStatus, isAdmin])
-
-  async function handleLogin() {
-    if (!password || authActionLoading) return
-    setAuthActionLoading(true)
-    setStatus(null)
+  async function loadTab(t: Tab) {
+    setError(null);
     try {
-      const response = await api.adminLogin({ password })
-      setSettings(response.settings)
-      setAuthenticated(true)
-      setPassword('')
-      const statsResponse = await api.getAdminStats()
-      setStats(statsResponse)
-      setStatus({ tone: 'success', message: 'Administrator session started.' })
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.code === 'configuration_error') {
-          setStatus({ tone: 'error', message: 'Server admin configuration is incomplete. Contact support.' })
-        } else if (error.code === 'invalid_credentials') {
-          setStatus({ tone: 'error', message: 'Invalid administrator password.' })
-        } else if (error.code === 'invalid_session_token') {
-          setStatus({ tone: 'error', message: 'Telegram session expired. Reopen the Mini App and try again.' })
-        } else {
-          setStatus({ tone: 'error', message: resolveApiErrorMessage(error, t, 'request_failed') })
-        }
-      } else {
-        setStatus({ tone: 'error', message: 'Login failed' })
+      if (t === 'stats') {
+        const r = await api.getAdminStats();
+        setStats(r);
+      } else if (t === 'orders') {
+        setOrdersLoading(true);
+        const r = await api.getAdminOrders(1, orderFilter || undefined);
+        setOrders(r.orders);
+        setOrdersLoading(false);
+      } else if (t === 'discounts') {
+        const r = await api.getAdminDiscounts();
+        setDiscounts(r.discounts);
+      } else if (t === 'support') {
+        const r = await api.getAdminSupportTickets();
+        setTickets(r.tickets);
+      } else if (t === 'audit') {
+        const r = await api.getAuditLogs();
+        setAuditLogs(r.logs);
       }
-    } finally {
-      setAuthActionLoading(false)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error loading data');
     }
   }
 
-  async function handleLogout() {
-    setLoading(true)
+  async function handleStatusChange(orderId: number, status: string) {
+    setUpdatingOrder(orderId);
     try {
-      await api.adminLogout()
+      const r = await api.updateAdminOrderStatus(orderId, status);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? r.order : o)));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to update status');
+    } finally {
+      setUpdatingOrder(null);
+    }
+  }
+
+  async function handleCreateDiscount() {
+    if (creating || !newCode || !newValue) return;
+    setCreating(true);
+    try {
+      const r = await api.createAdminDiscount({
+        code: newCode,
+        type: newType,
+        value: Number(newValue),
+        minOrderAmount: newMin ? Number(newMin) : 0,
+      });
+      setDiscounts((prev) => [r.discount, ...prev]);
+      setNewCode(''); setNewValue(''); setNewMin('');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to create discount');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleAdminReply(ticketId: number) {
+    const msg = replyText[ticketId]?.trim();
+    if (!msg) return;
+    try {
+      const r = await api.adminReplySupportTicket(ticketId, msg);
+      setTickets((prev) => prev.map((tk) => (tk.id === ticketId ? r.ticket : tk)));
+      setReplyText((prev) => ({ ...prev, [ticketId]: '' }));
     } catch {
-      // no-op
-    } finally {
-      setAuthenticated(false)
-      setSettings(null)
-      setLoading(false)
-      setStatus({ tone: 'info', message: 'Administrator session closed.' })
+      // ignore
     }
   }
-
-  async function refreshSettings(successMessage?: string) {
-    const next = await api.getAdminSettings()
-    setSettings(next)
-    if (successMessage) setStatus({ tone: 'success', message: successMessage })
-  }
-
-  async function handlePasswordChange() {
-    if (!newPassword.trim()) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.updateAdminPassword({ currentPassword, newPassword })
-      setCurrentPassword('')
-      setNewPassword('')
-      await refreshSettings('Password saved successfully.')
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Password update failed' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleAddAdmin() {
-    if (!/^\d+$/.test(addAdminId.trim())) {
-      setStatus({ tone: 'error', message: 'Telegram ID must contain only digits.' })
-      return
-    }
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.addAdministrator(addAdminId.trim())
-      setAddAdminId('')
-      await refreshSettings('Administrator added.')
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to add administrator' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleChangeAdmin() {
-    if (!/^\d+$/.test(changeFromId.trim()) || !/^\d+$/.test(changeToId.trim())) {
-      setStatus({ tone: 'error', message: 'Telegram IDs must contain only digits.' })
-      return
-    }
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.changeAdministrator(changeFromId.trim(), changeToId.trim())
-      setChangeFromId('')
-      setChangeToId('')
-      await refreshSettings('Administrator Telegram ID updated.')
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to update administrator' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleRemoveAdmin(id: string) {
-    if (!confirm(`Remove administrator ${id}?`)) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.removeAdministrator(id)
-      await refreshSettings('Administrator removed.')
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to remove administrator' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleSaveBot() {
-    if (!botToken.trim()) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      if (settings?.bot.connected) {
-        await api.changeAdminBot(botToken.trim())
-      } else {
-        await api.connectAdminBot(botToken.trim())
-      }
-      setBotToken('')
-      await refreshSettings('Telegram bot token saved and validated.')
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to save bot token' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleTestBot() {
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.testAdminBot()
-      await refreshSettings('Telegram bot connection is healthy.')
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Connection test failed' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleDisconnectBot() {
-    if (!settings?.bot.connected) return
-    setLoading(true)
-    setStatus(null)
-    try {
-      await api.disconnectAdminBot()
-      await refreshSettings('Bot disconnected.')
-    } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to disconnect bot' })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const botStatusLabel = useMemo(() => {
-    if (!settings) return 'Disconnected'
-    if (settings.bot.connected) return 'Connected'
-    return 'Disconnected'
-  }, [settings])
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}>Administration</h1>
+      <h1 className={styles.title}>⚙️ Admin Panel</h1>
 
-      {status && <div className={`${styles.alert} ${styles[status.tone]}`}>{status.message}</div>}
+      {error && <p className={styles.error}>{error}</p>}
 
-      {!authLoading && canManage && (
-        <div className={styles.tabBar}>
-          {[
-            ['dashboard', 'Dashboard'],
-            ['products', 'Products'],
-            ['cities', 'Cities'],
-            ['categories', 'Categories'],
-            ['administrators', 'Admins'],
-            ['bot', 'Bot'],
-            ['security', 'Security'],
-          ].map(([tab, label]) => (
-            <button
-              key={tab}
-              type="button"
-              className={`${styles.tabButton} ${activeTab === tab ? styles.tabButtonActive : ''}`}
-              onClick={() => setActiveTab(tab as AdminTab)}
-            >
-              {label}
+      <div className={styles.tabs}>
+        {(['stats', 'orders', 'discounts', 'support', 'audit'] as Tab[]).map((tabName) => (
+          <button
+            key={tabName}
+            className={`${styles.tab} ${tab === tabName ? styles.tabActive : ''}`}
+            onClick={() => setTab(tabName)}
+          >
+            {t(`admin.tab_${tabName}`, { defaultValue: tabName })}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'stats' && stats && (
+        <div className={styles.stats}>
+          <div className={styles.statCard}><span className={styles.statValue}>{stats.totalOrders}</span><span>{t('admin.totalOrders', { defaultValue: 'Total Orders' })}</span></div>
+          <div className={styles.statCard}><span className={styles.statValue}>{stats.pendingOrders}</span><span>{t('admin.pendingOrders', { defaultValue: 'Pending' })}</span></div>
+          <div className={styles.statCard}><span className={styles.statValue}>{stats.totalUsers}</span><span>{t('admin.totalUsers', { defaultValue: 'Users' })}</span></div>
+          <div className={styles.statCard}><span className={styles.statValue}>{formatCurrency(stats.totalRevenue, language)}</span><span>{t('admin.revenue', { defaultValue: 'Revenue' })}</span></div>
+        </div>
+      )}
+
+      {tab === 'orders' && (
+        <div>
+          <div className={styles.filterRow}>
+            <select className={styles.filterSelect} value={orderFilter} onChange={(e) => setOrderFilter(e.target.value)}>
+              <option value="">{t('admin.allStatuses', { defaultValue: 'All statuses' })}</option>
+              {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button className={styles.filterBtn} onClick={() => void loadTab('orders')}>
+              {t('admin.filter', { defaultValue: 'Filter' })}
             </button>
+          </div>
+          {ordersLoading ? <p className={styles.loading}>Loading...</p> : (
+            <div className={styles.orderList}>
+              {orders.map((order) => (
+                <div key={order.id} className={styles.orderCard}>
+                  <div className={styles.orderHeader}>
+                    <span className={styles.orderId}>#{order.id}</span>
+                    <span className={styles.orderTotal}>{formatCurrency(order.total, language)}</span>
+                  </div>
+                  <p className={styles.orderMeta}>{new Date(order.createdAt).toLocaleString()} • {order.items.length} items</p>
+                  <div className={styles.statusRow}>
+                    <select
+                      className={styles.statusSelect}
+                      value={order.status}
+                      onChange={(e) => void handleStatusChange(order.id, e.target.value)}
+                      disabled={updatingOrder === order.id}
+                    >
+                      {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    {order.refundStatus && (
+                      <span className={styles.refundTag}>Refund: {order.refundStatus}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'discounts' && (
+        <div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>{t('admin.createDiscount', { defaultValue: 'Create discount code' })}</h3>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Code" value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} />
+              <select className={styles.select} value={newType} onChange={(e) => setNewType(e.target.value)}>
+                <option value="percent">%</option>
+                <option value="fixed">Fixed</option>
+              </select>
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} type="number" placeholder="Value" value={newValue} onChange={(e) => setNewValue(e.target.value)} />
+              <input className={styles.input} type="number" placeholder="Min order" value={newMin} onChange={(e) => setNewMin(e.target.value)} />
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleCreateDiscount()} disabled={creating || !newCode || !newValue}>
+              {creating ? 'Creating...' : 'Create'}
+            </button>
+          </div>
+          <div className={styles.discountList}>
+            {discounts.map((d) => (
+              <div key={d.id} className={styles.discountCard}>
+                <span className={styles.discountCode}>{d.code}</span>
+                <span>{d.value}{d.type === 'percent' ? '%' : ' fix'}</span>
+                <span>{t('admin.minOrder', { defaultValue: 'Min' })}: {d.minOrderAmount}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'support' && (
+        <div className={styles.ticketList}>
+          {tickets.map((ticket) => (
+            <div key={ticket.id} className={styles.ticketCard}>
+              <div className={styles.ticketHeader}>
+                <span className={styles.ticketSubject}>{ticket.subject}</span>
+                <span className={styles.ticketStatus}>{ticket.status}</span>
+              </div>
+              <p className={styles.ticketMsg}>{ticket.message}</p>
+              {ticket.replies.map((r) => (
+                <div key={r.id} className={`${styles.reply} ${r.isAdmin ? styles.replyAdmin : styles.replyUser}`}>
+                  <strong>{r.isAdmin ? 'Admin' : 'User'}</strong>: {r.message}
+                </div>
+              ))}
+              <div className={styles.replyRow}>
+                <input
+                  className={styles.input}
+                  placeholder="Reply..."
+                  value={replyText[ticket.id] ?? ''}
+                  onChange={(e) => setReplyText((prev) => ({ ...prev, [ticket.id]: e.target.value }))}
+                />
+                <button className={styles.replyBtn} onClick={() => void handleAdminReply(ticket.id)}>
+                  Send
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {authLoading && (
-        <section className={styles.card}>
-          <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
-          <p className={styles.help}>{t('common.loading')}</p>
-        </section>
-      )}
-
-      {!authLoading && authStatus === 'AUTHENTICATED' && !isAdmin && (
-        <section className={styles.card}>
-          <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
-          <p className={styles.help}>This Telegram account does not have administrator access.</p>
-        </section>
-      )}
-
-      {!authLoading && isAdmin && !authenticated && (
-        <section className={styles.card}>
-          <h2 className={styles.cardTitle}><ShieldIcon /> Admin authorization</h2>
-          <p className={styles.help}>Administrator access for Telegram ID {user?.telegramId ?? '—'}.</p>
-          <div className={styles.formRow}>
-            <input className={styles.input} value={user?.telegramId ?? ''} readOnly aria-label="Authenticated Telegram ID" />
-          </div>
-          <div className={styles.formRow}>
-            <input className={styles.input} type="password" placeholder="Administrator password" value={password} onChange={(event) => setPassword(event.target.value)} />
-          </div>
-          <button className={styles.primaryButton} onClick={() => void handleLogin()} disabled={authActionLoading || !password}>
-            {authActionLoading ? t('common.loading') : 'Login to administration'}
-          </button>
-        </section>
-      )}
-
-      {!authLoading && canManage && (
-        <>
-          {(activeTab === 'cities') && (
-            <CitiesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
-          )}
-          {(activeTab === 'categories') && (
-            <CategoriesSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
-          )}
-          {(activeTab === 'products') && (
-            <ProductsSection setStatus={setStatus} loading={loading} setLoading={setLoading} />
-          )}
-
-          {(activeTab === 'security') && <section className={styles.card}>
-            <h2 className={styles.cardTitle}><ShieldIcon /> Security</h2>
-            <p className={styles.help}>Use a strong administrator password and rotate it regularly.</p>
-            <div className={styles.formRow}>
-              <input className={styles.input} type="password" placeholder="Current password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
-              <input className={styles.input} type="password" placeholder="New password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+      {tab === 'audit' && (
+        <div className={styles.auditList}>
+          {auditLogs.map((log) => (
+            <div key={log.id} className={styles.auditRow}>
+              <span className={styles.auditAction}>{log.action}</span>
+              {log.entity && <span className={styles.auditEntity}>{log.entity}#{log.entityId}</span>}
+              {log.meta && <span className={styles.auditMeta}>{log.meta}</span>}
+              <span className={styles.auditDate}>{new Date(log.createdAt).toLocaleString()}</span>
             </div>
-            <div className={styles.actions}>
-              <button className={styles.primaryButton} onClick={() => void handlePasswordChange()} disabled={loading || !newPassword.trim()}>
-                Save password
-              </button>
-              <button className={styles.ghostButton} onClick={() => void handleLogout()} disabled={loading}>
-                Logout
-              </button>
-            </div>
-          </section>}
-
-          {(activeTab === 'administrators') && <section className={styles.card}>
-            <h2 className={styles.cardTitle}><ShieldIcon /> Administrators</h2>
-            <p className={styles.help}>Current authorized Telegram IDs.</p>
-            <ul className={styles.adminList}>
-              {settings.administrators.map((id) => (
-                <li key={id} className={styles.adminItem}>
-                  <span>{id}</span>
-                  <button className={styles.removeButton} onClick={() => void handleRemoveAdmin(id)} disabled={loading}>Remove</button>
-                </li>
-              ))}
-            </ul>
-            <div className={styles.formRow}>
-              <input className={styles.input} placeholder="Add Telegram ID" value={addAdminId} onChange={(event) => setAddAdminId(event.target.value)} />
-              <button className={styles.primaryButton} onClick={() => void handleAddAdmin()} disabled={loading || !addAdminId.trim()}>Add</button>
-            </div>
-            <div className={styles.formRow}>
-              <input className={styles.input} placeholder="Current Telegram ID" value={changeFromId} onChange={(event) => setChangeFromId(event.target.value)} />
-              <input className={styles.input} placeholder="New Telegram ID" value={changeToId} onChange={(event) => setChangeToId(event.target.value)} />
-              <button className={styles.primaryButton} onClick={() => void handleChangeAdmin()} disabled={loading || !changeFromId.trim() || !changeToId.trim()}>Change</button>
-            </div>
-          </section>}
-
-          {(activeTab === 'bot') && <section className={styles.card}>
-            <h2 className={styles.cardTitle}><BotIcon /> Telegram bot</h2>
-            <p className={styles.help}>Status: <strong>{botStatusLabel}</strong></p>
-            {settings.bot.connected && (
-              <p className={styles.help}>Connected bot: @{settings.bot.bot.username} ({settings.bot.bot.firstName})</p>
-            )}
-            <p className={styles.help}>Token: {settings.bot.tokenMasked ?? 'not configured'}</p>
-            <div className={styles.formRow}>
-              <input className={styles.input} type="password" placeholder="Telegram Bot Token" value={botToken} onChange={(event) => setBotToken(event.target.value)} />
-              <button className={styles.primaryButton} onClick={() => void handleSaveBot()} disabled={loading || !botToken.trim()}>
-                Save / Connect Bot
-              </button>
-            </div>
-            <div className={styles.actions}>
-              <button className={styles.ghostButton} onClick={() => void handleTestBot()} disabled={loading || !settings.bot.connected}>Test connection</button>
-              <button className={styles.removeButton} onClick={() => void handleDisconnectBot()} disabled={loading || !settings.bot.connected}>Disconnect</button>
-            </div>
-          </section>}
-
-          {(activeTab === 'dashboard') && (
-            <section className={styles.card}>
-              <h2 className={styles.cardTitle}>Shop statistics</h2>
-              {stats ? (
-                <div className={styles.statsGrid}>
-                  <article className={styles.statCard}><span>Total orders</span><strong>{stats.totalOrders}</strong></article>
-                  <article className={styles.statCard}><span>Pending orders</span><strong>{stats.pendingOrders}</strong></article>
-                  <article className={styles.statCard}><span>Total users</span><strong>{stats.totalUsers}</strong></article>
-                  <article className={styles.statCard}><span>Revenue</span><strong>{stats.totalRevenue.toFixed(2)}</strong></article>
-                </div>
-              ) : (
-                <p className={styles.help}>Statistics are unavailable. Re-authenticate and retry.</p>
-              )}
-              <div className={styles.actions}>
-                <button className={styles.ghostButton} onClick={() => void handleLogout()} disabled={loading}>
-                  Logout
-                </button>
-              </div>
-            </section>
-          )}
-        </>
+          ))}
+        </div>
       )}
     </div>
-  )
+  );
 }

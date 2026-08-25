@@ -304,57 +304,6 @@ model UserActivityLog {
   @@map("user_activity_logs")
 }
 
-model Administrator {
-  id         Int      @id @default(autoincrement())
-  telegramId String   @unique @map("telegram_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  sessions AdminSession[]
-
-  @@map("administrators")
-}
-
-model AdminSecurity {
-  id             Int      @id @default(autoincrement())
-  passwordHash   String   @map("password_hash")
-  passwordSalt   String   @map("password_salt")
-  passwordAlgo   String   @default("scrypt") @map("password_algo")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  updatedByAdmin Int?     @map("updated_by_admin")
-
-  @@map("admin_security")
-}
-
-model AdminSession {
-  id             Int           @id @default(autoincrement())
-  adminId        Int           @map("admin_id")
-  tokenHash      String        @unique @map("token_hash")
-  expiresAt      DateTime      @map("expires_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  lastActivityAt DateTime      @default(now()) @map("last_activity_at")
-  revokedAt      DateTime?     @map("revoked_at")
-
-  admin Administrator @relation(fields: [adminId], references: [id], onDelete: Cascade)
-
-  @@index([adminId, expiresAt])
-  @@map("admin_sessions")
-}
-
-model BotConfig {
-  id              Int       @id @default(autoincrement())
-  botId           String    @map("bot_id")
-  botUsername     String    @map("bot_username")
-  botFirstName    String    @map("bot_first_name")
-  encryptedToken  String    @map("encrypted_token")
-  enabled         Boolean   @default(true)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  lastValidatedAt DateTime? @map("last_validated_at")
-
-  @@map("bot_configs")
-}
-
 model DeliveryOption {
   id          Int      @id @default(autoincrement())
   name        String

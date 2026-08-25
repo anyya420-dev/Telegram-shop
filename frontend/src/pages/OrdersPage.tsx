@@ -27,7 +27,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     void fetchOrders();
-  }, [fetchOrders]);
+  }, []);
 
   if (ordersLoading) {
     return (

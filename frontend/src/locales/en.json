@@ -11,12 +11,12 @@
   },
   "home": {
     "title": "Shop",
-    "featured": "Featured",
-    "newest": "New arrivals",
-    "popular": "Popular",
+    "featured": "🔥 Featured",
+    "newest": "✨ New arrivals",
+    "popular": "⭐ Popular",
     "viewAll": "All →",
     "categories": "Categories",
-    "searchPlaceholder": "Search products..."
+    "searchPlaceholder": "🔍 Search products..."
   },
   "catalog": {
     "title": "Catalog",
@@ -27,14 +27,14 @@
     "sortPriceDesc": "Price ↓",
     "sortPopular": "Popular",
     "empty": "No products found",
-    "searchPlaceholder": "Search products...",
+    "searchPlaceholder": "🔍 Search products...",
     "clearSearch": "Clear search",
     "resetFilters": "Reset filters",
     "nothingFound": "Nothing found for your request"
   },
   "shop": {
     "title": "Shop",
-    "searchPlaceholder": "Search products...",
+    "searchPlaceholder": "🔍 Search products...",
     "allCategories": "All",
     "loading": "Loading...",
     "empty": "No products found"
@@ -45,8 +45,8 @@
     "outOfStock": "Out of stock",
     "quantity": "Quantity",
     "total": "Total",
-    "addToCart": "Add to cart",
-    "updateCart": "Update cart",
+    "addToCart": "🛒 Add to cart",
+    "updateCart": "🛒 Update cart",
     "added": "✓ Added",
     "adding": "Adding...",
     "goToCart": "Go to cart →",
@@ -80,11 +80,11 @@
     "delivery": "Delivery",
     "orderTotal": "Total",
     "soon": "— (soon)",
-    "checkout": "Checkout",
+    "checkout": "💳 Checkout",
     "checkingOut": "Placing order...",
     "checkoutFailed": "Could not place order. Please try again.",
     "checkoutNote": "Payment will be available in the next version",
-    "recommended": "You might also like",
+    "recommended": "🔥 You might also like",
     "discountCode": "Promo code",
     "applyCode": "Apply",
     "invalidDiscount": "Invalid or expired code",
@@ -118,20 +118,17 @@
     "ordersCount_one": "{{count}} order",
     "ordersCount_other": "{{count}} orders",
     "language": "Language",
-    "selectCity": "Select city",
+    "selectCity": "📍 Select city",
     "cancel": "Cancel",
-    "languageRu": "Russian",
-    "languageEn": "English",
+    "languageRu": "🇷🇺 Russian",
+    "languageEn": "🇬🇧 English",
     "telegramWebAppOnly": "Open this store from Telegram Web App for full account features."
   },
   "city": {
     "title": "Select city",
     "subtitle": "The product catalog depends on the selected city",
     "loading": "Loading...",
-    "empty": "No cities available yet",
-    "chooseLater": "Choose later",
-    "selectAction": "Choose city",
-    "productsAfterSelection": "Products will become available after selecting a city."
+    "empty": "No cities available yet"
   },
   "balance": {
     "title": "Balance",
@@ -160,10 +157,10 @@
     "bet": "Bet amount",
     "target": "Pick a number",
     "hint": "If the dice matches your number, you win 5× your bet",
-    "spin": "Roll dice",
+    "spin": "🎲 Roll dice",
     "rolling": "Rolling...",
-    "won": "You won {{payout}}!",
-    "lost": "You lost {{bet}}",
+    "won": "🎉 You won {{payout}}!",
+    "lost": "😢 You lost {{bet}}",
     "history": "Recent games",
     "error": "Spin failed"
   },
@@ -194,13 +191,11 @@
     "addToCart": "Add to cart",
     "outOfStock": "Out of stock",
     "close": "Close",
-    "retry": "Retry",
-    "yes": "Yes",
-    "no": "No"
+    "retry": "Retry"
   },
   "cityPicker": {
     "badge": "Location",
-    "title": "Choose a city",
+    "title": "📍 Choose a city",
     "helper": "Catalog, stock, and quantity steps depend on the selected city.",
     "changeCity": "Change city",
     "cityChangeNotice": "When you change the city, the cart is cleared so products from different locations are not mixed."
@@ -279,25 +274,6 @@
     "language_update_failed": "Failed to save the language.",
     "checkout_failed": "Failed to place the order.",
     "orders_fetch_failed": "Failed to load orders.",
-    "cart_empty": "Cart is empty.",
-    "unauthorized": "Authorization required. Reopen the app and try again.",
-    "forbidden": "You do not have permission for this action.",
-    "not_found": "Requested data was not found.",
-    "conflict": "Data conflict detected. Refresh and try again.",
-    "validation_failed": "Please check your input and try again.",
-    "server_error": "Temporary server error. Please try again later.",
-    "service_unavailable": "Service is temporarily unavailable. Please try again later.",
-    "invalid_admin_session": "Administrator session expired. Sign in again.",
-    "cors_blocked": "The browser blocked the request to the server (CORS).",
-    "api_not_configured": "The app was built without an API address. Please contact the administrator.",
-    "request_timeout": "The server did not respond in time. Please try again.",
-    "server_unreachable": "The server is unreachable. Please try again in a minute.",
-    "cors_origin_not_allowed": "The server rejected the request from this address. Please contact the administrator.",
-    "invalid_request_body": "Invalid request."
-  },
-  "diagnostics": {
-    "origin": "App origin",
-    "code": "Error code",
-    "config": "Configuration"
+    "cart_empty": "Cart is empty."
   }
 }

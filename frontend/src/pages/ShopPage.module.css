@@ -121,8 +121,7 @@
 .loadingState {
   display: flex;
   justify-content: center;
-  margin-top: 40px;
-  margin-bottom: 8px;
+  margin-top: 60px;
 }
 
 .spinner {
@@ -140,9 +139,8 @@
 
 .empty {
   text-align: center;
-  margin-top: 40px;
+  margin-top: 60px;
   color: var(--text-muted);
-  padding: 0 8px;
 }
 
 .emptyIcon {
@@ -156,39 +154,4 @@
   border-radius: 50%;
   color: var(--text-muted);
   margin: 0 auto 14px;
-}
-
-.selectCityBtn {
-  margin-top: 10px;
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.errorState {
-  margin-top: 20px;
-  margin-bottom: 8px;
-  padding: 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 108, 145, 0.28);
-  background: rgba(143, 25, 56, 0.22);
-  color: #ffb4c0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.retryBtn {
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
 }

@@ -8,7 +8,6 @@ import { formatCurrency } from '../lib/format';
 import { getLocalizedCityName } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { DeliveryOption, Language } from '../types';
-import { resolveApiErrorMessage } from '../lib/errors';
 
 export default function CheckoutPage() {
   const { cart, user, checkout } = useApp();
@@ -35,7 +34,7 @@ export default function CheckoutPage() {
       const response = await api.getDeliveryOptions();
       setDeliveryOptions(response.options);
     } catch (err) {
-      setDeliveryError(resolveApiErrorMessage(err, t, 'request_failed'));
+      setDeliveryError(err instanceof Error ? err.message : t('errors.request_failed'));
     } finally {
       setDeliveryLoading(false);
     }
@@ -63,7 +62,7 @@ export default function CheckoutPage() {
       setDiscountAmount(response.discountAmount);
     } catch (err) {
       setDiscountAmount(0);
-      setDiscountError(resolveApiErrorMessage(err, t, 'request_failed'));
+      setDiscountError(err instanceof Error ? err.message : t('cart.invalidDiscount'));
     } finally {
       setValidatingDiscount(false);
     }
@@ -85,7 +84,7 @@ export default function CheckoutPage() {
       });
       setSuccessOrderId(order.id);
     } catch (err) {
-      setSubmitError(resolveApiErrorMessage(err, t, 'checkout_failed'));
+      setSubmitError(err instanceof Error ? err.message : t('cart.checkoutFailed'));
     } finally {
       setSubmitting(false);
     }

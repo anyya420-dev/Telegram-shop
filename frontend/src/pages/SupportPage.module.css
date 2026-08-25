@@ -7,12 +7,11 @@
   font-size: 22px;
   font-weight: 700;
   margin-bottom: 20px;
-  color: var(--text-primary);
+  color: var(--tg-theme-text-color, #000);
 }
 
 .form {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--tg-theme-secondary-bg-color, #f0f0f0);
   border-radius: 16px;
   padding: 16px;
   margin-bottom: 24px;
@@ -25,15 +24,15 @@
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 4px;
-  color: var(--text-primary);
+  color: var(--tg-theme-text-color, #000);
 }
 
 .input {
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--tg-theme-hint-color, #ccc);
   border-radius: 10px;
-  background: var(--bg-input);
-  color: var(--text-primary);
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #000);
   font-size: 14px;
   width: 100%;
   box-sizing: border-box;
@@ -41,10 +40,10 @@
 
 .textarea {
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--tg-theme-hint-color, #ccc);
   border-radius: 10px;
-  background: var(--bg-input);
-  color: var(--text-primary);
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #000);
   font-size: 14px;
   resize: vertical;
   width: 100%;
@@ -52,8 +51,8 @@
 }
 
 .submitBtn {
-  background: var(--accent);
-  color: #fff;
+  background: var(--tg-theme-button-color, #7C3AED);
+  color: var(--tg-theme-button-text-color, #fff);
   border: none;
   border-radius: 12px;
   padding: 12px;
@@ -83,28 +82,23 @@
 }
 
 .ticket {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--tg-theme-secondary-bg-color, #f0f0f0);
   border-radius: 12px;
   overflow: hidden;
 }
 
 .ticketHeader {
   display: flex;
-  width: 100%;
-  border: 0;
-  background: transparent;
   justify-content: space-between;
   align-items: center;
   padding: 12px 14px;
   cursor: pointer;
-  text-align: left;
 }
 
 .ticketSubject {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--tg-theme-text-color, #000);
   margin-bottom: 4px;
 }
 
@@ -121,19 +115,19 @@
 .status_closed { background: #e2e8f0; color: #4a5568; }
 
 .ticketArrow {
-  color: var(--text-muted);
+  color: var(--tg-theme-hint-color, #888);
   font-size: 12px;
 }
 
 .ticketBody {
   padding: 0 14px 14px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--tg-theme-hint-color, #ccc);
   padding-top: 12px;
 }
 
 .ticketMsg {
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--tg-theme-text-color, #000);
   margin-bottom: 10px;
   white-space: pre-wrap;
 }
@@ -162,8 +156,8 @@
 }
 
 .replyBtn {
-  background: var(--accent);
-  color: #fff;
+  background: var(--tg-theme-button-color, #7C3AED);
+  color: var(--tg-theme-button-text-color, #fff);
   border: none;
   border-radius: 8px;
   padding: 8px 14px;
@@ -175,35 +169,4 @@
 
 .replyBtn:disabled {
   opacity: 0.5;
-}
-
-.placeholder {
-  padding: 14px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.loadError {
-  padding: 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 108, 145, 0.28);
-  background: rgba(143, 25, 56, 0.22);
-  color: #ffb4c0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-
-.retryBtn {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
 }

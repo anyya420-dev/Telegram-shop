@@ -7,7 +7,6 @@ import styles from './CatalogPage.module.css';
 import { getLocalizedCategoryName } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
-import { resolveApiErrorMessage } from '../lib/errors';
 
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'popular';
 
@@ -29,11 +28,7 @@ export default function CatalogPage() {
   const language = i18n.language as Language;
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const rawCategoryId = searchParams.get('categoryId');
-  const parsedCategoryId = rawCategoryId ? Number(rawCategoryId) : null;
-  const initCategory = typeof parsedCategoryId === 'number' && Number.isFinite(parsedCategoryId) && parsedCategoryId > 0
-    ? parsedCategoryId
-    : null;
+  const initCategory = searchParams.get('categoryId') ? Number(searchParams.get('categoryId')) : null;
   const initSearch = searchParams.get('search') || '';
   const initSort = (searchParams.get('sort') as SortOption) || 'newest';
 
@@ -51,7 +46,7 @@ export default function CatalogPage() {
     try {
       await refreshCatalog(s, cat);
     } catch (err) {
-      setCatalogError(resolveApiErrorMessage(err, t, 'catalog_refresh_failed'));
+      setCatalogError(err instanceof Error ? err.message : t('errors.catalog_refresh_failed'));
     } finally {
       setLoading(false);
     }
@@ -60,16 +55,6 @@ export default function CatalogPage() {
   useEffect(() => {
     void doRefresh(initSearch, initCategory ?? 'all');
   }, []);
-
-  useEffect(() => {
-    if (activeCategoryId === 'all') {
-      return;
-    }
-
-    if (!categories.some((category) => category.id === activeCategoryId)) {
-      setActiveCategoryId('all');
-    }
-  }, [activeCategoryId, categories]);
 
   useEffect(() => {
     if (!user?.selectedCityId) return;
@@ -104,11 +89,8 @@ export default function CatalogPage() {
   if (!user?.selectedCityId) {
     return (
       <div className={styles.empty}>
-        <div className={styles.emptyIcon}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg></div>
-        <p>{t('city.productsAfterSelection')}</p>
-        <button className={styles.cityActionBtn} onClick={() => navigate('/select-city')} type="button">
-          {t('city.selectAction')}
-        </button>
+        <div className={styles.emptyIcon}>📍</div>
+        <p>{t('city.subtitle')}</p>
       </div>
     );
   }
@@ -117,14 +99,9 @@ export default function CatalogPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>{t('catalog.title')}</h1>
-        <div className={styles.headerActions}>
-          <button className={styles.cityActionBtn} onClick={() => navigate('/select-city')} type="button">
-            {t('city.selectAction')}
-          </button>
-          <button className={styles.sortBtn} onClick={() => setShowSort(true)}>
-            ⇅ {sortLabels[sort]}
-          </button>
-        </div>
+        <button className={styles.sortBtn} onClick={() => setShowSort(true)}>
+          ⇅ {sortLabels[sort]}
+        </button>
       </div>
 
       <div className={styles.searchWrap}>
@@ -152,8 +129,7 @@ export default function CatalogPage() {
       <div className={styles.catScroll}>
         <button
           className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
-          onClick={() => setActiveCategoryId('all')}
-          type="button"
+          onClick={() => { setActiveCategoryId('all'); void doRefresh(search, 'all'); }}
         >
           {t('catalog.allCategories')}
         </button>
@@ -161,8 +137,7 @@ export default function CatalogPage() {
           <button
             key={cat.id}
             className={`${styles.catBtn} ${activeCategoryId === cat.id ? styles.catActive : ''}`}
-            onClick={() => setActiveCategoryId(cat.id)}
-            type="button"
+            onClick={() => { setActiveCategoryId(cat.id); void doRefresh(search, cat.id); }}
           >
             {getLocalizedCategoryName(cat, language)}
           </button>
@@ -176,9 +151,9 @@ export default function CatalogPage() {
             setSearch('');
             setSort('newest');
             setActiveCategoryId('all');
+            void doRefresh('', 'all');
           }}
           type="button"
-          disabled={loading}
         >
           {t('catalog.resetFilters')}
         </button>
@@ -205,7 +180,7 @@ export default function CatalogPage() {
         </div>
       ) : sortedProducts.length === 0 ? (
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg></div>
+          <div className={styles.emptyIcon}>🔍</div>
           <p>{search ? t('catalog.nothingFound') : t('catalog.empty')}</p>
         </div>
       ) : (
