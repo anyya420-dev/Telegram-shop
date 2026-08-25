@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { Router } from 'express'
 import { mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
 
@@ -8,17 +9,17 @@ function getCatalogSort(value: unknown): CatalogSort {
   return value === 'price_asc' || value === 'price_desc' || value === 'popular' ? value : 'newest'
 }
 
-function buildCatalogOrderBy(sort: CatalogSort) {
+function buildCatalogOrderBy(sort: CatalogSort): Prisma.ProductCityOrderByWithRelationInput[] {
   switch (sort) {
     case 'price_asc':
-      return [{ product: { price: 'asc' } }, { product: { name: 'asc' } }] as const
+      return [{ product: { price: 'asc' } }, { product: { name: 'asc' } }]
     case 'price_desc':
-      return [{ product: { price: 'desc' } }, { product: { name: 'asc' } }] as const
+      return [{ product: { price: 'desc' } }, { product: { name: 'asc' } }]
     case 'popular':
-      return [{ product: { isRecommended: 'desc' } }, { product: { name: 'asc' } }] as const
+      return [{ product: { isRecommended: 'desc' } }, { product: { name: 'asc' } }]
     case 'newest':
     default:
-      return [{ product: { createdAt: 'desc' } }, { product: { name: 'asc' } }] as const
+      return [{ product: { createdAt: 'desc' } }, { product: { name: 'asc' } }]
   }
 }
 
