@@ -940,80 +940,80 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
       setAuthenticated(false);
       setAdminRole('admin');
     }
+  }
 
-    async function handleCreateAdministrator() {
-      if (adminRole !== 'owner') return;
-      setError(null);
-      try {
-        const response = await api.createAdministrator({ username: newAdminUsername.trim() || undefined });
-        setGeneratedAdminPassword(response.generatedPassword);
-        setNewAdminUsername('');
-        const refreshed = await api.getAdminAdministrators();
-        setAdministrators(refreshed.administrators);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to create administrator'));
-      }
+  async function handleCreateAdministrator() {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.createAdministrator({ username: newAdminUsername.trim() || undefined });
+      setGeneratedAdminPassword(response.generatedPassword);
+      setNewAdminUsername('');
+      const refreshed = await api.getAdminAdministrators();
+      setAdministrators(refreshed.administrators);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to create administrator'));
     }
+  }
 
-    async function handleToggleAdministrator(adminId: number, isActive: boolean) {
-      if (adminRole !== 'owner') return;
-      setError(null);
-      try {
-        const response = await api.updateAdministrator(adminId, { isActive });
-        setAdministrators((current) => current.map((item) => (item.id === adminId ? response.administrator : item)));
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to update administrator'));
-      }
+  async function handleToggleAdministrator(adminId: number, isActive: boolean) {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.updateAdministrator(adminId, { isActive });
+      setAdministrators((current) => current.map((item) => (item.id === adminId ? response.administrator : item)));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update administrator'));
     }
+  }
 
-    async function handleDeleteAdministrator(adminId: number) {
-      if (adminRole !== 'owner') return;
-      setError(null);
-      try {
-        await api.deleteAdministrator(adminId);
-        setAdministrators((current) => current.filter((item) => item.id !== adminId));
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to delete administrator'));
-      }
+  async function handleDeleteAdministrator(adminId: number) {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      await api.deleteAdministrator(adminId);
+      setAdministrators((current) => current.filter((item) => item.id !== adminId));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to delete administrator'));
     }
+  }
 
-    async function handleResetAdministratorPassword(adminId: number) {
-      if (adminRole !== 'owner') return;
-      setError(null);
-      try {
-        const response = await api.resetAdministratorPassword(adminId);
-        setGeneratedAdminPassword(response.generatedPassword);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to reset administrator password'));
-      }
+  async function handleResetAdministratorPassword(adminId: number) {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.resetAdministratorPassword(adminId);
+      setGeneratedAdminPassword(response.generatedPassword);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to reset administrator password'));
     }
+  }
 
-    async function handleSaveShopName() {
-      if (adminRole !== 'owner') return;
-      setError(null);
-      try {
-        const response = await api.updateAdminSettings({ shopName: shopName.trim() });
-        setShopName(response.shopName);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to update shop name'));
-      }
+  async function handleSaveShopName() {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.updateAdminSettings({ shopName: shopName.trim() });
+      setShopName(response.shopName);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update shop name'));
     }
+  }
 
-    async function handleChangePassword(target: 'self' | 'owner') {
-      if (!currentPassword.trim() || !newPassword.trim()) return;
-      setError(null);
-      try {
-        await api.adminChangePassword({
-          currentPassword: currentPassword.trim(),
-          newPassword: newPassword.trim(),
-          target,
-        });
-        setCurrentPassword('');
-        setNewPassword('');
-        setAuthenticated(false);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to change password'));
-      }
+  async function handleChangePassword(target: 'self' | 'owner') {
+    if (!currentPassword.trim() || !newPassword.trim()) return;
+    setError(null);
+    try {
+      await api.adminChangePassword({
+        currentPassword: currentPassword.trim(),
+        newPassword: newPassword.trim(),
+        target,
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setAuthenticated(false);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to change password'));
     }
   }
 

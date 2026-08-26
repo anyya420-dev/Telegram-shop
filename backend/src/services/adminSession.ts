@@ -107,14 +107,6 @@ export async function verifyAdminPassword(password: string, mode: 'admin' | 'own
     return { valid: false as const, reason: 'configuration_error' as const }
   }
 
-  export async function verifyAdminAccountPassword(accountId: number, password: string) {
-    const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
-    if (!account || account.deletedAt || !account.isActive) {
-      return false
-    }
-    return verifyPasswordHash(password, account.passwordSalt, account.passwordHash)
-  }
-
   for (const account of accounts) {
     if (verifyPasswordHash(password, account.passwordSalt, account.passwordHash)) {
       return { valid: true as const, account }
@@ -122,6 +114,14 @@ export async function verifyAdminPassword(password: string, mode: 'admin' | 'own
   }
 
   return { valid: false as const, reason: 'invalid_credentials' as const }
+}
+
+export async function verifyAdminAccountPassword(accountId: number, password: string) {
+  const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
+  if (!account || account.deletedAt || !account.isActive) {
+    return false
+  }
+  return verifyPasswordHash(password, account.passwordSalt, account.passwordHash)
 }
 
 export async function ensureAdminPasswordFromEnv() {

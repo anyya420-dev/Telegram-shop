@@ -86,6 +86,7 @@ function clearAdminCookie(response: Response) {
 }
 
 type AdminContext = {
+  id: number
   sessionId: number
   accountId: number
   role: string
@@ -197,6 +198,7 @@ async function getAdminUser(request: Request, response: Response, options?: { re
   }
 
   const admin = {
+    id: adminAccount.id,
     sessionId: session.id,
     accountId: adminAccount.id,
     role: adminAccount.role,
