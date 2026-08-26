@@ -79,6 +79,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   const citiesReloadInFlightRef = useRef<Promise<City[]> | null>(null)
   const bootstrapRequestInFlightRef = useRef<{ key: string; promise: Promise<BootstrapResponse> } | null>(null)
+  const bootstrapRequestIdRef = useRef(0)
 
   function t(key: string): string {
     return i18n.t(key)
@@ -99,11 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         bootstrapRequestInFlightRef.current = null
       }
     })
-
-    bootstrapRequestInFlightRef.current = {
-      key: requestKey,
-      promise,
-    }
+    bootstrapRequestInFlightRef.current = { key: requestKey, promise }
 
     return promise
   }
@@ -178,6 +175,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    const requestId = bootstrapRequestIdRef.current + 1
+    bootstrapRequestIdRef.current = requestId
+    let disposed = false
+
+    function isCurrentRequest() {
+      return !disposed && bootstrapRequestIdRef.current === requestId
+    }
+
     async function bootstrap() {
       try {
         setLoading(true)
@@ -189,6 +194,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           telegramUser: telegram.user,
           isTelegramEnvironment: telegram.isTelegramEnvironment,
         })
+        if (!isCurrentRequest()) {
+          return
+        }
 
         api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
@@ -208,20 +216,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
             api.getCatalog({ cityId: response.user.selectedCityId }),
             api.getCart(),
           ])
+          if (!isCurrentRequest()) {
+            return
+          }
           setProducts(catalogResponse.products)
           setCart(cartResponse.cart)
           setRecommended(cartResponse.recommended)
           setCartLoading(false)
         }
       } catch (bootstrapError) {
+        if (!isCurrentRequest()) {
+          return
+        }
         setError(translateError(bootstrapError, t, 'shop_load_failed'))
       } finally {
+        if (!isCurrentRequest()) {
+          return
+        }
         setCartLoading(false)
         setLoading(false)
       }
     }
 
     void bootstrap()
+
+    return () => {
+      disposed = true
+    }
   }, [])  // no dependency on setLanguage needed
 
   async function selectCity(cityId: number) {

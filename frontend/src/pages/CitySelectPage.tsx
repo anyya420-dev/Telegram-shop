@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, MapPin } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -32,15 +32,7 @@ export default function CitySelectPage() {
     }
   }, [cities.length])
 
-  useEffect(() => {
-    if (hasInitialLoadAttempt.current || cities.length > 0 || citiesLoading) {
-      return
-    }
-    hasInitialLoadAttempt.current = true
-    void handleReloadCities()
-  }, [cities.length, citiesLoading])
-
-  async function handleReloadCities() {
+  const handleReloadCities = useCallback(async () => {
     if (citiesLoading) {
       return
     }
@@ -54,7 +46,15 @@ export default function CitySelectPage() {
       setLoadState('error')
       setError(loadError instanceof ApiError && loadError.code ? t(`errors.${loadError.code}`) : t('errors.request_failed'))
     }
-  }
+  }, [citiesLoading, reloadCities, t])
+
+  useEffect(() => {
+    if (hasInitialLoadAttempt.current || cities.length > 0 || citiesLoading) {
+      return
+    }
+    hasInitialLoadAttempt.current = true
+    void handleReloadCities()
+  }, [cities.length, citiesLoading, handleReloadCities])
 
   async function handleSelect(cityId: number) {
     setSelecting(cityId)
