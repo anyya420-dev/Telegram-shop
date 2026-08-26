@@ -2384,11 +2384,16 @@ router.post('/bots', authRateLimiter, async (request, response) => {
     sendError(response, 400, 'token_required', 'Bot token is required')
     return
   }
+  if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
+    sendError(response, 400, 'invalid_bot_token', 'Telegram bot token is invalid')
+    return
+  }
 
   let validatedBot: { botId: string; username: string; firstName: string } | null = null
 
   try {
-    const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/getMe`)
+    const validationUrl = new URL(`/bot${encodeURIComponent(token)}/getMe`, 'https://api.telegram.org')
+    const telegramResponse = await fetch(validationUrl)
     const payload = await telegramResponse.json().catch(() => null) as
       | { ok?: boolean; result?: { id?: number | string; username?: string; first_name?: string } }
       | null
