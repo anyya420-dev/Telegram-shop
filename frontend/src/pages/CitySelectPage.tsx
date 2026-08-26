@@ -29,12 +29,8 @@ export default function CitySelectPage() {
   useEffect(() => {
     if (cities.length > 0) {
       setLoadState('success')
-      return
     }
-    if (loadState === 'loading' && !citiesLoading) {
-      setLoadState('empty')
-    }
-  }, [cities.length, citiesLoading, loadState])
+  }, [cities.length])
 
   useEffect(() => {
     if (hasInitialLoadAttempt.current || cities.length > 0 || citiesLoading) {

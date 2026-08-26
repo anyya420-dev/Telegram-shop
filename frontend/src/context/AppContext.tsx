@@ -38,16 +38,9 @@ type AppState = {
 const AppContext = createContext<AppState | null>(null)
 type BootstrapPayload = Parameters<typeof api.bootstrap>[0]
 type BootstrapResponse = Awaited<ReturnType<typeof api.bootstrap>>
-let bootstrapRequestInFlight: Promise<BootstrapResponse> | null = null
 
-function runBootstrapRequest(payload: BootstrapPayload) {
-  if (!bootstrapRequestInFlight) {
-    bootstrapRequestInFlight = api.bootstrap(payload).finally(() => {
-      bootstrapRequestInFlight = null
-    })
-  }
-
-  return bootstrapRequestInFlight
+function getBootstrapRequestKey(payload: BootstrapPayload) {
+  return `${payload.isTelegramEnvironment ? 'telegram' : 'web'}:${payload.initData || 'no-init-data'}`
 }
 
 function emptyCart(): Cart {
@@ -85,6 +78,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   const citiesReloadInFlightRef = useRef<Promise<City[]> | null>(null)
+  const bootstrapRequestInFlightRef = useRef<{ key: string; promise: Promise<BootstrapResponse> } | null>(null)
 
   function t(key: string): string {
     return i18n.t(key)
@@ -92,6 +86,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   function setLanguage(lang: Language) {
     void i18n.changeLanguage(lang)
+  }
+
+  function runBootstrapRequest(payload: BootstrapPayload) {
+    const requestKey = getBootstrapRequestKey(payload)
+    if (bootstrapRequestInFlightRef.current?.key === requestKey) {
+      return bootstrapRequestInFlightRef.current.promise
+    }
+
+    const promise = api.bootstrap(payload).finally(() => {
+      if (bootstrapRequestInFlightRef.current?.key === requestKey) {
+        bootstrapRequestInFlightRef.current = null
+      }
+    })
+
+    bootstrapRequestInFlightRef.current = {
+      key: requestKey,
+      promise,
+    }
+
+    return promise
   }
 
   async function reloadCities() {

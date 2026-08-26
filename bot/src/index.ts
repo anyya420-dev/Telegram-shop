@@ -27,9 +27,14 @@ bot.command('shop', async (context) => {
   })
 })
 
-bot.launch().then(() => {
-  console.log('Telegram bot started')
-})
+bot.launch()
+  .then(() => {
+    console.log('Telegram bot started')
+  })
+  .catch((error) => {
+    console.error('Failed to start Telegram bot:', error)
+    process.exit(1)
+  })
 
 process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))
