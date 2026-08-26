@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin } from 'lucide-react';
+import { ChevronRight, Dices, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
 import { useTranslation } from 'react-i18next';
@@ -77,6 +77,19 @@ export default function HomePage() {
         </div>
       ) : (
         <>
+          <section className={styles.section}>
+            <button className={styles.casinoCard} onClick={() => navigate('/casino')} type="button">
+              <span className={styles.casinoIcon}>
+                <Dices size={20} strokeWidth={1.7} />
+              </span>
+              <span className={styles.casinoContent}>
+                <span className={styles.sectionTitle}>{t('home.casinoTitle', { defaultValue: 'Casino' })}</span>
+                <span className={styles.casinoText}>{t('home.casinoText', { defaultValue: 'Play with separate virtual credits and track every round.' })}</span>
+              </span>
+              <ChevronRight size={18} strokeWidth={1.8} />
+            </button>
+          </section>
+
           {categories.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHeader}>

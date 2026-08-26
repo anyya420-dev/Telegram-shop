@@ -16,7 +16,9 @@
     "popular": "Popular",
     "viewAll": "All",
     "categories": "Categories",
-    "searchPlaceholder": "Search products"
+    "searchPlaceholder": "Search products",
+    "casinoTitle": "Casino",
+    "casinoText": "Play with separate virtual credits and track every round."
   },
   "catalog": {
     "title": "Catalog",
@@ -169,6 +171,8 @@
     "topupSuccess": "Added {{amount}} to your balance",
     "topupError": "Failed to top up",
     "history": "Transaction history",
+    "shopOnly": "Shop balance only",
+    "notice": "This balance is reserved for shop-side adjustments such as refunds. It cannot be topped up, withdrawn, or converted into casino credits.",
     "txType": {
       "topup": "Top up",
       "spend": "Purchase",
@@ -190,7 +194,8 @@
     "won": "You won {{payout}}!",
     "lost": "You lost {{bet}}",
     "history": "Recent games",
-    "error": "Spin failed"
+    "error": "Spin failed",
+    "credits": "Credits"
   },
   "support": {
     "title": "Support",

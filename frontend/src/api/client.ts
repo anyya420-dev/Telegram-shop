@@ -6,6 +6,7 @@ import type {
   AdminProduct,
   AdminStats,
   Balance,
+  CasinoState,
   BootstrapResponse,
   Cart,
   Category,
@@ -159,8 +160,8 @@ export const api = {
   getBalance() {
     return publicRequest<{ balance: Balance }>('/balance')
   },
-  topupBalance(amount: number) {
-    return publicRequest<{ balance: Balance }>('/balance/topup', { method: 'POST', body: JSON.stringify({ amount }) })
+  getCasinoState() {
+    return publicRequest<CasinoState>('/casino')
   },
 
   casinoSpin(bet: number, target: number) {

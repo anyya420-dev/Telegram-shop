@@ -9,17 +9,12 @@ import i18n from '../lib/i18n'
 import type { Language } from '../types'
 import styles from './BalancePage.module.css'
 
-const TOPUP_AMOUNTS = [100, 250, 500, 1000, 2500, 5000]
-
 export default function BalancePage() {
   const { t } = useTranslation()
   const language = i18n.language as Language
   const [balance, setBalance] = useState<Balance | null>(null)
   const [loading, setLoading] = useState(true)
-  const [topping, setTopping] = useState(false)
-  const [customAmount, setCustomAmount] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
 
   async function loadBalance() {
     try {
@@ -38,23 +33,6 @@ export default function BalancePage() {
   useEffect(() => {
     void loadBalance()
   }, [])
-
-  async function handleTopup(amount: number) {
-    if (topping || amount <= 0) return
-    setTopping(true)
-    setError(null)
-    setSuccess(null)
-    try {
-      const response = await api.topupBalance(amount)
-      setBalance(response.balance)
-      setSuccess(t('balance.topupSuccess', { amount: formatCurrency(amount, language) }))
-      setCustomAmount('')
-    } catch (topupError) {
-      setError(getErrorMessage(topupError, t, 'request_failed'))
-    } finally {
-      setTopping(false)
-    }
-  }
 
   if (loading) return <div className={styles.loading}><div className={styles.spinner} /></div>
 
@@ -86,35 +64,9 @@ export default function BalancePage() {
       </div>
 
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('balance.topup')}</h3>
-        <div className={styles.amounts}>
-          {TOPUP_AMOUNTS.map((amount) => (
-            <button key={amount} className={styles.amountBtn} onClick={() => void handleTopup(amount)} disabled={topping} type="button">
-              +{formatCurrency(amount, language)}
-            </button>
-          ))}
-        </div>
-        <div className={styles.customRow}>
-          <input
-            className={styles.customInput}
-            type="number"
-            min="1"
-            max="100000"
-            placeholder={t('balance.customAmount')}
-            value={customAmount}
-            onChange={(event) => setCustomAmount(event.target.value)}
-          />
-          <button
-            className={styles.customBtn}
-            disabled={topping || !customAmount}
-            onClick={() => void handleTopup(Number(customAmount))}
-            type="button"
-          >
-            {t('balance.topupBtn')}
-          </button>
-        </div>
+        <h3 className={styles.sectionTitle}>{t('balance.shopOnly', { defaultValue: 'Shop balance only' })}</h3>
+        <p className={styles.txComment}>{t('balance.notice', { defaultValue: 'This balance is reserved for shop-side adjustments such as refunds. It cannot be topped up, withdrawn, or converted into casino credits.' })}</p>
         {error ? <p className={styles.error}>{error}</p> : null}
-        {success ? <p className={styles.success}>{success}</p> : null}
       </div>
 
       {balance.transactions.length > 0 ? (

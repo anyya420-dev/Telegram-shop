@@ -481,6 +481,65 @@ test('stripe webhook verifies signature, marks payment paid, and ignores duplica
   assert.equal(duplicateBody.duplicated, true)
 })
 
+test('casino credits stay separate from shop balance and direct top-ups are blocked', async () => {
+  const telegramId = '900000012'
+  const user = await prisma.user.create({
+    data: { telegramId, firstName: 'Casino', username: 'casino_user', language: 'ru' },
+  })
+  const balance = await prisma.balance.create({
+    data: { userId: user.id, amount: 42 },
+  })
+  await prisma.balanceTransaction.create({
+    data: { balanceId: balance.id, type: 'refund', amount: 42, comment: 'Refund credit' },
+  })
+
+  const token = createSessionToken!(telegramId)
+
+  const shopBalance = await requestJson('/api/balance', {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(shopBalance.response.status, 200)
+  assert.equal(shopBalance.body.balance.amount, 42)
+  assert.equal(shopBalance.body.balance.transactions.length, 1)
+  assert.equal(shopBalance.body.balance.transactions[0].type, 'refund')
+
+  const blockedTopup = await requestJson('/api/balance/topup', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: 100 }),
+  })
+  assert.equal(blockedTopup.response.status, 403)
+  assert.equal(blockedTopup.body.code, 'balance_topup_disabled')
+
+  const casinoState = await requestJson('/api/casino', {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(casinoState.response.status, 200)
+  assert.equal(casinoState.body.balance.credits, 1000)
+  assert.equal(casinoState.body.history.length, 0)
+
+  const spin = await requestJson('/api/casino/spin', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bet: 25, target: 3 }),
+  })
+  assert.equal(spin.response.status, 200)
+  assert.notEqual(spin.body.balance.credits, 1000)
+
+  const shopBalanceAfter = await requestJson('/api/balance', {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(shopBalanceAfter.response.status, 200)
+  assert.equal(shopBalanceAfter.body.balance.amount, 42)
+  assert.equal(shopBalanceAfter.body.balance.transactions.every((entry: any) => !String(entry.type).startsWith('casino_')), true)
+
+  const casinoHistory = await requestJson('/api/casino/history', {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(casinoHistory.response.status, 200)
+  assert.equal(casinoHistory.body.history.length, 1)
+})
+
 test('cart and checkout enforce quantity, delivery, stock, and cart clearing rules', async () => {
   const telegramId = '900000002'
   const user = await prisma.user.create({

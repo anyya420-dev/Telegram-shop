@@ -26,9 +26,15 @@ export default function CasinoPage() {
     try {
       setLoading(true)
       setLoadError(null)
-      const [balanceResponse, historyResponse] = await Promise.all([api.getBalance(), api.getCasinoHistory()])
-      setBalance(balanceResponse.balance.amount)
-      setHistory(historyResponse.history)
+      const casinoState = await api.getCasinoState()
+      setBalance(casinoState.balance.credits)
+      setHistory(casinoState.history.map((entry) => ({
+        id: entry.id,
+        type: entry.isWin ? 'casino_win' : 'casino_loss',
+        amount: entry.netChange,
+        comment: entry.comment,
+        createdAt: entry.createdAt,
+      })))
     } catch (error) {
       setLoadError(getErrorMessage(error, t, 'request_failed'))
     } finally {
@@ -62,8 +68,14 @@ export default function CasinoPage() {
       setAnimDice(response.dice)
       setBalance(response.balance.amount)
       setResult({ dice: response.dice, win: response.win, payout: response.payout })
-      const historyResponse = await api.getCasinoHistory()
-      setHistory(historyResponse.history)
+      const casinoState = await api.getCasinoState()
+      setHistory(casinoState.history.map((entry) => ({
+        id: entry.id,
+        type: entry.isWin ? 'casino_win' : 'casino_loss',
+        amount: entry.netChange,
+        comment: entry.comment,
+        createdAt: entry.createdAt,
+      })))
     } catch (spinError) {
       window.clearInterval(interval)
       setAnimDice(null)
@@ -89,7 +101,7 @@ export default function CasinoPage() {
       <h1 className={styles.title}>{t('casino.title')}</h1>
 
       <div className={styles.balanceRow}>
-        <span>{t('casino.balance')}: </span>
+        <span>{t('casino.credits', { defaultValue: t('casino.balance') })}: </span>
         <strong>{formatCurrency(balance ?? 0, language)}</strong>
       </div>
 

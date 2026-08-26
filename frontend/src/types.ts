@@ -199,6 +199,28 @@ export type Balance = {
   transactions: BalanceTransaction[]
 }
 
+export type CasinoRound = {
+  id: number
+  game: string
+  betAmount: number
+  targetValue: number
+  outcomeValue: number
+  payoutAmount: number
+  netChange: number
+  isWin: boolean
+  comment: string | null
+  createdAt: string
+}
+
+export type CasinoState = {
+  balance: {
+    id: number
+    userId: number
+    credits: number
+  }
+  history: CasinoRound[]
+}
+
 export type Review = {
   id: number
   userId: number

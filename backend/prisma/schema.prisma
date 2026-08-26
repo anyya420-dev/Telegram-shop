@@ -22,6 +22,7 @@ model User {
   cart             Cart?
   orders           Order[]
   balance          Balance?
+  casinoBalance    CasinoBalance?
   reviews          Review[]
   wishlists        Wishlist[]
   supportTickets   SupportTicket[]
@@ -244,6 +245,37 @@ model Balance {
   transactions BalanceTransaction[]
 
   @@map("balances")
+}
+
+model CasinoBalance {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  credits   Float    @default(1000)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User         @relation(fields: [userId], references: [id])
+  rounds CasinoRound[]
+
+  @@map("casino_balances")
+}
+
+model CasinoRound {
+  id              Int      @id @default(autoincrement())
+  casinoBalanceId Int      @map("casino_balance_id")
+  game            String   @default("dice")
+  betAmount       Float    @map("bet_amount")
+  targetValue     Int      @map("target_value")
+  outcomeValue    Int      @map("outcome_value")
+  payoutAmount    Float    @default(0) @map("payout_amount")
+  netChange       Float    @map("net_change")
+  isWin           Boolean  @map("is_win")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  casinoBalance CasinoBalance @relation(fields: [casinoBalanceId], references: [id], onDelete: Cascade)
+
+  @@index([casinoBalanceId, createdAt])
+  @@map("casino_rounds")
 }
 
 model BalanceTransaction {
