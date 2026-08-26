@@ -165,7 +165,7 @@ export const api = {
   },
 
   casinoSpin(bet: number, target: number) {
-    return publicRequest<{ dice: number; target: number; win: boolean; bet: number; payout: number; balance: { amount: number } }>('/casino/spin', { method: 'POST', body: JSON.stringify({ bet, target }) })
+    return publicRequest<{ dice: number; target: number; win: boolean; bet: number; payout: number; balance: { amount: number; credits: number }; round: { id: number; game: string; betAmount: number; targetValue: number; outcomeValue: number; payoutAmount: number; netChange: number; isWin: boolean; comment: string | null; createdAt: string } }>('/casino/spin', { method: 'POST', body: JSON.stringify({ bet, target }) })
   },
   getCasinoHistory() {
     return publicRequest<{ history: { id: number; type: string; amount: number; comment: string | null; createdAt: string }[] }>('/casino/history')

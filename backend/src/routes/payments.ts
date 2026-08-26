@@ -9,6 +9,7 @@ import {
 import {
   createOrRefreshOrderPayment,
   expirePaymentIfNeeded,
+  getJsonMetadata,
   getStripeWebhookSecret,
   readStripeSignature,
   sanitizePayment,
@@ -187,7 +188,7 @@ router.post('/:paymentId/crypto/submit', authRateLimiter, async (request, respon
         transactionHash: transactionHash || payment.transactionHash,
         senderAddress: senderAddress || payment.senderAddress,
         metadata: JSON.stringify({
-          ...(payment.metadata ? JSON.parse(payment.metadata) as Record<string, unknown> : {}),
+          ...(getJsonMetadata(payment.metadata) ?? {}),
           tonConnectBoc: tonConnectBoc || undefined,
           submittedByCustomerAt: new Date().toISOString(),
         }),

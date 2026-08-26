@@ -12,6 +12,10 @@ import { getLocalizedCityName, getLocalizedUnit } from '../lib/localized'
 import i18n from '../lib/i18n'
 import type { DeliveryOption, Language, Order, Payment, PaymentMethod } from '../types'
 
+function resolveTonChain(network: string | null | undefined) {
+  return typeof network === 'string' && network.toLowerCase().includes('test') ? '-3' : '-239'
+}
+
 export default function CheckoutPage() {
   const { cart, user, checkout, openCityPicker } = useApp()
   const navigate = useNavigate()
@@ -184,7 +188,7 @@ export default function CheckoutPage() {
       const amountNano = String(Math.round(payment.amount * 1_000_000_000))
       const result = await tonConnectUI.sendTransaction({
         validUntil: Math.floor(new Date(payment.expiresAt).getTime() / 1000),
-        network: '-239',
+        network: resolveTonChain(payment.network ?? selectedPaymentMethod?.network),
         messages: [
           {
             address: selectedPaymentMethod.walletAddress,

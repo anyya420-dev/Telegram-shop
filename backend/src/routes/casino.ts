@@ -93,7 +93,7 @@ router.post('/spin', authRateLimiter, async (request, response) => {
   const netChange = win ? normalizeQuantity(payout - bet) : -bet
 
   const updated = await prisma.$transaction(async (tx) => {
-    await tx.casinoRound.create({
+    const round = await tx.casinoRound.create({
       data: {
         casinoBalanceId: balance.id,
         game: 'dice',
@@ -105,10 +105,11 @@ router.post('/spin', authRateLimiter, async (request, response) => {
         isWin: win,
       },
     })
-    return tx.casinoBalance.update({
+    const nextBalance = await tx.casinoBalance.update({
       where: { id: balance.id },
       data: { credits: { increment: netChange } },
     })
+    return { balance: nextBalance, round }
   })
 
   await prisma.userActivityLog.create({
@@ -119,7 +120,15 @@ router.post('/spin', authRateLimiter, async (request, response) => {
     },
   })
 
-  response.json({ dice, target, win, bet, payout, balance: { amount: updated.credits, credits: updated.credits } })
+  response.json({
+    dice,
+    target,
+    win,
+    bet,
+    payout,
+    balance: { amount: updated.balance.credits, credits: updated.balance.credits },
+    round: mapRound(updated.round),
+  })
 })
 
 // GET /api/casino/history

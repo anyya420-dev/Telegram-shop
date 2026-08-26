@@ -68,14 +68,16 @@ export default function CasinoPage() {
       setAnimDice(response.dice)
       setBalance(response.balance.amount)
       setResult({ dice: response.dice, win: response.win, payout: response.payout })
-      const casinoState = await api.getCasinoState()
-      setHistory(casinoState.history.map((entry) => ({
-        id: entry.id,
-        type: entry.isWin ? 'casino_win' : 'casino_loss',
-        amount: entry.netChange,
-        comment: entry.comment,
-        createdAt: entry.createdAt,
-      })))
+      setHistory((current) => [
+        {
+          id: response.round.id,
+          type: response.round.isWin ? 'casino_win' : 'casino_loss',
+          amount: response.round.netChange,
+          comment: response.round.comment,
+          createdAt: response.round.createdAt,
+        },
+        ...current.filter((entry) => entry.id !== response.round.id),
+      ].slice(0, 20))
     } catch (spinError) {
       window.clearInterval(interval)
       setAnimDice(null)
