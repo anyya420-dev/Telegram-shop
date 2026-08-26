@@ -961,13 +961,53 @@ router.patch('/discounts/:id', authRateLimiter, async (request, response) => {
     return
   }
 
+  const existingDiscount = await prisma.discount.findUnique({ where: { id }, select: { id: true } })
+  if (!existingDiscount) {
+    sendError(response, 404, 'discount_not_found', 'Discount not found')
+    return
+  }
+
   const { isActive, usageLimit, expiresAt } = request.body
   const data: Record<string, unknown> = {}
   if (typeof isActive === 'boolean') data.isActive = isActive
-  if (typeof usageLimit === 'number') data.usageLimit = usageLimit
-  if (expiresAt !== undefined) data.expiresAt = expiresAt ? new Date(expiresAt) : null
+  if (usageLimit !== undefined) {
+    const parsedUsageLimit = getNonNegativeNumber(usageLimit)
+    if (usageLimit !== null && parsedUsageLimit == null) {
+      sendError(response, 400, 'invalid_usage_limit', 'Usage limit must be zero or greater')
+      return
+    }
+    data.usageLimit = usageLimit === null ? null : parsedUsageLimit
+  }
+  if (expiresAt !== undefined) {
+    if (expiresAt === null || expiresAt === '') {
+      data.expiresAt = null
+    } else {
+      const parsedDate = new Date(expiresAt)
+      if (Number.isNaN(parsedDate.getTime())) {
+        sendError(response, 400, 'invalid_expiration', 'Expiration date is invalid')
+        return
+      }
+      data.expiresAt = parsedDate
+    }
+  }
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
 
   const discount = await prisma.discount.update({ where: { id }, data })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'discount_updated',
+      entity: 'discount',
+      entityId: id,
+      meta: JSON.stringify(data),
+    },
+  })
+
   response.json({ discount })
 })
 

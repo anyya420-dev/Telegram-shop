@@ -4,68 +4,15 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminStats, Category, City, Discount, Language, Order, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCategory, AdminCity, AdminOrder, AdminProduct, AdminStats, DeliveryOption, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'support' | 'audit' | 'payments';
+type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments';
 
-type AdminOrder = Order & {
-  user?: {
-    id: number;
-    firstName: string;
-    username: string | null;
-    telegramId: string;
-  };
-};
-
-type AdminCity = City & {
+type AdminDeliveryOption = DeliveryOption & {
+  isActive?: boolean;
+  sortOrder?: number;
   nameEn?: string | null;
-  sortOrder: number;
-  _count?: {
-    users: number;
-    productCities: number;
-    orders: number;
-  };
-};
-
-type AdminCategory = Category & {
-  nameEn?: string | null;
-  _count: {
-    products: number;
-  };
-};
-
-type AdminProductCity = {
-  id: number;
-  cityId: number;
-  stock: number;
-  isAvailable: boolean;
-  minimumQuantity: number;
-  quantityStep: number;
-  maximumQuantity: number;
-  unit: string;
-  city: {
-    id?: number;
-    name: string;
-  };
-};
-
-type AdminProduct = {
-  id: number;
-  name: string;
-  nameEn: string | null;
-  description: string;
-  descriptionEn: string | null;
-  price: number;
-  isActive: boolean;
-  isRecommended: boolean;
-  image: string | null;
-  categoryId: number;
-  category: {
-    id?: number;
-    name: string;
-  };
-  productCities: AdminProductCity[];
 };
 
 type ProductCityDraft = {
@@ -109,6 +56,21 @@ type CategoryEditDraft = Partial<{
 type CityEditDraft = Partial<{
   name: string;
   nameEn: string;
+  isActive: boolean;
+  sortOrder: string;
+}>;
+
+type DiscountEditDraft = Partial<{
+  isActive: boolean;
+  usageLimit: string;
+  expiresAt: string;
+}>;
+
+type DeliveryEditDraft = Partial<{
+  name: string;
+  nameEn: string;
+  type: string;
+  price: string;
   isActive: boolean;
   sortOrder: string;
 }>;
@@ -214,6 +176,18 @@ export default function AdminPage() {
   const [newValue, setNewValue] = useState('');
   const [newMin, setNewMin] = useState('');
   const [creatingDiscount, setCreatingDiscount] = useState(false);
+  const [editingDiscount, setEditingDiscount] = useState<number | null>(null);
+  const [discountEdits, setDiscountEdits] = useState<Record<number, DiscountEditDraft>>({});
+
+  const [deliveryOptions, setDeliveryOptions] = useState<AdminDeliveryOption[]>([]);
+  const [newDeliveryName, setNewDeliveryName] = useState('');
+  const [newDeliveryNameEn, setNewDeliveryNameEn] = useState('');
+  const [newDeliveryType, setNewDeliveryType] = useState('delivery');
+  const [newDeliveryPrice, setNewDeliveryPrice] = useState('0');
+  const [newDeliverySortOrder, setNewDeliverySortOrder] = useState('0');
+  const [newDeliveryIsActive, setNewDeliveryIsActive] = useState(true);
+  const [editingDelivery, setEditingDelivery] = useState<number | null>(null);
+  const [deliveryEdits, setDeliveryEdits] = useState<Record<number, DeliveryEditDraft>>({});
 
   const [newPaymentType, setNewPaymentType] = useState<PaymentMethod['type']>('card');
   const [newPaymentTitle, setNewPaymentTitle] = useState('');
@@ -260,14 +234,14 @@ export default function AdminPage() {
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
 
   const tabs = useMemo(
-    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'support', 'audit', 'payments'] as Tab[],
+    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments'] as Tab[],
     [],
   );
 
   async function refreshCities() {
     const response = await api.getAdminCities();
-    setCities(response.cities as AdminCity[]);
-    return response.cities as AdminCity[];
+    setCities(response.cities);
+    return response.cities;
   }
 
   async function refreshCategories() {
@@ -277,9 +251,15 @@ export default function AdminPage() {
   }
 
   async function refreshProducts() {
-    const response = await api.getAdminProducts() as unknown as { products: AdminProduct[] };
+    const response = await api.getAdminProducts();
     setProducts(response.products);
     return response.products;
+  }
+
+  async function refreshDeliveryOptions() {
+    const response = await api.getAdminDeliveryOptions();
+    setDeliveryOptions(response.options);
+    return response.options;
   }
 
   useEffect(() => {
@@ -333,7 +313,7 @@ export default function AdminPage() {
         setStats(await api.getAdminStats());
       } else if (tabName === 'orders') {
         const response = await api.getAdminOrders(1, orderFilter || undefined);
-        setOrders(response.orders as AdminOrder[]);
+        setOrders(response.orders);
       } else if (tabName === 'products') {
         await Promise.all([refreshProducts(), categories.length === 0 ? refreshCategories() : Promise.resolve(categories), cities.length === 0 ? refreshCities() : Promise.resolve(cities)]);
       } else if (tabName === 'users') {
@@ -346,6 +326,9 @@ export default function AdminPage() {
       } else if (tabName === 'discounts') {
         const response = await api.getAdminDiscounts();
         setDiscounts(response.discounts);
+      } else if (tabName === 'delivery') {
+        const response = await api.getAdminDeliveryOptions();
+        setDeliveryOptions(response.options);
       } else if (tabName === 'support') {
         const response = await api.getAdminSupportTickets();
         setTickets(response.tickets);
@@ -370,7 +353,7 @@ export default function AdminPage() {
     setError(null);
     try {
       const response = await api.updateAdminOrderStatus(orderId, status);
-      setOrders((current) => current.map((order) => (order.id === orderId ? response.order as AdminOrder : order)));
+      setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to update status'));
     } finally {
@@ -382,7 +365,7 @@ export default function AdminPage() {
     setError(null);
     try {
       const response = await api.confirmAdminOrderPayment(orderId);
-      setOrders((current) => current.map((order) => (order.id === orderId ? response.order as AdminOrder : order)));
+      setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to confirm payment'));
     }
@@ -392,7 +375,7 @@ export default function AdminPage() {
     setError(null);
     try {
       const response = await api.rejectAdminOrderPayment(orderId);
-      setOrders((current) => current.map((order) => (order.id === orderId ? response.order as AdminOrder : order)));
+      setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to reject payment'));
     }
@@ -610,6 +593,70 @@ export default function AdminPage() {
       setError(getAdminErrorMessage(e, 'Failed to create discount'));
     } finally {
       setCreatingDiscount(false);
+    }
+  }
+
+  async function handleSaveDiscount(discountId: number) {
+    const edits = discountEdits[discountId];
+    if (!edits) return;
+    setError(null);
+
+    try {
+      const payload: Parameters<typeof api.updateAdminDiscount>[1] = {};
+      if (typeof edits.isActive === 'boolean') payload.isActive = edits.isActive;
+      if (typeof edits.usageLimit === 'string') payload.usageLimit = edits.usageLimit.trim() ? Number(edits.usageLimit) : null;
+      if (typeof edits.expiresAt === 'string') payload.expiresAt = edits.expiresAt.trim() || null;
+      const response = await api.updateAdminDiscount(discountId, payload);
+      setDiscounts((current) => current.map((discount) => (discount.id === discountId ? response.discount : discount)));
+      setEditingDiscount(null);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update discount'));
+    }
+  }
+
+  async function handleCreateDeliveryOption() {
+    if (!newDeliveryName.trim()) return;
+    setError(null);
+
+    try {
+      const response = await api.createAdminDeliveryOption({
+        name: newDeliveryName.trim(),
+        nameEn: newDeliveryNameEn.trim() || undefined,
+        type: newDeliveryType,
+        price: parseNonNegativeNumber(newDeliveryPrice, 'Delivery price must be zero or greater'),
+        sortOrder: Number(newDeliverySortOrder) || 0,
+        isActive: newDeliveryIsActive,
+      });
+      setDeliveryOptions((current) => [...current, response.option].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id));
+      setNewDeliveryName('');
+      setNewDeliveryNameEn('');
+      setNewDeliveryType('delivery');
+      setNewDeliveryPrice('0');
+      setNewDeliverySortOrder('0');
+      setNewDeliveryIsActive(true);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to create delivery option'));
+    }
+  }
+
+  async function handleSaveDeliveryOption(optionId: number) {
+    const edits = deliveryEdits[optionId];
+    if (!edits) return;
+    setError(null);
+
+    try {
+      const payload: Parameters<typeof api.updateAdminDeliveryOption>[1] = {};
+      if (typeof edits.name === 'string') payload.name = edits.name;
+      if (typeof edits.nameEn === 'string') payload.nameEn = edits.nameEn.trim() || null;
+      if (typeof edits.type === 'string') payload.type = edits.type;
+      if (typeof edits.price === 'string' && edits.price !== '') payload.price = parseNonNegativeNumber(edits.price, 'Delivery price must be zero or greater');
+      if (typeof edits.isActive === 'boolean') payload.isActive = edits.isActive;
+      if (typeof edits.sortOrder === 'string') payload.sortOrder = Number(edits.sortOrder);
+      const response = await api.updateAdminDeliveryOption(optionId, payload);
+      setDeliveryOptions((current) => current.map((option) => (option.id === optionId ? response.option : option)).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id));
+      setEditingDelivery(null);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update delivery option'));
     }
   }
 
@@ -1227,11 +1274,128 @@ export default function AdminPage() {
           <div className={styles.discountList}>
             {discounts.map((discount) => (
               <div key={discount.id} className={styles.discountCard}>
-                <span className={styles.discountCode}>{discount.code}</span>
-                <span>{discount.value}{discount.type === 'percent' ? '%' : ' fixed'}</span>
-                <span>{t('admin.minOrder', { defaultValue: 'Min' })}: {discount.minOrderAmount}</span>
+                {editingDiscount === discount.id ? (
+                  <div className={styles.form} style={{ marginBottom: 0, width: '100%' }}>
+                    <div className={styles.formRow}>
+                      <input
+                        className={styles.input}
+                        type="number"
+                        placeholder="Usage limit"
+                        value={discountEdits[discount.id]?.usageLimit ?? String(discount.usageLimit ?? '')}
+                        onChange={(event) => setDiscountEdits((current) => ({ ...current, [discount.id]: { ...current[discount.id], usageLimit: event.target.value } }))}
+                      />
+                      <input
+                        className={styles.input}
+                        type="datetime-local"
+                        value={discountEdits[discount.id]?.expiresAt ?? (discount.expiresAt ? discount.expiresAt.slice(0, 16) : '')}
+                        onChange={(event) => setDiscountEdits((current) => ({ ...current, [discount.id]: { ...current[discount.id], expiresAt: event.target.value } }))}
+                      />
+                    </div>
+                    <div className={styles.formRow}>
+                      <label className={styles.checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={discountEdits[discount.id]?.isActive ?? Boolean(discount.isActive ?? true)}
+                          onChange={(event) => setDiscountEdits((current) => ({ ...current, [discount.id]: { ...current[discount.id], isActive: event.target.checked } }))}
+                        />
+                        {t('admin.active', { defaultValue: 'Active' })}
+                      </label>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleSaveDiscount(discount.id)}>{t('common.save', { defaultValue: 'Save' })}</button>
+                      <button className={styles.replyBtn} onClick={() => setEditingDiscount(null)}>{t('common.cancel', { defaultValue: 'Cancel' })}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className={styles.discountCode}>{discount.code}</span>
+                    <span>{discount.value}{discount.type === 'percent' ? '%' : ' fixed'}</span>
+                    <span>{t('admin.minOrder', { defaultValue: 'Min' })}: {discount.minOrderAmount}</span>
+                    <span>{t('admin.usageLimit', { defaultValue: 'Limit' })}: {discount.usageLimit ?? '∞'}</span>
+                    <span className={`${styles.refundTag} ${discount.isActive ?? true ? styles.tagActive : styles.tagInactive}`}>
+                      {discount.isActive ?? true ? t('admin.active', { defaultValue: 'Active' }) : t('admin.inactive', { defaultValue: 'Inactive' })}
+                    </span>
+                    <button className={styles.replyBtn} onClick={() => { setEditingDiscount(discount.id); setDiscountEdits((current) => ({ ...current, [discount.id]: {} })); }}>
+                      {t('common.edit', { defaultValue: 'Edit' })}
+                    </button>
+                  </>
+                )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'delivery' && (
+        <div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>{t('admin.deliveryOptions', { defaultValue: 'Delivery options' })}</h3>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Name" value={newDeliveryName} onChange={(event) => setNewDeliveryName(event.target.value)} />
+              <input className={styles.input} placeholder="Name EN" value={newDeliveryNameEn} onChange={(event) => setNewDeliveryNameEn(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <select className={styles.select} value={newDeliveryType} onChange={(event) => setNewDeliveryType(event.target.value)}>
+                <option value="delivery">Delivery</option>
+                <option value="pickup">Pickup</option>
+              </select>
+              <input className={styles.input} type="number" placeholder="Price" value={newDeliveryPrice} onChange={(event) => setNewDeliveryPrice(event.target.value)} />
+              <input className={styles.input} type="number" placeholder="Sort order" value={newDeliverySortOrder} onChange={(event) => setNewDeliverySortOrder(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <label className={styles.checkLabel}><input type="checkbox" checked={newDeliveryIsActive} onChange={(event) => setNewDeliveryIsActive(event.target.checked)} /> {t('admin.active', { defaultValue: 'Active' })}</label>
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleCreateDeliveryOption()} disabled={!newDeliveryName.trim()}>
+              {t('common.save', { defaultValue: 'Save' })}
+            </button>
+          </div>
+
+          <div className={styles.discountList}>
+            {deliveryOptions.map((option) => (
+              <div key={option.id} className={styles.discountCard}>
+                {editingDelivery === option.id ? (
+                  <div className={styles.form} style={{ marginBottom: 0, width: '100%' }}>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Name" value={deliveryEdits[option.id]?.name ?? option.name} onChange={(event) => setDeliveryEdits((current) => ({ ...current, [option.id]: { ...current[option.id], name: event.target.value } }))} />
+                      <input className={styles.input} placeholder="Name EN" value={deliveryEdits[option.id]?.nameEn ?? (option.nameEn ?? '')} onChange={(event) => setDeliveryEdits((current) => ({ ...current, [option.id]: { ...current[option.id], nameEn: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <select className={styles.select} value={deliveryEdits[option.id]?.type ?? option.type} onChange={(event) => setDeliveryEdits((current) => ({ ...current, [option.id]: { ...current[option.id], type: event.target.value } }))}>
+                        <option value="delivery">Delivery</option>
+                        <option value="pickup">Pickup</option>
+                      </select>
+                      <input className={styles.input} type="number" placeholder="Price" value={deliveryEdits[option.id]?.price ?? String(option.price)} onChange={(event) => setDeliveryEdits((current) => ({ ...current, [option.id]: { ...current[option.id], price: event.target.value } }))} />
+                      <input className={styles.input} type="number" placeholder="Sort order" value={deliveryEdits[option.id]?.sortOrder ?? String(option.sortOrder ?? 0)} onChange={(event) => setDeliveryEdits((current) => ({ ...current, [option.id]: { ...current[option.id], sortOrder: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <label className={styles.checkLabel}>
+                        <input type="checkbox" checked={deliveryEdits[option.id]?.isActive ?? Boolean(option.isActive ?? true)} onChange={(event) => setDeliveryEdits((current) => ({ ...current, [option.id]: { ...current[option.id], isActive: event.target.checked } }))} />
+                        {t('admin.active', { defaultValue: 'Active' })}
+                      </label>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleSaveDeliveryOption(option.id)}>{t('common.save', { defaultValue: 'Save' })}</button>
+                      <button className={styles.replyBtn} onClick={() => setEditingDelivery(null)}>{t('common.cancel', { defaultValue: 'Cancel' })}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <span className={styles.discountCode}>{option.name}</span>
+                      {option.nameEn ? <span> / {option.nameEn}</span> : null}
+                      <span className={`${styles.refundTag} ${option.isActive ?? true ? styles.tagActive : styles.tagInactive}`}>
+                        {option.isActive ?? true ? t('admin.active', { defaultValue: 'Active' }) : t('admin.inactive', { defaultValue: 'Inactive' })}
+                      </span>
+                      <span className={styles.orderMeta}> • {option.type} • {formatCurrency(option.price, language)}</span>
+                    </div>
+                    <button className={styles.replyBtn} onClick={() => { setEditingDelivery(option.id); setDeliveryEdits((current) => ({ ...current, [option.id]: {} })); }}>
+                      {t('common.edit', { defaultValue: 'Edit' })}
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+            {deliveryOptions.length === 0 && <p className={styles.loading}>{t('checkout.noDeliveryOptions', { defaultValue: 'No delivery options.' })}</p>}
           </div>
         </div>
       )}

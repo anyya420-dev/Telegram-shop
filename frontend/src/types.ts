@@ -205,6 +205,10 @@ export type Discount = {
   type: string
   value: number
   minOrderAmount: number
+  usageLimit?: number | null
+  usedCount?: number
+  isActive?: boolean
+  expiresAt?: string | null
 }
 
 export type AdminStats = {
@@ -212,4 +216,63 @@ export type AdminStats = {
   pendingOrders: number
   totalUsers: number
   totalRevenue: number
+}
+
+export type AdminCity = City & {
+  nameEn?: string | null
+  sortOrder: number
+  _count?: {
+    users: number
+    productCities: number
+    orders: number
+  }
+}
+
+export type AdminCategory = Category & {
+  nameEn?: string | null
+  _count: {
+    products: number
+  }
+}
+
+export type AdminProductCity = {
+  id: number
+  cityId: number
+  stock: number
+  isAvailable: boolean
+  minimumQuantity: number
+  quantityStep: number
+  maximumQuantity: number
+  unit: string
+  city: {
+    id?: number
+    name: string
+  }
+}
+
+export type AdminProduct = {
+  id: number
+  name: string
+  nameEn: string | null
+  description: string
+  descriptionEn: string | null
+  price: number
+  isActive: boolean
+  isRecommended: boolean
+  image: string | null
+  categoryId: number
+  category: {
+    id?: number
+    name: string
+  }
+  productCities: AdminProductCity[]
+}
+
+export type AdminOrder = Order & {
+  user?: {
+    id: number
+    firstName: string
+    username: string | null
+    telegramId: string
+  }
 }

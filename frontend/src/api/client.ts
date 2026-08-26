@@ -1,10 +1,15 @@
 import type {
+  AdminCategory,
+  AdminCity,
+  AdminOrder,
+  AdminProduct,
   AdminStats,
   Balance,
   BootstrapResponse,
   Cart,
   Category,
   City,
+  DeliveryOption,
   Discount,
   Language,
   Order,
@@ -125,8 +130,8 @@ export const api = {
   removeCartItem(itemId: number) {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
   },
-  checkout(payload?: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number }) {
-    return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload ?? {}) })
+  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId: number }) {
+    return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload) })
   },
   markOrderPaid(id: number) {
     return publicRequest<{ order: Order }>(`/orders/${id}/mark-paid`, { method: 'POST' })
@@ -221,7 +226,7 @@ export const api = {
   getAdminOrders(page = 1, status?: string) {
     const params = new URLSearchParams({ page: String(page) })
     if (status) params.set('status', status)
-    return adminRequest<{ orders: Order[]; total: number; page: number; pages: number }>(`/admin/orders?${params}`)
+    return adminRequest<{ orders: AdminOrder[]; total: number; page: number; pages: number }>(`/admin/orders?${params}`)
   },
   updateAdminOrderStatus(orderId: number, status: string, comment?: string) {
     return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status, comment }) })
@@ -239,16 +244,16 @@ export const api = {
     return adminRequest<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)
   },
   getAdminCities() {
-    return adminRequest<{ cities: City[] }>('/admin/cities')
+    return adminRequest<{ cities: AdminCity[] }>('/admin/cities')
   },
   createAdminCity(data: { name: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
-    return adminRequest<{ city: City }>('/admin/cities', { method: 'POST', body: JSON.stringify(data) })
+    return adminRequest<{ city: AdminCity }>('/admin/cities', { method: 'POST', body: JSON.stringify(data) })
   },
   updateAdminCity(id: number, data: { name?: string; nameEn?: string | null; isActive?: boolean; sortOrder?: number }) {
-    return adminRequest<{ city: City }>(`/admin/cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    return adminRequest<{ city: AdminCity }>(`/admin/cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminProducts() {
-    return adminRequest<{ products: ProductDetail[] }>('/admin/products')
+    return adminRequest<{ products: AdminProduct[] }>('/admin/products')
   },
   createAdminProduct(data: { name: string; nameEn?: string; description?: string; descriptionEn?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }[] }) {
     return adminRequest<{ product: unknown }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
@@ -267,6 +272,18 @@ export const api = {
   },
   createAdminDiscount(data: { code: string; type: string; value: number; minOrderAmount?: number; usageLimit?: number }) {
     return adminRequest<{ discount: Discount }>('/admin/discounts', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminDiscount(id: number, data: { isActive?: boolean; usageLimit?: number | null; expiresAt?: string | null }) {
+    return adminRequest<{ discount: Discount }>(`/admin/discounts/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminDeliveryOptions() {
+    return adminRequest<{ options: (DeliveryOption & { isActive?: boolean; sortOrder?: number; nameEn?: string | null })[] }>('/admin/delivery-options')
+  },
+  createAdminDeliveryOption(data: { name: string; nameEn?: string; type?: string; price?: number; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ option: DeliveryOption & { isActive?: boolean; sortOrder?: number; nameEn?: string | null } }>('/admin/delivery-options', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminDeliveryOption(id: number, data: { name?: string; nameEn?: string | null; type?: string; price?: number; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ option: DeliveryOption & { isActive?: boolean; sortOrder?: number; nameEn?: string | null } }>(`/admin/delivery-options/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminSupportTickets(status?: string) {
     const params = status ? `?status=${status}` : ''
@@ -294,12 +311,12 @@ export const api = {
     return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}/toggle`, { method: 'PATCH' })
   },
   getAdminCategories() {
-    return adminRequest<{ categories: (Category & { _count: { products: number } })[] }>('/admin/categories')
+    return adminRequest<{ categories: AdminCategory[] }>('/admin/categories')
   },
   createAdminCategory(data: { name: string; nameEn?: string; sortOrder?: number }) {
-    return adminRequest<{ category: Category & { _count: { products: number } } }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
+    return adminRequest<{ category: AdminCategory }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
   },
   updateAdminCategory(id: number, data: { name?: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
-    return adminRequest<{ category: Category & { _count: { products: number } } }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    return adminRequest<{ category: AdminCategory }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
 }

@@ -945,3 +945,63 @@ test('admin city and product management enforce authorization and validation', a
   assert.ok(cityAuditLog)
   assert.equal(typeof cityAuditLog.userId, 'number')
 })
+
+test('admin discount and delivery management validate updates', async () => {
+  const login = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(login.status, 200)
+  const adminCookie = login.headers.get('set-cookie') ?? ''
+  assert.ok(adminCookie)
+
+  const discount = await requestJson('/api/admin/discounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ code: 'ADMIN10', type: 'percent', value: 10, minOrderAmount: 100 }),
+  })
+  assert.equal(discount.response.status, 200)
+
+  const invalidDiscountUpdate = await requestJson(`/api/admin/discounts/${discount.body.discount.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ usageLimit: -1 }),
+  })
+  assert.equal(invalidDiscountUpdate.response.status, 400)
+  assert.equal(invalidDiscountUpdate.body.code, 'invalid_usage_limit')
+
+  const validDiscountUpdate = await requestJson(`/api/admin/discounts/${discount.body.discount.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ isActive: false, usageLimit: 5 }),
+  })
+  assert.equal(validDiscountUpdate.response.status, 200)
+  assert.equal(validDiscountUpdate.body.discount.isActive, false)
+  assert.equal(validDiscountUpdate.body.discount.usageLimit, 5)
+
+  const createdDelivery = await requestJson('/api/admin/delivery-options', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ name: 'Pickup Point', nameEn: 'Pickup Point', type: 'pickup', price: 0, sortOrder: 2, isActive: true }),
+  })
+  assert.equal(createdDelivery.response.status, 200)
+  assert.equal(createdDelivery.body.option.type, 'pickup')
+
+  const invalidDeliveryUpdate = await requestJson(`/api/admin/delivery-options/${createdDelivery.body.option.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ type: 'invalid-type' }),
+  })
+  assert.equal(invalidDeliveryUpdate.response.status, 400)
+  assert.equal(invalidDeliveryUpdate.body.code, 'invalid_type')
+
+  const validDeliveryUpdate = await requestJson(`/api/admin/delivery-options/${createdDelivery.body.option.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ isActive: false, price: 25 }),
+  })
+  assert.equal(validDeliveryUpdate.response.status, 200)
+  assert.equal(validDeliveryUpdate.body.option.isActive, false)
+  assert.equal(validDeliveryUpdate.body.option.price, 25)
+})
