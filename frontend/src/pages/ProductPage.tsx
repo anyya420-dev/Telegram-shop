@@ -175,7 +175,7 @@ export default function ProductPage() {
     return (
       <div className={styles.error}>
         <p>{pageError ?? t('product.notFound')}</p>
-        <button className={styles.viewCartBtn} onClick={() => navigate('/catalog')} type="button">
+        <button className={styles.viewCartBtn} onClick={() => navigate(-1)} type="button">
           {t('common.back')}
         </button>
       </div>

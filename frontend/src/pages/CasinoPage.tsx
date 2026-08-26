@@ -29,8 +29,8 @@ export default function CasinoPage() {
       const [balanceResponse, historyResponse] = await Promise.all([api.getBalance(), api.getCasinoHistory()])
       setBalance(balanceResponse.balance.amount)
       setHistory(historyResponse.history)
-    } catch (loadError) {
-      setLoadError(getErrorMessage(loadError, t, 'request_failed'))
+    } catch (error) {
+      setLoadError(getErrorMessage(error, t, 'request_failed'))
     } finally {
       setLoading(false)
     }
