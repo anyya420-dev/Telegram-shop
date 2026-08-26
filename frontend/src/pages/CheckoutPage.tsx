@@ -482,7 +482,7 @@ export default function CheckoutPage() {
         <p className={styles.sectionTitle}>{t('checkout.casinoCredits', { defaultValue: 'Casino Credits' })}</p>
         <div className={styles.infoRow}>
           <CreditCard size={14} strokeWidth={1.6} />
-          <span>{casinoCreditsBalance.toFixed(0)} available</span>
+          <span>{casinoCreditsBalance.toFixed(0)} {t('checkout.available', { defaultValue: 'available' })}</span>
         </div>
         <input
           className={styles.input}

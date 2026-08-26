@@ -86,7 +86,7 @@ export default function CasinoPage() {
       if (wheelTimer) {
         window.clearInterval(wheelTimer)
         const finalIndex = Math.max(0, WHEEL_SEGMENTS.indexOf(response.round.outcomeValue ?? ''))
-        setWheelIndex(finalIndex === -1 ? 0 : finalIndex)
+        setWheelIndex(finalIndex)
       }
       if (slotsTimer) {
         window.clearInterval(slotsTimer)

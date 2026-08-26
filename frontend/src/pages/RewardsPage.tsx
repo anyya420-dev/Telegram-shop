@@ -45,10 +45,11 @@ export default function RewardsPage() {
         <Gift size={18} strokeWidth={1.7} />
         <h1>{t('profile.rewards', { defaultValue: 'My rewards' })}</h1>
       </div>
+      {error ? <p className={styles.error}>{error}</p> : null}
       {error ? (
         <button className={styles.retry} onClick={() => void loadRewards()} type="button">
           <RefreshCw size={16} strokeWidth={1.7} />
-          {error}
+          {t('common.retry')}
         </button>
       ) : null}
       {loading ? <div className={styles.empty}>{t('common.loading')}</div> : null}

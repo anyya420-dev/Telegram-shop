@@ -7,7 +7,6 @@ import type {
   AdminProduct,
   AdminStats,
   Balance,
-  CasinoReward,
   CasinoState,
   BootstrapResponse,
   Cart,
@@ -166,9 +165,6 @@ export const api = {
     return publicRequest<CasinoState>('/casino')
   },
 
-  getCasinoRewards() {
-    return publicRequest<{ rewards: CasinoReward[] }>('/casino')
-  },
   playCasinoGame(game: 'wheel' | 'slots' | 'roulette' | 'chest', payload: Record<string, unknown>) {
     return publicRequest<{ round: CasinoState['history'][number]; reward: { rewardType: string; discountPercent: number | null; creditAmount: number | null; title: string }; balance: CasinoState['balance'] }>(`/casino/${game}/play`, { method: 'POST', body: JSON.stringify(payload) })
   },
