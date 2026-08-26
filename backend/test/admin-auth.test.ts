@@ -147,28 +147,32 @@ test('admin session flow keeps public endpoints independent', async () => {
 })
 
 test('admin password follows ADMIN_PASSWORD env changes', async () => {
-  const initialLogin = await request('/api/admin/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: 'admin-secret' }),
-  })
-  assert.equal(initialLogin.status, 200)
+  try {
+    const initialLogin = await request('/api/admin/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'admin-secret' }),
+    })
+    assert.equal(initialLogin.status, 200)
 
-  process.env.ADMIN_PASSWORD = 'admin-secret-updated'
+    process.env.ADMIN_PASSWORD = 'admin-secret-updated'
 
-  const oldPasswordLogin = await request('/api/admin/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: 'admin-secret' }),
-  })
-  assert.equal(oldPasswordLogin.status, 401)
+    const oldPasswordLogin = await request('/api/admin/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'admin-secret' }),
+    })
+    assert.equal(oldPasswordLogin.status, 401)
 
-  const updatedPasswordLogin = await request('/api/admin/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: 'admin-secret-updated' }),
-  })
-  assert.equal(updatedPasswordLogin.status, 200)
+    const updatedPasswordLogin = await request('/api/admin/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'admin-secret-updated' }),
+    })
+    assert.equal(updatedPasswordLogin.status, 200)
+  } finally {
+    process.env.ADMIN_PASSWORD = 'admin-secret'
+  }
 })
 
 test('cors allows only production frontend origin and handles preflight', async () => {
