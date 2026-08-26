@@ -23,6 +23,7 @@ model User {
   orders           Order[]
   balance          Balance?
   casinoBalance    CasinoBalance?
+  casinoRewards    CasinoReward[]
   reviews          Review[]
   wishlists        Wishlist[]
   supportTickets   SupportTicket[]
@@ -68,6 +69,9 @@ model Product {
   price         Float
   image         String?
   categoryId    Int           @map("category_id")
+  creditsEnabled Boolean      @default(false) @map("credits_enabled")
+  creditsPrice   Float?       @map("credits_price")
+  minCreditsRequired Float?   @map("min_credits_required")
   isActive      Boolean       @default(true) @map("is_active")
   isRecommended Boolean       @default(false) @map("is_recommended")
   createdAt     DateTime      @default(now()) @map("created_at")
@@ -127,6 +131,8 @@ model Order {
   paymentMethodId  Int?        @map("payment_method_id")
   deliveryOptionId Int?        @map("delivery_option_id")
   discountId       Int?        @map("discount_id")
+  rewardId         Int?        @unique @map("reward_id")
+  casinoCreditsUsed Float      @default(0) @map("casino_credits_used")
   cancelledAt      DateTime?   @map("cancelled_at")
   refundStatus     String?     @map("refund_status") // none | requested | approved | rejected
   refundAt         DateTime?   @map("refund_at")
@@ -139,6 +145,7 @@ model Order {
   paymentMethod  PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
   deliveryOption DeliveryOption?      @relation(fields: [deliveryOptionId], references: [id])
   discount       Discount?            @relation(fields: [discountId], references: [id])
+  reward         CasinoReward?        @relation(fields: [rewardId], references: [id])
   statusHistory  OrderStatusHistory[]
   payments       Payment[]
 
@@ -251,11 +258,14 @@ model CasinoBalance {
   id        Int      @id @default(autoincrement())
   userId    Int      @unique @map("user_id")
   credits   Float    @default(1000)
+  lifetimeWon Float  @default(0) @map("lifetime_won")
+  lifetimeSpent Float @default(0) @map("lifetime_spent")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user   User         @relation(fields: [userId], references: [id])
-  rounds CasinoRound[]
+  user         User                     @relation(fields: [userId], references: [id])
+  rounds       CasinoRound[]
+  transactions CasinoCreditTransaction[]
 
   @@map("casino_balances")
 }
@@ -263,19 +273,101 @@ model CasinoBalance {
 model CasinoRound {
   id              Int      @id @default(autoincrement())
   casinoBalanceId Int      @map("casino_balance_id")
-  game            String   @default("dice")
+  game            String   @default("wheel")
+  requestId       String   @unique @map("request_id")
+  status          String   @default("completed")
   betAmount       Float    @map("bet_amount")
-  targetValue     Int      @map("target_value")
-  outcomeValue    Int      @map("outcome_value")
+  targetValue     String?  @map("target_value")
+  outcomeValue    String?  @map("outcome_value")
   payoutAmount    Float    @default(0) @map("payout_amount")
   netChange       Float    @map("net_change")
   isWin           Boolean  @map("is_win")
+  rewardConfigId  Int?     @map("reward_config_id")
+  rewardId        Int?     @unique @map("reward_id")
+  metadata        String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  casinoBalance CasinoBalance     @relation(fields: [casinoBalanceId], references: [id], onDelete: Cascade)
+  rewardConfig  CasinoRewardConfig? @relation(fields: [rewardConfigId], references: [id])
+  reward        CasinoReward?     @relation(fields: [rewardId], references: [id])
+
+  @@index([casinoBalanceId, createdAt])
+  @@map("casino_rounds")
+}
+
+model CasinoGameConfig {
+  id        Int      @id @default(autoincrement())
+  game      String   @unique
+  isEnabled Boolean  @default(true) @map("is_enabled")
+  minBet    Float    @default(10) @map("min_bet")
+  maxBet    Float    @default(500) @map("max_bet")
+  spinLimit Int      @default(1) @map("spin_limit")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  rewardConfigs CasinoRewardConfig[]
+
+  @@map("casino_game_configs")
+}
+
+model CasinoRewardConfig {
+  id              Int      @id @default(autoincrement())
+  game            String
+  rewardType      String   @map("reward_type")
+  title           String
+  resultKey       String?  @map("result_key")
+  discountPercent Float?   @map("discount_percent")
+  creditAmount    Float?   @map("credit_amount")
+  weight          Int      @default(1)
+  isActive        Boolean  @default(true) @map("is_active")
+  expiresInHours  Int?     @map("expires_in_hours")
+  minOrderAmount  Float?   @map("min_order_amount")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  gameConfig CasinoGameConfig @relation(fields: [game], references: [game], onDelete: Cascade)
+  rounds     CasinoRound[]
+
+  @@index([game, isActive])
+  @@map("casino_reward_configs")
+}
+
+model CasinoReward {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  game            String
+  rewardType      String   @map("reward_type")
+  status          String   @default("available")
+  discountPercent Float?   @map("discount_percent")
+  creditAmount    Float?   @map("credit_amount")
+  minOrderAmount  Float?   @map("min_order_amount")
+  createdAt       DateTime @default(now()) @map("created_at")
+  expiresAt       DateTime? @map("expires_at")
+  usedAt          DateTime? @map("used_at")
+  orderId         Int?     @unique @map("order_id")
+
+  user  User       @relation(fields: [userId], references: [id])
+  order Order?
+  round CasinoRound?
+
+  @@index([userId, status, expiresAt])
+  @@map("casino_rewards")
+}
+
+model CasinoCreditTransaction {
+  id              Int      @id @default(autoincrement())
+  casinoBalanceId Int      @map("casino_balance_id")
+  amount          Float
+  type            String
+  reason          String?
+  orderId         Int?     @map("order_id")
+  roundId         Int?     @map("round_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
   casinoBalance CasinoBalance @relation(fields: [casinoBalanceId], references: [id], onDelete: Cascade)
 
   @@index([casinoBalanceId, createdAt])
-  @@map("casino_rounds")
+  @@map("casino_credit_transactions")
 }
 
 model BalanceTransaction {
