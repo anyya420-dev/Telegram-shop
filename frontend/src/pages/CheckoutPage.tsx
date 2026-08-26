@@ -78,6 +78,10 @@ export default function CheckoutPage() {
     () => deliveryOptions.find((option) => option.id === selectedDeliveryId) ?? null,
     [deliveryOptions, selectedDeliveryId],
   )
+  const selectedPaymentMethod = useMemo(
+    () => paymentMethods.find((method) => method.id === selectedPaymentMethodId) ?? null,
+    [paymentMethods, selectedPaymentMethodId],
+  )
 
   const cityLabel = user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('profile.cityNotSelected')
   const safeSubtotal = cart?.subtotal ?? 0
@@ -180,7 +184,7 @@ export default function CheckoutPage() {
           <p className={styles.sectionTitle}>{t('checkout.items')}</p>
           {order.items.map((item) => (
             <div key={item.id} className={styles.line}>
-              <span>{item.productName} × {item.quantity} {item.unit}</span>
+              <span>{item.productName} × {item.quantity} {getLocalizedUnit(item.unit, language)}</span>
               <span>{formatCurrency(item.lineTotal, language)}</span>
             </div>
           ))}
