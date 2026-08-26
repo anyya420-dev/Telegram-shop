@@ -127,7 +127,7 @@ export default function OrderDetailPage() {
     )
   }
 
-  const canCancel = ['pending', 'confirmed'].includes(order.status)
+  const canCancel = ['pending', 'confirmed', 'payment_pending'].includes(order.status)
   const canRefund = ['delivered', 'cancelled'].includes(order.status) && !order.refundStatus
   const localizedCity = language === 'en' && order.city.nameEn ? order.city.nameEn : order.city.name
   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)

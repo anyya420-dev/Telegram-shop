@@ -562,6 +562,68 @@ test('session bootstrap requires real Telegram init data when demo mode is disab
   }
 })
 
+test('customer can cancel payment pending order', async () => {
+  const telegramId = '900000005'
+  const user = await prisma.user.create({
+    data: { telegramId, firstName: 'Pending', username: 'pending_user', language: 'ru' },
+  })
+  const city = await prisma.city.create({ data: { name: 'Pending City', nameEn: 'Pending City', isActive: true } })
+  const order = await prisma.order.create({
+    data: {
+      userId: user.id,
+      cityId: city.id,
+      status: 'payment_pending',
+      paymentStatus: 'pending',
+      subtotal: 10,
+      total: 10,
+    },
+  })
+  const product = await prisma.product.create({
+    data: {
+      name: 'Pending Product',
+      description: 'Pending',
+      price: 10,
+      categoryId: (await prisma.category.create({ data: { name: 'Pending Category', isActive: true } })).id,
+      isActive: true,
+    },
+  })
+  const productCity = await prisma.productCity.create({
+    data: {
+      productId: product.id,
+      cityId: city.id,
+      stock: 0,
+      minimumQuantity: 1,
+      quantityStep: 1,
+      maximumQuantity: 10,
+      unit: 'шт.',
+      isAvailable: true,
+    },
+  })
+  await prisma.orderItem.create({
+    data: {
+      orderId: order.id,
+      productCityId: productCity.id,
+      productName: product.name,
+      quantity: 2,
+      price: 5,
+      lineTotal: 10,
+      unit: 'шт.',
+    },
+  })
+
+  const sessionToken = createSessionToken!(telegramId)
+  const cancelResponse = await requestJson(`/api/orders/${order.id}/cancel`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': sessionToken },
+  })
+
+  assert.equal(cancelResponse.response.status, 200)
+  assert.equal(cancelResponse.body.order.status, 'cancelled')
+
+  const refreshedProductCity = await prisma.productCity.findUniqueOrThrow({ where: { id: productCity.id } })
+  assert.equal(refreshedProductCity.stock, 2)
+})
+
 test('session bootstrap, city selection, and catalog stay city-aware', async () => {
   process.env.TELEGRAM_BOT_TOKEN = 'bootstrap-secret'
   process.env.ALLOW_DEMO_MODE = 'true'

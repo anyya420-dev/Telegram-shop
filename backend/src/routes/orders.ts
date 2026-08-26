@@ -296,8 +296,8 @@ router.post('/:id/cancel', authRateLimiter, async (request, response) => {
     return
   }
 
-  if (!['pending', 'confirmed'].includes(order.status)) {
-    sendError(response, 400, 'cannot_cancel', 'Only pending or confirmed orders can be cancelled')
+  if (!['pending', 'confirmed', 'payment_pending'].includes(order.status)) {
+    sendError(response, 400, 'cannot_cancel', 'Only pending, payment pending, or confirmed orders can be cancelled')
     return
   }
 
