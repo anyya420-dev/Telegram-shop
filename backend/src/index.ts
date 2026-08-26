@@ -43,7 +43,7 @@ function getAllowedOrigins() {
   const configuredOrigins = readConfiguredOrigins()
 
   if (process.env.NODE_ENV === 'production') {
-    return new Set(configuredOrigins.length > 0 ? configuredOrigins : fallbackProductionOrigins)
+    return new Set([...fallbackProductionOrigins, ...configuredOrigins])
   }
 
   return new Set([...fallbackProductionOrigins, 'http://localhost:5173', 'http://localhost:4173', ...configuredOrigins])

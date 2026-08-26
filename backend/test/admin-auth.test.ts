@@ -39,9 +39,9 @@ before(async () => {
   process.env.NODE_ENV = 'production'
   process.env.ADMIN_PASSWORD = 'admin-secret'
   process.env.DATABASE_URL = databaseUrl
-  process.env.FRONTEND_URL = 'https://telegram-shop.onrender.com/'
+  process.env.FRONTEND_URL = 'https://telegram-shop-3781.onrender.com/'
   process.env.WEB_APP_URL = 'https://telegram-shop-3781.onrender.com/webapp'
-  process.env.CORS_ALLOWED_ORIGINS = 'https://telegram-shop.onrender.com/, https://telegram-shop-3781.onrender.com/app'
+  delete process.env.CORS_ALLOWED_ORIGINS
 
   run('npm', ['run', 'db:generate'])
   run('npm', ['run', 'db:migrate:deploy', '--workspace', 'backend'])
@@ -164,6 +164,14 @@ test('cors allows only production frontend origin and handles preflight', async 
   })
   assert.equal(legacyOrigin.status, 200)
   assert.equal(legacyOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-3781.onrender.com')
+
+  const configuredWebAppOrigin = await request('/api/health', {
+    headers: {
+      Origin: 'https://telegram-shop-3781.onrender.com',
+    },
+  })
+  assert.equal(configuredWebAppOrigin.status, 200)
+  assert.equal(configuredWebAppOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-3781.onrender.com')
 
   const disallowed = await request('/api/health', {
     headers: {
