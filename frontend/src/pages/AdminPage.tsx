@@ -127,7 +127,7 @@ function createDefaultProductCityDraft(cityId = ''): ProductCityDraft {
   };
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
+function getAdminErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
@@ -357,7 +357,7 @@ export default function AdminPage() {
         setPaymentMethods(response.methods);
       }
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to load admin data'));
+      setError(getAdminErrorMessage(e, 'Failed to load admin data'));
     } finally {
       if (tabName === 'orders') {
         setOrdersLoading(false);
@@ -372,7 +372,7 @@ export default function AdminPage() {
       const response = await api.updateAdminOrderStatus(orderId, status);
       setOrders((current) => current.map((order) => (order.id === orderId ? response.order as AdminOrder : order)));
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to update status'));
+      setError(getAdminErrorMessage(e, 'Failed to update status'));
     } finally {
       setUpdatingOrder(null);
     }
@@ -384,7 +384,7 @@ export default function AdminPage() {
       const response = await api.confirmAdminOrderPayment(orderId);
       setOrders((current) => current.map((order) => (order.id === orderId ? response.order as AdminOrder : order)));
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to confirm payment'));
+      setError(getAdminErrorMessage(e, 'Failed to confirm payment'));
     }
   }
 
@@ -394,7 +394,7 @@ export default function AdminPage() {
       const response = await api.rejectAdminOrderPayment(orderId);
       setOrders((current) => current.map((order) => (order.id === orderId ? response.order as AdminOrder : order)));
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to reject payment'));
+      setError(getAdminErrorMessage(e, 'Failed to reject payment'));
     }
   }
 
@@ -416,7 +416,7 @@ export default function AdminPage() {
       setNewCitySortOrder('0');
       setNewCityIsActive(true);
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to create city'));
+      setError(getAdminErrorMessage(e, 'Failed to create city'));
     } finally {
       setCreatingCity(false);
     }
@@ -437,7 +437,7 @@ export default function AdminPage() {
       setCities((current) => current.map((city) => (city.id === cityId ? response.city as AdminCity : city)).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
       setEditingCity(null);
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to update city'));
+      setError(getAdminErrorMessage(e, 'Failed to update city'));
     }
   }
 
@@ -457,7 +457,7 @@ export default function AdminPage() {
       setNewCatNameEn('');
       setNewCatOrder('0');
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to create category'));
+      setError(getAdminErrorMessage(e, 'Failed to create category'));
     } finally {
       setCreatingCat(false);
     }
@@ -478,7 +478,7 @@ export default function AdminPage() {
       setCategories((current) => current.map((category) => (category.id === categoryId ? response.category : category)).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
       setEditingCat(null);
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to update category'));
+      setError(getAdminErrorMessage(e, 'Failed to update category'));
     }
   }
 
@@ -520,7 +520,7 @@ export default function AdminPage() {
       setShowNewProduct(false);
       await refreshProducts();
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to create product'));
+      setError(getAdminErrorMessage(e, 'Failed to create product'));
     } finally {
       setCreatingProd(false);
     }
@@ -546,7 +546,7 @@ export default function AdminPage() {
       setEditingProduct(null);
       await refreshProducts();
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to update product'));
+      setError(getAdminErrorMessage(e, 'Failed to update product'));
     }
   }
 
@@ -567,7 +567,7 @@ export default function AdminPage() {
       setEditingProductCity(null);
       await refreshProducts();
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to update city availability'));
+      setError(getAdminErrorMessage(e, 'Failed to update city availability'));
     }
   }
 
@@ -586,7 +586,7 @@ export default function AdminPage() {
       });
       await refreshProducts();
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to add city availability'));
+      setError(getAdminErrorMessage(e, 'Failed to add city availability'));
     }
   }
 
@@ -607,7 +607,7 @@ export default function AdminPage() {
       setNewValue('');
       setNewMin('');
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to create discount'));
+      setError(getAdminErrorMessage(e, 'Failed to create discount'));
     } finally {
       setCreatingDiscount(false);
     }
@@ -635,7 +635,7 @@ export default function AdminPage() {
       setNewPaymentCardNumber('');
       setNewPaymentCardholderName('');
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to create payment method'));
+      setError(getAdminErrorMessage(e, 'Failed to create payment method'));
     }
   }
 
@@ -645,7 +645,7 @@ export default function AdminPage() {
       const response = await api.toggleAdminPaymentSetting(id);
       setPaymentMethods((current) => current.map((method) => (method.id === id ? response.method : method)));
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to toggle payment method'));
+      setError(getAdminErrorMessage(e, 'Failed to toggle payment method'));
     }
   }
 
@@ -655,7 +655,7 @@ export default function AdminPage() {
       await api.deleteAdminPaymentSetting(id);
       setPaymentMethods((current) => current.filter((method) => method.id !== id));
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to delete payment method'));
+      setError(getAdminErrorMessage(e, 'Failed to delete payment method'));
     }
   }
 
@@ -669,7 +669,7 @@ export default function AdminPage() {
       setTickets((current) => current.map((ticket) => (ticket.id === ticketId ? response.ticket : ticket)));
       setReplyText((current) => ({ ...current, [ticketId]: '' }));
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Failed to send reply'));
+      setError(getAdminErrorMessage(e, 'Failed to send reply'));
     }
   }
 
@@ -684,7 +684,7 @@ export default function AdminPage() {
       setPassword('');
       await loadTab(tab);
     } catch (e: unknown) {
-      setError(getErrorMessage(e, 'Login failed'));
+      setError(getAdminErrorMessage(e, 'Login failed'));
     } finally {
       setAuthLoading(false);
     }
