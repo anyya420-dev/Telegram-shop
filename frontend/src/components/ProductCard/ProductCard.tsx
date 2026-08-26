@@ -28,7 +28,7 @@ export default function ProductCard({ product, onClick }: Props) {
 
   useEffect(() => {
     setQuantity(clampProductQuantity(product, product.minimumQuantity || 1))
-  }, [product])
+  }, [product.productCityId, product.minimumQuantity, product.quantityStep, product.maximumQuantity, product.stock])
 
   async function handleAdd(event: React.MouseEvent) {
     event.stopPropagation()
