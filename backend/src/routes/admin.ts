@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authRateLimiter, mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
+import { authRateLimiter, mapCity, mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
 import type { CookieOptions, Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import {
@@ -14,6 +14,18 @@ const router = Router()
 const ADMIN_SESSION_COOKIE_NAME = 'tg_shop_admin_session'
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const PAYMENT_TYPES = ['card', 'ton', 'crypto'] as const
+const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'] as const
+const DELIVERY_TYPES = ['delivery', 'pickup'] as const
+
+type ProductCityInput = {
+  cityId: number
+  stock: number
+  isAvailable: boolean
+  minimumQuantity: number
+  quantityStep: number
+  maximumQuantity: number
+  unit: string
+}
 
 function getAdminCookieOptions() {
   const sameSite: CookieOptions['sameSite'] = IS_PRODUCTION ? 'none' : 'lax'
@@ -51,6 +63,90 @@ function clearAdminCookie(response: Response) {
 }
 
 type AdminContext = { id: number | null }
+
+function getTrimmedString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function getOptionalTrimmedString(value: unknown) {
+  if (value === null) return null
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+function getFiniteNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function getNonNegativeNumber(value: unknown) {
+  const parsed = getFiniteNumber(value)
+  return parsed != null && parsed >= 0 ? parsed : null
+}
+
+function getPositiveNumber(value: unknown) {
+  const parsed = getFiniteNumber(value)
+  return parsed != null && parsed > 0 ? parsed : null
+}
+
+function getPositiveInteger(value: unknown) {
+  const parsed = getFiniteNumber(value)
+  return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function validateProductCityPayload(input: unknown) {
+  const cityId = parsePositiveInt(String((input as Record<string, unknown>)?.cityId ?? ''))
+  const stock = getNonNegativeNumber((input as Record<string, unknown>)?.stock) ?? 0
+  const minimumQuantity = getPositiveInteger((input as Record<string, unknown>)?.minimumQuantity) ?? 1
+  const quantityStep = getPositiveInteger((input as Record<string, unknown>)?.quantityStep) ?? 1
+  const maximumQuantity = getPositiveInteger((input as Record<string, unknown>)?.maximumQuantity) ?? Math.max(stock, minimumQuantity)
+  const unit = getTrimmedString((input as Record<string, unknown>)?.unit) || 'pcs'
+  const isAvailable = typeof (input as Record<string, unknown>)?.isAvailable === 'boolean'
+    ? Boolean((input as Record<string, unknown>)?.isAvailable)
+    : true
+
+  if (!cityId) {
+    return { error: { code: 'city_required', message: 'Valid city id is required' } } as const
+  }
+  if (maximumQuantity < minimumQuantity) {
+    return { error: { code: 'quantity_invalid', message: 'Maximum quantity must be greater than or equal to minimum quantity' } } as const
+  }
+  if ((maximumQuantity - minimumQuantity) % quantityStep !== 0) {
+    return { error: { code: 'quantity_invalid', message: 'Quantity step must match the minimum and maximum quantity range' } } as const
+  }
+  if (stock > 0 && minimumQuantity > stock) {
+    return { error: { code: 'quantity_invalid', message: 'Minimum quantity cannot exceed stock' } } as const
+  }
+  if (stock > 0 && maximumQuantity > stock) {
+    return { error: { code: 'quantity_invalid', message: 'Maximum quantity cannot exceed stock' } } as const
+  }
+
+  return {
+    value: {
+      cityId,
+      stock,
+      isAvailable,
+      minimumQuantity,
+      quantityStep,
+      maximumQuantity,
+      unit,
+    } satisfies ProductCityInput,
+  } as const
+}
+
+async function ensureCategoryExists(categoryId: number) {
+  return prisma.category.findUnique({ where: { id: categoryId }, select: { id: true } })
+}
+
+async function ensureCityIdsExist(cityIds: number[]) {
+  if (cityIds.length === 0) return true
+  const cities = await prisma.city.findMany({ where: { id: { in: cityIds } }, select: { id: true } })
+  return cities.length === cityIds.length
+}
+
+async function ensureProductExists(productId: number) {
+  return prisma.product.findUnique({ where: { id: productId }, select: { id: true } })
+}
 
 async function getAdminUser(request: Request, response: Response) {
   const token = parseCookie(request, ADMIN_SESSION_COOKIE_NAME)
@@ -154,9 +250,8 @@ router.patch('/orders/:id/status', authRateLimiter, async (request, response) =>
   }
 
   const status = typeof request.body.status === 'string' ? request.body.status : ''
-  const validStatuses = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled']
-  if (!validStatuses.includes(status)) {
-    sendError(response, 400, 'invalid_status', `Status must be one of: ${validStatuses.join(', ')}`)
+  if (!ORDER_STATUSES.includes(status)) {
+    sendError(response, 400, 'invalid_status', `Status must be one of: ${ORDER_STATUSES.join(', ')}`)
     return
   }
 
@@ -544,21 +639,69 @@ router.patch('/products/:id', authRateLimiter, async (request, response) => {
     return
   }
 
-  const { name, nameEn, description, descriptionEn, price, isActive, isRecommended } = request.body
+  const existingProduct = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { id: true },
+  })
+  if (!existingProduct) {
+    sendError(response, 404, 'product_not_found', 'Product not found')
+    return
+  }
+
+  const { name, nameEn, description, descriptionEn, price, image, categoryId, isActive, isRecommended } = request.body
 
   const data: Record<string, unknown> = {}
-  if (typeof name === 'string') data.name = name
-  if (typeof nameEn === 'string') data.nameEn = nameEn
-  if (typeof description === 'string') data.description = description
-  if (typeof descriptionEn === 'string') data.descriptionEn = descriptionEn
-  if (typeof price === 'number' && price > 0) data.price = price
+  if (typeof name === 'string') {
+    const trimmedName = getTrimmedString(name)
+    if (!trimmedName) {
+      sendError(response, 400, 'name_required', 'Product name is required')
+      return
+    }
+    data.name = trimmedName
+  }
+  if (typeof nameEn === 'string' || nameEn === null) data.nameEn = getOptionalTrimmedString(nameEn)
+  if (typeof description === 'string') data.description = description.trim()
+  if (typeof descriptionEn === 'string' || descriptionEn === null) data.descriptionEn = getOptionalTrimmedString(descriptionEn)
+  if (image !== undefined) {
+    if (typeof image !== 'string' && image !== null) {
+      sendError(response, 400, 'invalid_image', 'Invalid image value')
+      return
+    }
+    data.image = getOptionalTrimmedString(image)
+  }
+  if (price !== undefined) {
+    const parsedPrice = getPositiveNumber(price)
+    if (parsedPrice == null) {
+      sendError(response, 400, 'price_required', 'Price must be a positive number')
+      return
+    }
+    data.price = parsedPrice
+  }
+  if (categoryId !== undefined) {
+    const parsedCategoryId = parsePositiveInt(String(categoryId))
+    if (!parsedCategoryId) {
+      sendError(response, 400, 'category_required', 'Valid category id is required')
+      return
+    }
+    const categoryExists = await ensureCategoryExists(parsedCategoryId)
+    if (!categoryExists) {
+      sendError(response, 404, 'category_not_found', 'Category not found')
+      return
+    }
+    data.categoryId = parsedCategoryId
+  }
   if (typeof isActive === 'boolean') data.isActive = isActive
   if (typeof isRecommended === 'boolean') data.isRecommended = isRecommended
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
 
   const product = await prisma.product.update({
     where: { id: productId },
     data,
-    include: { category: true },
+    include: { category: true, productCities: { include: { city: true } } },
   })
 
   await prisma.auditLog.create({
@@ -585,15 +728,86 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
     return
   }
 
-  const { stock, isAvailable, minimumQuantity, quantityStep, maximumQuantity } = request.body
-  const data: Record<string, unknown> = {}
-  if (typeof stock === 'number' && stock >= 0) data.stock = stock
-  if (typeof isAvailable === 'boolean') data.isAvailable = isAvailable
-  if (typeof minimumQuantity === 'number') data.minimumQuantity = minimumQuantity
-  if (typeof quantityStep === 'number') data.quantityStep = quantityStep
-  if (typeof maximumQuantity === 'number') data.maximumQuantity = maximumQuantity
+  const existingProductCity = await prisma.productCity.findUnique({
+    where: { id },
+    include: { city: true },
+  })
+  if (!existingProductCity) {
+    sendError(response, 404, 'product_not_found', 'Product city record not found')
+    return
+  }
 
-  const pc = await prisma.productCity.update({ where: { id }, data })
+  const { stock, isAvailable, minimumQuantity, quantityStep, maximumQuantity, unit } = request.body
+  const data: Record<string, unknown> = {}
+  if (stock !== undefined) {
+    const parsedStock = getNonNegativeNumber(stock)
+    if (parsedStock == null) {
+      sendError(response, 400, 'invalid_stock', 'Stock must be zero or greater')
+      return
+    }
+    data.stock = parsedStock
+  }
+  if (typeof isAvailable === 'boolean') data.isAvailable = isAvailable
+  if (minimumQuantity !== undefined) {
+    const parsedMinimumQuantity = getPositiveInteger(minimumQuantity)
+    if (parsedMinimumQuantity == null) {
+      sendError(response, 400, 'quantity_invalid', 'Minimum quantity must be a positive integer')
+      return
+    }
+    data.minimumQuantity = parsedMinimumQuantity
+  }
+  if (quantityStep !== undefined) {
+    const parsedQuantityStep = getPositiveInteger(quantityStep)
+    if (parsedQuantityStep == null) {
+      sendError(response, 400, 'quantity_invalid', 'Quantity step must be a positive integer')
+      return
+    }
+    data.quantityStep = parsedQuantityStep
+  }
+  if (maximumQuantity !== undefined) {
+    const parsedMaximumQuantity = getPositiveInteger(maximumQuantity)
+    if (parsedMaximumQuantity == null) {
+      sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be a positive integer')
+      return
+    }
+    data.maximumQuantity = parsedMaximumQuantity
+  }
+  if (unit !== undefined) {
+    if (typeof unit !== 'string' || !unit.trim()) {
+      sendError(response, 400, 'unit_required', 'Unit is required')
+      return
+    }
+    data.unit = unit.trim()
+  }
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
+
+  const nextStock = (data.stock as number | undefined) ?? existingProductCity.stock
+  const nextMinimumQuantity = (data.minimumQuantity as number | undefined) ?? existingProductCity.minimumQuantity
+  const nextQuantityStep = (data.quantityStep as number | undefined) ?? existingProductCity.quantityStep
+  const nextMaximumQuantity = (data.maximumQuantity as number | undefined) ?? existingProductCity.maximumQuantity
+
+  if (nextMaximumQuantity < nextMinimumQuantity) {
+    sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be greater than or equal to minimum quantity')
+    return
+  }
+  if ((nextMaximumQuantity - nextMinimumQuantity) % nextQuantityStep !== 0) {
+    sendError(response, 400, 'quantity_invalid', 'Quantity step must match the minimum and maximum quantity range')
+    return
+  }
+  if (nextStock > 0 && nextMinimumQuantity > nextStock) {
+    sendError(response, 400, 'quantity_invalid', 'Minimum quantity cannot exceed stock')
+    return
+  }
+  if (nextStock > 0 && nextMaximumQuantity > nextStock) {
+    sendError(response, 400, 'quantity_invalid', 'Maximum quantity cannot exceed stock')
+    return
+  }
+
+  const pc = await prisma.productCity.update({ where: { id }, data, include: { city: true } })
 
   await prisma.auditLog.create({
     data: {
@@ -620,7 +834,7 @@ router.get('/users', authRateLimiter, async (request, response) => {
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({
-      include: { selectedCity: true, balance: true },
+      include: { selectedCity: true, balance: true, _count: { select: { orders: true } } },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
@@ -628,7 +842,23 @@ router.get('/users', authRateLimiter, async (request, response) => {
     prisma.user.count(),
   ])
 
-  response.json({ users, total, page, pages: Math.ceil(total / limit) })
+  response.json({
+    users: users.map((user) => ({
+      id: user.id,
+      telegramId: user.telegramId,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      selectedCityId: user.selectedCityId,
+      selectedCity: user.selectedCity ? mapCity(user.selectedCity) : null,
+      language: user.language,
+      balance: user.balance?.amount ?? null,
+      orderCount: user._count.orders,
+    })),
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+  })
 })
 
 // ──── Discounts ────────────────────────────────────────────────────────────────
@@ -727,19 +957,28 @@ router.post('/delivery-options', authRateLimiter, async (request, response) => {
   if (!admin) return
 
   const { name, nameEn, type, price, isActive, sortOrder } = request.body
-  if (!name || typeof name !== 'string') {
+  const trimmedName = getTrimmedString(name)
+  if (!trimmedName) {
     sendError(response, 400, 'name_required', 'name is required')
+    return
+  }
+  if (type !== undefined && !DELIVERY_TYPES.includes(type)) {
+    sendError(response, 400, 'invalid_type', 'type must be delivery or pickup')
+    return
+  }
+  if (price !== undefined && getNonNegativeNumber(price) == null) {
+    sendError(response, 400, 'invalid_price', 'price must be zero or greater')
     return
   }
 
   const option = await prisma.deliveryOption.create({
     data: {
-      name,
-      nameEn: nameEn ?? null,
+      name: trimmedName,
+      nameEn: getOptionalTrimmedString(nameEn),
       type: type ?? 'delivery',
-      price: typeof price === 'number' ? price : 0,
+      price: getNonNegativeNumber(price) ?? 0,
       isActive: isActive ?? true,
-      sortOrder: sortOrder ?? 0,
+      sortOrder: getFiniteNumber(sortOrder) ?? 0,
     },
   })
 
@@ -757,14 +996,52 @@ router.patch('/delivery-options/:id', authRateLimiter, async (request, response)
     return
   }
 
+  const existingOption = await prisma.deliveryOption.findUnique({ where: { id }, select: { id: true } })
+  if (!existingOption) {
+    sendError(response, 404, 'delivery_option_not_found', 'Delivery option not found')
+    return
+  }
+
   const { name, nameEn, type, price, isActive, sortOrder } = request.body
   const data: Record<string, unknown> = {}
-  if (typeof name === 'string') data.name = name
-  if (typeof nameEn === 'string') data.nameEn = nameEn
-  if (typeof type === 'string') data.type = type
-  if (typeof price === 'number') data.price = price
+  if (typeof name === 'string') {
+    const trimmedName = getTrimmedString(name)
+    if (!trimmedName) {
+      sendError(response, 400, 'name_required', 'name is required')
+      return
+    }
+    data.name = trimmedName
+  }
+  if (typeof nameEn === 'string' || nameEn === null) data.nameEn = getOptionalTrimmedString(nameEn)
+  if (type !== undefined) {
+    if (!DELIVERY_TYPES.includes(type)) {
+      sendError(response, 400, 'invalid_type', 'type must be delivery or pickup')
+      return
+    }
+    data.type = type
+  }
+  if (price !== undefined) {
+    const parsedPrice = getNonNegativeNumber(price)
+    if (parsedPrice == null) {
+      sendError(response, 400, 'invalid_price', 'price must be zero or greater')
+      return
+    }
+    data.price = parsedPrice
+  }
   if (typeof isActive === 'boolean') data.isActive = isActive
-  if (typeof sortOrder === 'number') data.sortOrder = sortOrder
+  if (sortOrder !== undefined) {
+    const parsedSortOrder = getFiniteNumber(sortOrder)
+    if (parsedSortOrder == null) {
+      sendError(response, 400, 'invalid_sort_order', 'Sort order must be a number')
+      return
+    }
+    data.sortOrder = parsedSortOrder
+  }
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
 
   const option = await prisma.deliveryOption.update({ where: { id }, data })
   response.json({ option })
@@ -874,54 +1151,90 @@ router.post('/products', authRateLimiter, async (request, response) => {
   if (!admin) return
 
   const { name, nameEn, description, descriptionEn, price, image, categoryId, isActive, isRecommended, cities } = request.body
+  const parsedCategoryId = parsePositiveInt(String(categoryId))
 
-  if (typeof name !== 'string' || !name.trim()) {
+  if (!getTrimmedString(name)) {
     sendError(response, 400, 'name_required', 'Product name is required')
     return
   }
-  if (typeof price !== 'number' || price <= 0) {
+  const parsedPrice = getPositiveNumber(price)
+  if (parsedPrice == null) {
     sendError(response, 400, 'price_required', 'Price must be a positive number')
     return
   }
-  if (!parsePositiveInt(String(categoryId))) {
+  if (!parsedCategoryId) {
     sendError(response, 400, 'category_required', 'Valid category id is required')
     return
   }
+  const categoryExists = await ensureCategoryExists(parsedCategoryId)
+  if (!categoryExists) {
+    sendError(response, 404, 'category_not_found', 'Category not found')
+    return
+  }
 
-  const product = await prisma.product.create({
-    data: {
-      name: name.trim(),
-      nameEn: typeof nameEn === 'string' && nameEn.trim() ? nameEn.trim() : null,
-      description: typeof description === 'string' ? description.trim() : '',
-      descriptionEn: typeof descriptionEn === 'string' && descriptionEn.trim() ? descriptionEn.trim() : null,
-      price,
-      image: typeof image === 'string' && image.trim() ? image.trim() : null,
-      categoryId: Number(categoryId),
-      isActive: typeof isActive === 'boolean' ? isActive : true,
-      isRecommended: typeof isRecommended === 'boolean' ? isRecommended : false,
-    },
-    include: { category: true, productCities: { include: { city: true } } },
-  })
+  const productCities: ProductCityInput[] = []
+  if (cities !== undefined) {
+    if (!Array.isArray(cities)) {
+      sendError(response, 400, 'invalid_cities', 'Cities must be an array')
+      return
+    }
 
-  // Optionally create city availability records
-  if (Array.isArray(cities)) {
+    const seenCityIds = new Set<number>()
     for (const cityEntry of cities) {
-      const cId = parsePositiveInt(String(cityEntry.cityId))
-      if (!cId) continue
-      await prisma.productCity.create({
-        data: {
-          productId: product.id,
-          cityId: cId,
-          stock: typeof cityEntry.stock === 'number' ? cityEntry.stock : 0,
-          isAvailable: typeof cityEntry.isAvailable === 'boolean' ? cityEntry.isAvailable : true,
-        },
-      })
+      const parsedCity = validateProductCityPayload(cityEntry)
+      if ('error' in parsedCity) {
+        sendError(response, 400, parsedCity.error.code, parsedCity.error.message)
+        return
+      }
+      if (seenCityIds.has(parsedCity.value.cityId)) {
+        sendError(response, 400, 'duplicate_city', 'Each city can only be assigned once per product')
+        return
+      }
+      seenCityIds.add(parsedCity.value.cityId)
+      productCities.push(parsedCity.value)
+    }
+
+    const citiesExist = await ensureCityIdsExist(productCities.map((entry) => entry.cityId))
+    if (!citiesExist) {
+      sendError(response, 404, 'city_not_found', 'One or more selected cities were not found')
+      return
     }
   }
 
-  const updated = await prisma.product.findUnique({
-    where: { id: product.id },
-    include: { category: true, productCities: { include: { city: true } } },
+  const product = await prisma.$transaction(async (tx) => {
+    const createdProduct = await tx.product.create({
+      data: {
+        name: getTrimmedString(name),
+        nameEn: getOptionalTrimmedString(nameEn),
+        description: typeof description === 'string' ? description.trim() : '',
+        descriptionEn: getOptionalTrimmedString(descriptionEn),
+        price: parsedPrice,
+        image: getOptionalTrimmedString(image),
+        categoryId: parsedCategoryId,
+        isActive: typeof isActive === 'boolean' ? isActive : true,
+        isRecommended: typeof isRecommended === 'boolean' ? isRecommended : false,
+      },
+    })
+
+    if (productCities.length > 0) {
+      await tx.productCity.createMany({
+        data: productCities.map((entry) => ({
+          productId: createdProduct.id,
+          cityId: entry.cityId,
+          stock: entry.stock,
+          isAvailable: entry.isAvailable,
+          minimumQuantity: entry.minimumQuantity,
+          quantityStep: entry.quantityStep,
+          maximumQuantity: entry.maximumQuantity,
+          unit: entry.unit,
+        })),
+      })
+    }
+
+    return tx.product.findUniqueOrThrow({
+      where: { id: createdProduct.id },
+      include: { category: true, productCities: { include: { city: true } } },
+    })
   })
 
   await prisma.auditLog.create({
@@ -934,7 +1247,7 @@ router.post('/products', authRateLimiter, async (request, response) => {
     },
   })
 
-  response.status(201).json({ product: updated })
+  response.status(201).json({ product })
 })
 
 // POST /api/admin/product-cities - add product to an additional city
@@ -950,19 +1263,41 @@ router.post('/product-cities', authRateLimiter, async (request, response) => {
     return
   }
 
-  const existing = await prisma.productCity.findFirst({ where: { productId, cityId } })
+  const [productExists, cityExists, existing] = await Promise.all([
+    ensureProductExists(productId),
+    prisma.city.findUnique({ where: { id: cityId }, select: { id: true } }),
+    prisma.productCity.findFirst({ where: { productId, cityId } }),
+  ])
+  if (!productExists) {
+    sendError(response, 404, 'product_not_found', 'Product not found')
+    return
+  }
+  if (!cityExists) {
+    sendError(response, 404, 'city_not_found', 'City not found')
+    return
+  }
   if (existing) {
     sendError(response, 409, 'already_exists', 'Product is already available in this city')
     return
   }
 
-  const { stock, isAvailable } = request.body
+  const parsedCityPayload = validateProductCityPayload(request.body)
+  if ('error' in parsedCityPayload) {
+    sendError(response, 400, parsedCityPayload.error.code, parsedCityPayload.error.message)
+    return
+  }
+
+  const { stock, isAvailable, minimumQuantity, quantityStep, maximumQuantity, unit } = parsedCityPayload.value
   const pc = await prisma.productCity.create({
     data: {
       productId,
       cityId,
-      stock: typeof stock === 'number' ? stock : 0,
-      isAvailable: typeof isAvailable === 'boolean' ? isAvailable : true,
+      stock,
+      isAvailable,
+      minimumQuantity,
+      quantityStep,
+      maximumQuantity,
+      unit,
     },
     include: { city: true },
   })
@@ -978,6 +1313,116 @@ router.post('/product-cities', authRateLimiter, async (request, response) => {
   })
 
   response.status(201).json({ productCity: pc })
+})
+
+// ──── Cities ────────────────────────────────────────────────────────────────
+
+// GET /api/admin/cities
+router.get('/cities', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const cities = await prisma.city.findMany({
+    include: { _count: { select: { users: true, productCities: true, orders: true } } },
+    orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+  })
+
+  response.json({ cities: cities.map((city) => mapCity(city)) })
+})
+
+// POST /api/admin/cities
+router.post('/cities', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const name = getTrimmedString(request.body.name)
+  const nameEn = getOptionalTrimmedString(request.body.nameEn)
+  const isActive = typeof request.body.isActive === 'boolean' ? request.body.isActive : true
+  const sortOrder = getFiniteNumber(request.body.sortOrder) ?? 0
+
+  if (!name) {
+    sendError(response, 400, 'invalid_name', 'City name is required')
+    return
+  }
+
+  const duplicate = await prisma.city.findUnique({ where: { name }, select: { id: true } })
+  if (duplicate) {
+    sendError(response, 409, 'city_exists', 'City already exists')
+    return
+  }
+
+  const city = await prisma.city.create({
+    data: { name, nameEn, isActive, sortOrder },
+    include: { _count: { select: { users: true, productCities: true, orders: true } } },
+  })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'city_created', entity: 'city', entityId: city.id, meta: JSON.stringify({ name: city.name }) },
+  })
+
+  response.status(201).json({ city: mapCity(city) })
+})
+
+// PATCH /api/admin/cities/:id
+router.patch('/cities/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid city id')
+    return
+  }
+
+  const city = await prisma.city.findUnique({ where: { id }, select: { id: true } })
+  if (!city) {
+    sendError(response, 404, 'city_not_found', 'City not found')
+    return
+  }
+
+  const data: Record<string, unknown> = {}
+  if (typeof request.body.name === 'string') {
+    const name = getTrimmedString(request.body.name)
+    if (!name) {
+      sendError(response, 400, 'invalid_name', 'City name is required')
+      return
+    }
+    const duplicate = await prisma.city.findFirst({ where: { name, NOT: { id } }, select: { id: true } })
+    if (duplicate) {
+      sendError(response, 409, 'city_exists', 'City already exists')
+      return
+    }
+    data.name = name
+  }
+  if (typeof request.body.nameEn === 'string' || request.body.nameEn === null) {
+    data.nameEn = getOptionalTrimmedString(request.body.nameEn)
+  }
+  if (typeof request.body.isActive === 'boolean') data.isActive = request.body.isActive
+  if (request.body.sortOrder !== undefined) {
+    const nextSortOrder = getFiniteNumber(request.body.sortOrder)
+    if (nextSortOrder == null) {
+      sendError(response, 400, 'invalid_sort_order', 'Sort order must be a number')
+      return
+    }
+    data.sortOrder = nextSortOrder
+  }
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
+
+  const updatedCity = await prisma.city.update({
+    where: { id },
+    data,
+    include: { _count: { select: { users: true, productCities: true, orders: true } } },
+  })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'city_updated', entity: 'city', entityId: id, meta: JSON.stringify(data) },
+  })
+
+  response.json({ city: mapCity(updatedCity) })
 })
 
 // ──── Categories ────────────────────────────────────────────────────────────
@@ -1001,16 +1446,22 @@ router.post('/categories', authRateLimiter, async (request, response) => {
   if (!admin) return
 
   const { name, nameEn, sortOrder } = request.body
-  if (typeof name !== 'string' || !name.trim()) {
+  const trimmedName = getTrimmedString(name)
+  if (!trimmedName) {
     sendError(response, 400, 'invalid_name', 'Category name is required')
+    return
+  }
+  const duplicateCategory = await prisma.category.findUnique({ where: { name: trimmedName }, select: { id: true } })
+  if (duplicateCategory) {
+    sendError(response, 409, 'category_exists', 'Category already exists')
     return
   }
 
   const category = await prisma.category.create({
     data: {
-      name: name.trim(),
-      nameEn: typeof nameEn === 'string' && nameEn.trim() ? nameEn.trim() : null,
-      sortOrder: typeof sortOrder === 'number' ? sortOrder : 0,
+      name: trimmedName,
+      nameEn: getOptionalTrimmedString(nameEn),
+      sortOrder: getFiniteNumber(sortOrder) ?? 0,
     },
     include: { _count: { select: { products: true } } },
   })
@@ -1033,12 +1484,37 @@ router.patch('/categories/:id', authRateLimiter, async (request, response) => {
     return
   }
 
+  const existingCategory = await prisma.category.findUnique({ where: { id }, select: { id: true } })
+  if (!existingCategory) {
+    sendError(response, 404, 'category_not_found', 'Category not found')
+    return
+  }
+
   const { name, nameEn, isActive, sortOrder } = request.body
   const data: Record<string, unknown> = {}
-  if (typeof name === 'string' && name.trim()) data.name = name.trim()
-  if (typeof nameEn === 'string') data.nameEn = nameEn.trim() || null
+  if (typeof name === 'string') {
+    const trimmedName = getTrimmedString(name)
+    if (!trimmedName) {
+      sendError(response, 400, 'invalid_name', 'Category name is required')
+      return
+    }
+    const duplicateCategory = await prisma.category.findFirst({ where: { name: trimmedName, NOT: { id } }, select: { id: true } })
+    if (duplicateCategory) {
+      sendError(response, 409, 'category_exists', 'Category already exists')
+      return
+    }
+    data.name = trimmedName
+  }
+  if (typeof nameEn === 'string' || nameEn === null) data.nameEn = getOptionalTrimmedString(nameEn)
   if (typeof isActive === 'boolean') data.isActive = isActive
-  if (typeof sortOrder === 'number') data.sortOrder = sortOrder
+  if (sortOrder !== undefined) {
+    const parsedSortOrder = getFiniteNumber(sortOrder)
+    if (parsedSortOrder == null) {
+      sendError(response, 400, 'invalid_sort_order', 'Sort order must be a number')
+      return
+    }
+    data.sortOrder = parsedSortOrder
+  }
 
   if (Object.keys(data).length === 0) {
     sendError(response, 400, 'no_changes', 'No valid fields to update')
