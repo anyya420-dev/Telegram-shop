@@ -1,59 +1,86 @@
-import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { api } from '../api/client';
-import { formatCurrency } from '../lib/format';
-import i18n from '../lib/i18n';
-import type { Language } from '../types';
-import styles from './CasinoPage.module.css';
-
-const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+import { useEffect, useState } from 'react'
+import { Dices, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { api } from '../api/client'
+import { getErrorMessage } from '../lib/errors'
+import { formatCurrency } from '../lib/format'
+import i18n from '../lib/i18n'
+import type { Language } from '../types'
+import styles from './CasinoPage.module.css'
 
 export default function CasinoPage() {
-  const { t } = useTranslation();
-  const language = i18n.language as Language;
-  const [balance, setBalance] = useState<number | null>(null);
-  const [bet, setBet] = useState('10');
-  const [target, setTarget] = useState(1);
-  const [rolling, setRolling] = useState(false);
-  const [result, setResult] = useState<{ dice: number; win: boolean; payout: number } | null>(null);
-  const [animDice, setAnimDice] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState<{ id: number; type: string; amount: number; comment: string | null; createdAt: string }[]>([]);
+  const { t } = useTranslation()
+  const language = i18n.language as Language
+  const [balance, setBalance] = useState<number | null>(null)
+  const [bet, setBet] = useState('10')
+  const [target, setTarget] = useState(1)
+  const [rolling, setRolling] = useState(false)
+  const [result, setResult] = useState<{ dice: number; win: boolean; payout: number } | null>(null)
+  const [animDice, setAnimDice] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<{ id: number; type: string; amount: number; comment: string | null; createdAt: string }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function loadCasino() {
+    try {
+      setLoading(true)
+      setError(null)
+      const [balanceResponse, historyResponse] = await Promise.all([api.getBalance(), api.getCasinoHistory()])
+      setBalance(balanceResponse.balance.amount)
+      setHistory(historyResponse.history)
+    } catch (loadError) {
+      setError(getErrorMessage(loadError, t, 'request_failed'))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    void api.getBalance().then((r) => setBalance(r.balance.amount));
-    void api.getCasinoHistory().then((r) => setHistory(r.history));
-  }, []);
+    void loadCasino()
+  }, [])
 
   async function handleSpin() {
-    const betNum = Number(bet);
-    if (!betNum || betNum <= 0 || rolling) return;
-    setRolling(true);
-    setError(null);
-    setResult(null);
+    const betNum = Number(bet)
+    if (!betNum || betNum <= 0 || rolling) return
+    setRolling(true)
+    setError(null)
+    setResult(null)
 
-    // Animate dice rolling
-    let count = 0;
-    const interval = setInterval(() => {
-      setAnimDice(Math.floor(Math.random() * 6) + 1);
-      count++;
-      if (count > 10) clearInterval(interval);
-    }, 80);
+    let count = 0
+    const interval = window.setInterval(() => {
+      setAnimDice(Math.floor(Math.random() * 6) + 1)
+      count += 1
+      if (count > 10) {
+        window.clearInterval(interval)
+      }
+    }, 80)
 
     try {
-      const r = await api.casinoSpin(betNum, target);
-      clearInterval(interval);
-      setAnimDice(r.dice);
-      setBalance(r.balance.amount);
-      setResult({ dice: r.dice, win: r.win, payout: r.payout });
-      void api.getCasinoHistory().then((res) => setHistory(res.history));
-    } catch (e: unknown) {
-      clearInterval(interval);
-      setAnimDice(null);
-      setError(e instanceof Error ? e.message : t('casino.error'));
+      const response = await api.casinoSpin(betNum, target)
+      window.clearInterval(interval)
+      setAnimDice(response.dice)
+      setBalance(response.balance.amount)
+      setResult({ dice: response.dice, win: response.win, payout: response.payout })
+      const historyResponse = await api.getCasinoHistory()
+      setHistory(historyResponse.history)
+    } catch (spinError) {
+      window.clearInterval(interval)
+      setAnimDice(null)
+      setError(getErrorMessage(spinError, t, 'request_failed'))
     } finally {
-      setRolling(false);
+      setRolling(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <h1 className={styles.title}>{t('casino.title')}</h1>
+        <div className={styles.controls}>
+          <p className={styles.hint}>{t('common.loading')}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -67,19 +94,19 @@ export default function CasinoPage() {
 
       <div className={styles.diceDisplay}>
         {animDice !== null ? (
-          <span className={styles.diceFace}>{DICE_FACES[animDice - 1]}</span>
+          <span className={styles.diceFace}>{animDice}</span>
         ) : (
-          <span className={styles.dicePlaceholder}>🎲</span>
+          <span className={styles.dicePlaceholder}><Dices size={72} strokeWidth={1.3} /></span>
         )}
       </div>
 
-      {result && (
+      {result ? (
         <div className={`${styles.resultBanner} ${result.win ? styles.win : styles.lose}`}>
           {result.win
             ? t('casino.won', { payout: formatCurrency(result.payout, language) })
             : t('casino.lost', { bet: formatCurrency(Number(bet), language) })}
         </div>
-      )}
+      ) : null}
 
       <div className={styles.controls}>
         <div className={styles.controlRow}>
@@ -90,20 +117,21 @@ export default function CasinoPage() {
             min="1"
             max="10000"
             value={bet}
-            onChange={(e) => setBet(e.target.value)}
+            onChange={(event) => setBet(event.target.value)}
           />
         </div>
 
         <div className={styles.controlRow}>
           <label className={styles.label}>{t('casino.target')}</label>
           <div className={styles.targetBtns}>
-            {[1, 2, 3, 4, 5, 6].map((n) => (
+            {[1, 2, 3, 4, 5, 6].map((value) => (
               <button
-                key={n}
-                className={`${styles.targetBtn} ${target === n ? styles.targetActive : ''}`}
-                onClick={() => setTarget(n)}
+                key={value}
+                className={`${styles.targetBtn} ${target === value ? styles.targetActive : ''}`}
+                onClick={() => setTarget(value)}
+                type="button"
               >
-                {DICE_FACES[n - 1]}
+                {value}
               </button>
             ))}
           </div>
@@ -111,25 +139,30 @@ export default function CasinoPage() {
 
         <p className={styles.hint}>{t('casino.hint')}</p>
 
-        {error && <p className={styles.error}>{error}</p>}
+        {error ? <p className={styles.error}>{error}</p> : null}
 
-        <button className={styles.spinBtn} onClick={() => void handleSpin()} disabled={rolling || !bet}>
+        <button className={styles.spinBtn} onClick={() => void handleSpin()} disabled={rolling || !bet} type="button">
           {rolling ? t('casino.rolling') : t('casino.spin')}
         </button>
+        {error ? (
+          <button className={styles.spinBtn} onClick={() => void loadCasino()} disabled={rolling} type="button">
+            <RefreshCw size={16} strokeWidth={1.5} />
+            {t('common.retry')}
+          </button>
+        ) : null}
       </div>
 
-      {history.length > 0 && (
+      {history.length > 0 ? (
         <div className={styles.history}>
           <h3 className={styles.historyTitle}>{t('casino.history')}</h3>
-          {history.map((h) => (
-            <div key={h.id} className={`${styles.historyRow} ${h.type === 'casino_win' ? styles.win : styles.lose}`}>
-              <span>{h.comment}</span>
-              <span>{h.amount >= 0 ? '+' : ''}{formatCurrency(h.amount, language)}</span>
+          {history.map((entry) => (
+            <div key={entry.id} className={`${styles.historyRow} ${entry.type === 'casino_win' ? styles.win : styles.lose}`}>
+              <span>{entry.comment}</span>
+              <span>{entry.amount >= 0 ? '+' : ''}{formatCurrency(entry.amount, language)}</span>
             </div>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
-  );
+  )
 }
-

@@ -29,7 +29,9 @@
 }
 
 .dicePlaceholder {
-  font-size: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0.3;
 }
 
@@ -96,11 +98,13 @@
 }
 
 .targetBtn {
-  font-size: 24px;
+  min-width: 38px;
+  font-size: 18px;
+  font-weight: 700;
   background: var(--tg-theme-bg-color, #fff);
   border: 2px solid transparent;
   border-radius: 8px;
-  padding: 4px;
+  padding: 8px 10px;
   cursor: pointer;
   transition: border-color 0.15s;
 }
@@ -123,6 +127,10 @@
 
 .spinBtn {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--tg-theme-button-color, #7C3AED);
   color: var(--tg-theme-button-text-color, #fff);
   border: none;
@@ -135,6 +143,10 @@
 
 .spinBtn:disabled {
   opacity: 0.5;
+}
+
+.spinBtn + .spinBtn {
+  margin-top: 8px;
 }
 
 .history {

@@ -185,10 +185,10 @@
     "bet": "Bet amount",
     "target": "Pick a number",
     "hint": "If the dice matches your number, you win 5× your bet",
-    "spin": "🎲 Roll dice",
+    "spin": "Roll dice",
     "rolling": "Rolling...",
-    "won": "🎉 You won {{payout}}!",
-    "lost": "😢 You lost {{bet}}",
+    "won": "You won {{payout}}!",
+    "lost": "You lost {{bet}}",
     "history": "Recent games",
     "error": "Spin failed"
   },
@@ -209,7 +209,8 @@
     "admin": "Support",
     "you": "You",
     "replyPlaceholder": "Your reply...",
-    "error": "Failed to submit"
+    "error": "Failed to submit",
+    "empty": "No support tickets yet"
   },
   "common": {
     "loading": "Loading...",

@@ -122,6 +122,15 @@
   margin-top: 8px;
 }
 
+.errorRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e53e3e;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
 .success {
   color: #38a169;
   font-size: 13px;
