@@ -52,14 +52,13 @@ bot.command('shop', async (context) => {
 })
 
 bot.launch()
-  .then(() => {
-    void clearLegacyWebAppMenuButton()
-      .then(() => {
-        console.log('Telegram bot started')
-      })
-      .catch((error) => {
-        console.warn('Telegram bot started, but failed to clear default menu button:', error)
-      })
+  .then(async () => {
+    try {
+      await clearLegacyWebAppMenuButton()
+    } catch (error) {
+      console.warn('Telegram bot started, but failed to clear default menu button:', error)
+    }
+    console.log('Telegram bot started')
   })
   .catch((error) => {
     console.error('Failed to start Telegram bot:', error)
