@@ -150,10 +150,15 @@ export async function getTelegramInitDataBotTokens() {
     .map(normalizeTelegramBotToken)
     .filter((value): value is string => Boolean(value))
 
-  const managedBots = await prisma.telegramBot.findMany({
-    where: { isActive: true },
-    select: { token: true },
-  })
+  let managedBots: { token: string }[] = []
+  try {
+    managedBots = await prisma.telegramBot.findMany({
+      where: { isActive: true },
+      select: { token: true },
+    })
+  } catch {
+    return [...new Set(envTokens)]
+  }
 
   const managedTokens = managedBots
     .map((bot) => normalizeTelegramBotToken(bot.token))
