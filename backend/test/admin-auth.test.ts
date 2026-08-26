@@ -874,6 +874,80 @@ test('session bootstrap accepts initData signed by active managed bot token', as
   }
 })
 
+test('operators auth requires verified Telegram init data and rejects spoofed headers', async () => {
+  const previousAllowDemoMode = process.env.ALLOW_DEMO_MODE
+  const previousTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
+  process.env.ALLOW_DEMO_MODE = 'false'
+  process.env.TELEGRAM_BOT_TOKEN = '111111111:env-operator-token'
+
+  try {
+    const managedBotToken = '333333333:managed-operator-token'
+    await prisma.telegramBot.create({
+      data: {
+        token: managedBotToken,
+        botId: 'managed-operator-bot',
+        username: 'managed_operator_bot',
+        firstName: 'Managed Operator Bot',
+        isActive: true,
+      },
+    })
+
+    const spoofedHeader = await requestJson('/api/operators/pending', {
+      headers: {
+        'X-Telegram-User-Id': '123456789',
+      },
+    })
+    assert.equal(spoofedHeader.response.status, 401)
+    assert.equal(spoofedHeader.body.code, 'telegram_init_data_required')
+
+    const unregisteredInitData = createTelegramInitData(
+      { id: 700000031, first_name: 'NotOperator', username: 'not_operator' },
+      managedBotToken,
+    )
+    const unregisteredOperator = await requestJson('/api/operators/pending', {
+      headers: {
+        'X-Telegram-Init-Data': unregisteredInitData,
+      },
+    })
+    assert.equal(unregisteredOperator.response.status, 403)
+    assert.equal(unregisteredOperator.body.code, 'operator_access_denied')
+
+    const activeTelegramId = '700000032'
+    await prisma.operator.create({
+      data: {
+        telegramId: activeTelegramId,
+        firstName: 'Active',
+        username: 'active_operator',
+        isActive: true,
+      },
+    })
+
+    const activeInitData = createTelegramInitData(
+      { id: Number(activeTelegramId), first_name: 'Active', username: 'active_operator' },
+      managedBotToken,
+    )
+    const authenticatedOperator = await requestJson('/api/operators/pending', {
+      headers: {
+        'X-Telegram-Init-Data': activeInitData,
+      },
+    })
+    assert.equal(authenticatedOperator.response.status, 200)
+    assert.ok(Array.isArray(authenticatedOperator.body.orders))
+  } finally {
+    if (previousAllowDemoMode === undefined) {
+      delete process.env.ALLOW_DEMO_MODE
+    } else {
+      process.env.ALLOW_DEMO_MODE = previousAllowDemoMode
+    }
+
+    if (previousTelegramBotToken === undefined) {
+      delete process.env.TELEGRAM_BOT_TOKEN
+    } else {
+      process.env.TELEGRAM_BOT_TOKEN = previousTelegramBotToken
+    }
+  }
+})
+
 test('customer can cancel payment pending order', async () => {
   const telegramId = '900000005'
   const user = await prisma.user.create({

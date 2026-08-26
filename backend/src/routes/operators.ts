@@ -31,38 +31,31 @@ const ORDER_INCLUDE = {
 }
 
 async function getAuthorizedOperator(request: Request, response: Response) {
-  const directTelegramId = request.header('x-telegram-user-id')?.trim()
   const initDataHeader = request.header('x-telegram-init-data')?.trim()
   const initDataBody = typeof request.body?.initData === 'string' ? request.body.initData.trim() : ''
   const initData = initDataHeader || initDataBody
 
-  let telegramId = directTelegramId || ''
-
-  if (initData) {
-    const botTokens = await getTelegramInitDataBotTokens()
-
-    if (botTokens.length === 0) {
-      sendError(response, 503, 'telegram_bot_token_required', 'Telegram bot token is required for Web App verification')
-      return null
-    }
-
-    const telegramUser = verifyTelegramInitDataWithAnyBotToken(initData, botTokens)
-    if (!telegramUser) {
-      sendError(response, 401, 'telegram_verification_failed', 'Telegram init data verification failed')
-      return null
-    }
-
-    telegramId = String(telegramUser.id)
+  if (!initData) {
+    sendError(response, 401, 'telegram_init_data_required', 'Telegram init data is required')
+    return null
   }
 
-  if (!telegramId) {
-    sendError(response, 401, 'telegram_auth_required', 'Telegram init data or Telegram user id header is required')
+  const botTokens = await getTelegramInitDataBotTokens()
+
+  if (botTokens.length === 0) {
+    sendError(response, 503, 'telegram_bot_token_required', 'Telegram bot token is required for Web App verification')
+    return null
+  }
+
+  const telegramUser = verifyTelegramInitDataWithAnyBotToken(initData, botTokens)
+  if (!telegramUser) {
+    sendError(response, 401, 'telegram_verification_failed', 'Telegram init data verification failed')
     return null
   }
 
   const operator = await prisma.operator.findFirst({
     where: {
-      telegramId,
+      telegramId: String(telegramUser.id),
       isActive: true,
     },
   })
