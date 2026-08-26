@@ -24,6 +24,11 @@ type TelegramUserPayload = {
   last_name?: string
 }
 
+function normalizeTelegramBotToken(value: string | undefined | null) {
+  const normalized = value?.trim()
+  return normalized ? normalized : null
+}
+
 type TranslationShape = {
   name: string
   nameEn: string | null
@@ -127,6 +132,39 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
   } catch {
     return null
   }
+}
+
+export function verifyTelegramInitDataWithAnyBotToken(initData: string, botTokens: string[]) {
+  for (const botToken of botTokens) {
+    const telegramUser = verifyTelegramInitData(initData, botToken)
+    if (telegramUser) {
+      return telegramUser
+    }
+  }
+
+  return null
+}
+
+export async function getTelegramInitDataBotTokens() {
+  const envTokens = [process.env.BOT_TOKEN, process.env.TELEGRAM_BOT_TOKEN]
+    .map(normalizeTelegramBotToken)
+    .filter((value): value is string => Boolean(value))
+
+  let managedBots: { token: string }[] = []
+  try {
+    managedBots = await prisma.telegramBot.findMany({
+      where: { isActive: true },
+      select: { token: true },
+    })
+  } catch {
+    return [...new Set(envTokens)]
+  }
+
+  const managedTokens = managedBots
+    .map((bot) => normalizeTelegramBotToken(bot.token))
+    .filter((value): value is string => Boolean(value))
+
+  return [...new Set([...envTokens, ...managedTokens])]
 }
 
 export function isAllowedQuantity(quantity: number, minimum: number, step: number, maximum: number) {

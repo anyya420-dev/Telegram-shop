@@ -5,36 +5,46 @@ const token = process.env.TELEGRAM_BOT_TOKEN
 const webAppUrl = process.env.WEB_APP_URL ?? 'http://localhost:5173'
 
 if (!token) {
-  console.warn('TELEGRAM_BOT_TOKEN is not set. Bot is disabled until the token is provided.')
-  process.exit(0)
+  console.warn('TELEGRAM_BOT_TOKEN is not set. Bot worker will stay idle until the token is provided.')
+  const idleInterval = setInterval(() => {
+    // keep worker process alive to avoid restart loops when token is intentionally unset
+  }, 60_000)
+  process.once('SIGINT', () => {
+    clearInterval(idleInterval)
+    process.exit(0)
+  })
+  process.once('SIGTERM', () => {
+    clearInterval(idleInterval)
+    process.exit(0)
+  })
+} else {
+  const bot = new Telegraf(token)
+
+  bot.start(async (context) => {
+    await context.reply(
+      'Добро пожаловать в NARCOS. Откройте Web App, чтобы выбрать город и начать покупки.',
+      Markup.inlineKeyboard([
+        [Markup.button.webApp('🛍 Открыть NARCOS', webAppUrl)],
+      ]),
+    )
+  })
+
+  bot.command('shop', async (context) => {
+    await context.reply(
+      'Откройте NARCOS через кнопку ниже.',
+      Markup.inlineKeyboard([
+        [Markup.button.webApp('🛍 NARCOS', webAppUrl)],
+      ]),
+    )
+  })
+
+  bot.launch().then(() => {
+    console.log('NARCOS shop bot started')
+  }).catch((error) => {
+    console.error('NARCOS shop bot failed to start:', error)
+    process.exit(1)
+  })
+
+  process.once('SIGINT', () => bot.stop('SIGINT'))
+  process.once('SIGTERM', () => bot.stop('SIGTERM'))
 }
-
-const bot = new Telegraf(token)
-
-bot.start(async (context) => {
-  await context.reply(
-    'Добро пожаловать в NARCOS. Откройте Web App, чтобы выбрать город и начать покупки.',
-    Markup.inlineKeyboard([
-      [Markup.button.webApp('🛍 Открыть NARCOS', webAppUrl)],
-    ]),
-  )
-})
-
-bot.command('shop', async (context) => {
-  await context.reply(
-    'Откройте NARCOS через кнопку ниже.',
-    Markup.inlineKeyboard([
-      [Markup.button.webApp('🛍 NARCOS', webAppUrl)],
-    ]),
-  )
-})
-
-bot.launch().then(() => {
-  console.log('NARCOS shop bot started')
-}).catch((error) => {
-  console.error('NARCOS shop bot failed to start:', error)
-  process.exit(1)
-})
-
-process.once('SIGINT', () => bot.stop('SIGINT'))
-process.once('SIGTERM', () => bot.stop('SIGTERM'))
