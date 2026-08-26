@@ -463,7 +463,8 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
   assert.equal(catalogNorth.response.status, 200)
   assert.equal(catalogNorth.body.products.length, 1)
   assert.equal(catalogNorth.body.products[0].productCityId, activeCityProduct.id)
-  assert.equal(catalogNorth.body.products[0].unitTranslations.en, 'шт.')
+  assert.equal(catalogNorth.body.products[0].unit, 'шт.')
+  assert.equal(catalogNorth.body.products[0].unitTranslations.ru, 'шт.')
 
   const catalogByCategory = await requestJson(`/api/catalog?cityId=${cityNorth.id}&categoryId=${categoryCoffee.id}`, {
     headers: { 'X-Session-Token': sessionToken },
