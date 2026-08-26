@@ -14,6 +14,7 @@ import {
   sanitizePayment,
   sanitizePaymentMethod,
 } from '../services/payments.js'
+import { ensureCasinoDefaults, getOrCreateCasinoBalance, serializeReward } from '../services/casino.js'
 
 const router = Router()
 const ADMIN_SESSION_COOKIE_NAME = 'tg_shop_admin_session'
@@ -809,6 +810,41 @@ router.patch('/products/:id', authRateLimiter, async (request, response) => {
   }
   if (typeof isActive === 'boolean') data.isActive = isActive
   if (typeof isRecommended === 'boolean') data.isRecommended = isRecommended
+  if (request.body.creditsEnabled !== undefined) {
+    if (typeof request.body.creditsEnabled !== 'boolean') {
+      sendError(response, 400, 'invalid_credits_enabled', 'Casino credits flag must be boolean')
+      return
+    }
+    data.creditsEnabled = request.body.creditsEnabled
+    if (!request.body.creditsEnabled) {
+      data.creditsPrice = null
+      data.minCreditsRequired = null
+    }
+  }
+  if (request.body.creditsPrice !== undefined) {
+    if (request.body.creditsPrice === null) {
+      data.creditsPrice = null
+    } else {
+      const parsedCreditsPrice = getPositiveNumber(request.body.creditsPrice)
+      if (parsedCreditsPrice == null) {
+        sendError(response, 400, 'invalid_credits_price', 'Casino credits price must be a positive number')
+        return
+      }
+      data.creditsPrice = parsedCreditsPrice
+    }
+  }
+  if (request.body.minCreditsRequired !== undefined) {
+    if (request.body.minCreditsRequired === null) {
+      data.minCreditsRequired = null
+    } else {
+      const parsedMinCreditsRequired = getNonNegativeNumber(request.body.minCreditsRequired)
+      if (parsedMinCreditsRequired == null) {
+        sendError(response, 400, 'invalid_minimum_credits', 'Minimum casino credits must be zero or positive')
+        return
+      }
+      data.minCreditsRequired = parsedMinCreditsRequired
+    }
+  }
 
   if (Object.keys(data).length === 0) {
     sendError(response, 400, 'no_changes', 'No valid fields to update')
@@ -1307,7 +1343,21 @@ router.post('/products', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const { name, nameEn, description, descriptionEn, price, image, categoryId, isActive, isRecommended, cities } = request.body
+  const {
+    name,
+    nameEn,
+    description,
+    descriptionEn,
+    price,
+    image,
+    categoryId,
+    creditsEnabled,
+    creditsPrice,
+    minCreditsRequired,
+    isActive,
+    isRecommended,
+    cities,
+  } = request.body
   const parsedCategoryId = parsePositiveInt(String(categoryId))
 
   if (!getTrimmedString(name)) {
@@ -1321,6 +1371,16 @@ router.post('/products', authRateLimiter, async (request, response) => {
   }
   if (!parsedCategoryId) {
     sendError(response, 400, 'category_required', 'Valid category id is required')
+    return
+  }
+  const parsedCreditsPrice = creditsPrice == null ? null : getPositiveNumber(creditsPrice)
+  if (creditsPrice != null && parsedCreditsPrice == null) {
+    sendError(response, 400, 'invalid_credits_price', 'Casino credits price must be a positive number')
+    return
+  }
+  const parsedMinCreditsRequired = minCreditsRequired == null ? null : getNonNegativeNumber(minCreditsRequired)
+  if (minCreditsRequired != null && parsedMinCreditsRequired == null) {
+    sendError(response, 400, 'invalid_minimum_credits', 'Minimum casino credits must be zero or positive')
     return
   }
   const categoryExists = await ensureCategoryExists(parsedCategoryId)
@@ -1368,6 +1428,9 @@ router.post('/products', authRateLimiter, async (request, response) => {
         price: parsedPrice,
         image: getOptionalTrimmedString(image),
         categoryId: parsedCategoryId,
+        creditsEnabled: typeof creditsEnabled === 'boolean' ? creditsEnabled : false,
+        creditsPrice: creditsEnabled ? parsedCreditsPrice : null,
+        minCreditsRequired: creditsEnabled ? parsedMinCreditsRequired : null,
         isActive: typeof isActive === 'boolean' ? isActive : true,
         isRecommended: typeof isRecommended === 'boolean' ? isRecommended : false,
       },
@@ -1688,6 +1751,314 @@ router.patch('/categories/:id', authRateLimiter, async (request, response) => {
   })
 
   response.json({ category })
+})
+
+router.get('/casino/config', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  await ensureCasinoDefaults(prisma)
+  const [games, rewardConfigs] = await Promise.all([
+    prisma.casinoGameConfig.findMany({ orderBy: { game: 'asc' } }),
+    prisma.casinoRewardConfig.findMany({ orderBy: [{ game: 'asc' }, { weight: 'desc' }, { id: 'asc' }] }),
+  ])
+
+  response.json({ games, rewardConfigs })
+})
+
+router.patch('/casino/games/:game', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  await ensureCasinoDefaults(prisma)
+  const game = getTrimmedString(request.params.game)
+  const current = await prisma.casinoGameConfig.findUnique({ where: { game } })
+  if (!current) {
+    sendError(response, 404, 'game_not_found', 'Casino game not found')
+    return
+  }
+
+  const data: Record<string, unknown> = {}
+  if (request.body.isEnabled !== undefined) {
+    if (typeof request.body.isEnabled !== 'boolean') {
+      sendError(response, 400, 'invalid_enabled', 'isEnabled must be boolean')
+      return
+    }
+    data.isEnabled = request.body.isEnabled
+  }
+  if (request.body.minBet !== undefined) {
+    const minBet = getPositiveNumber(request.body.minBet)
+    if (minBet == null) {
+      sendError(response, 400, 'invalid_min_bet', 'minBet must be a positive number')
+      return
+    }
+    data.minBet = minBet
+  }
+  if (request.body.maxBet !== undefined) {
+    const maxBet = getPositiveNumber(request.body.maxBet)
+    if (maxBet == null) {
+      sendError(response, 400, 'invalid_max_bet', 'maxBet must be a positive number')
+      return
+    }
+    data.maxBet = maxBet
+  }
+  if (request.body.spinLimit !== undefined) {
+    const spinLimit = getPositiveInteger(request.body.spinLimit)
+    if (spinLimit == null) {
+      sendError(response, 400, 'invalid_spin_limit', 'spinLimit must be a positive integer')
+      return
+    }
+    data.spinLimit = spinLimit
+  }
+  const nextMinBet = typeof data.minBet === 'number' ? data.minBet : current.minBet
+  const nextMaxBet = typeof data.maxBet === 'number' ? data.maxBet : current.maxBet
+  if (nextMaxBet < nextMinBet) {
+    sendError(response, 400, 'invalid_bet_range', 'maxBet must be greater than or equal to minBet')
+    return
+  }
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
+  const updated = await prisma.casinoGameConfig.update({ where: { game }, data })
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'casino_game_updated', entity: 'casino_game', entityId: updated.id, meta: JSON.stringify(data) },
+  })
+  response.json({ game: updated })
+})
+
+router.post('/casino/reward-configs', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const game = getTrimmedString(request.body.game)
+  const rewardType = getTrimmedString(request.body.rewardType)
+  const title = getTrimmedString(request.body.title)
+  const weight = getPositiveInteger(request.body.weight)
+  const discountPercent = request.body.discountPercent == null ? null : getNonNegativeNumber(request.body.discountPercent)
+  const creditAmount = request.body.creditAmount == null ? null : getNonNegativeNumber(request.body.creditAmount)
+  const expiresInHours = request.body.expiresInHours == null ? null : getPositiveInteger(request.body.expiresInHours)
+  const minOrderAmount = request.body.minOrderAmount == null ? null : getNonNegativeNumber(request.body.minOrderAmount)
+
+  if (!game || !rewardType || !title || !weight) {
+    sendError(response, 400, 'invalid_reward_config', 'game, rewardType, title and weight are required')
+    return
+  }
+  if (!['casino_credits', 'shop_discount', 'none'].includes(rewardType)) {
+    sendError(response, 400, 'invalid_reward_type', 'Unsupported reward type')
+    return
+  }
+  if (discountPercent != null && discountPercent > 30) {
+    sendError(response, 400, 'discount_limit_exceeded', 'Discount cannot exceed 30%')
+    return
+  }
+
+  await ensureCasinoDefaults(prisma)
+  const gameConfig = await prisma.casinoGameConfig.findUnique({ where: { game } })
+  if (!gameConfig) {
+    sendError(response, 404, 'game_not_found', 'Casino game not found')
+    return
+  }
+
+  const rewardConfig = await prisma.casinoRewardConfig.create({
+    data: {
+      game,
+      rewardType,
+      title,
+      resultKey: getOptionalTrimmedString(request.body.resultKey) ?? null,
+      discountPercent,
+      creditAmount,
+      weight,
+      isActive: typeof request.body.isActive === 'boolean' ? request.body.isActive : true,
+      expiresInHours,
+      minOrderAmount,
+    },
+  })
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'casino_reward_config_created', entity: 'casino_reward_config', entityId: rewardConfig.id, meta: JSON.stringify({ game, rewardType, title, weight }) },
+  })
+  response.status(201).json({ rewardConfig })
+})
+
+router.patch('/casino/reward-configs/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid reward config id')
+    return
+  }
+
+  const data: Record<string, unknown> = {}
+  if (request.body.title !== undefined) {
+    const title = getTrimmedString(request.body.title)
+    if (!title) {
+      sendError(response, 400, 'invalid_title', 'Title is required')
+      return
+    }
+    data.title = title
+  }
+  if (request.body.rewardType !== undefined) {
+    const rewardType = getTrimmedString(request.body.rewardType)
+    if (!['casino_credits', 'shop_discount', 'none'].includes(rewardType)) {
+      sendError(response, 400, 'invalid_reward_type', 'Unsupported reward type')
+      return
+    }
+    data.rewardType = rewardType
+  }
+  if (request.body.resultKey !== undefined) data.resultKey = getOptionalTrimmedString(request.body.resultKey)
+  if (request.body.weight !== undefined) {
+    const weight = getPositiveInteger(request.body.weight)
+    if (weight == null) {
+      sendError(response, 400, 'invalid_weight', 'Weight must be a positive integer')
+      return
+    }
+    data.weight = weight
+  }
+  if (request.body.discountPercent !== undefined) {
+    if (request.body.discountPercent === null) {
+      data.discountPercent = null
+    } else {
+      const discountPercent = getNonNegativeNumber(request.body.discountPercent)
+      if (discountPercent == null || discountPercent > 30) {
+        sendError(response, 400, 'discount_limit_exceeded', 'Discount cannot exceed 30%')
+        return
+      }
+      data.discountPercent = discountPercent
+    }
+  }
+  if (request.body.creditAmount !== undefined) {
+    if (request.body.creditAmount === null) {
+      data.creditAmount = null
+    } else {
+      const creditAmount = getNonNegativeNumber(request.body.creditAmount)
+      if (creditAmount == null) {
+        sendError(response, 400, 'invalid_credit_amount', 'Credit amount must be zero or positive')
+        return
+      }
+      data.creditAmount = creditAmount
+    }
+  }
+  if (request.body.expiresInHours !== undefined) {
+    if (request.body.expiresInHours === null) {
+      data.expiresInHours = null
+    } else {
+      const expiresInHours = getPositiveInteger(request.body.expiresInHours)
+      if (expiresInHours == null) {
+        sendError(response, 400, 'invalid_expiration', 'expiresInHours must be a positive integer')
+        return
+      }
+      data.expiresInHours = expiresInHours
+    }
+  }
+  if (request.body.minOrderAmount !== undefined) {
+    if (request.body.minOrderAmount === null) {
+      data.minOrderAmount = null
+    } else {
+      const minOrderAmount = getNonNegativeNumber(request.body.minOrderAmount)
+      if (minOrderAmount == null) {
+        sendError(response, 400, 'invalid_minimum_order', 'minOrderAmount must be zero or positive')
+        return
+      }
+      data.minOrderAmount = minOrderAmount
+    }
+  }
+  if (request.body.isActive !== undefined) {
+    if (typeof request.body.isActive !== 'boolean') {
+      sendError(response, 400, 'invalid_active', 'isActive must be boolean')
+      return
+    }
+    data.isActive = request.body.isActive
+  }
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid fields to update')
+    return
+  }
+
+  const rewardConfig = await prisma.casinoRewardConfig.update({ where: { id }, data })
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'casino_reward_config_updated', entity: 'casino_reward_config', entityId: rewardConfig.id, meta: JSON.stringify(data) },
+  })
+  response.json({ rewardConfig })
+})
+
+router.get('/casino/history', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const history = await prisma.casinoRound.findMany({
+    include: {
+      reward: true,
+      casinoBalance: {
+        include: {
+          user: {
+            select: { id: true, telegramId: true, firstName: true, username: true },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  })
+
+  response.json({
+    history: history.map((entry) => ({
+      ...entry,
+      user: entry.casinoBalance.user,
+      reward: serializeReward(entry.reward),
+    })),
+  })
+})
+
+router.post('/casino/credits/adjust', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const userId = parsePositiveInt(request.body.userId)
+  const amount = Number(request.body.amount)
+  const reason = getTrimmedString(request.body.reason)
+  if (!userId || !Number.isFinite(amount) || amount === 0 || !reason) {
+    sendError(response, 400, 'invalid_adjustment', 'userId, amount, and reason are required')
+    return
+  }
+
+  try {
+    const balance = await prisma.$transaction(async (tx) => {
+      const current = await getOrCreateCasinoBalance(tx, userId)
+      if (amount < 0 && current.credits + amount < 0) {
+        throw new Error('Casino credit balance cannot become negative')
+      }
+      const updated = await tx.casinoBalance.update({
+        where: { id: current.id },
+        data: {
+          credits: { increment: amount },
+          lifetimeWon: amount > 0 ? { increment: amount } : undefined,
+        },
+      })
+      await tx.casinoCreditTransaction.create({
+        data: {
+          casinoBalanceId: current.id,
+          amount,
+          type: 'admin_adjustment',
+          reason,
+        },
+      })
+      await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: 'casino_credits_adjusted',
+          entity: 'casino_balance',
+          entityId: current.id,
+          meta: JSON.stringify({ userId, previousValue: current.credits, newValue: updated.credits, reason }),
+        },
+      })
+      return updated
+    })
+    response.json({ balance })
+  } catch (error) {
+    sendError(response, 400, 'invalid_adjustment', error instanceof Error ? error.message : 'Invalid adjustment')
+  }
 })
 
 export default router

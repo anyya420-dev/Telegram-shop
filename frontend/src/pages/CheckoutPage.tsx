@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CreditCard, MapPin, User } from 'lucide-react'
+import { ArrowLeft, CreditCard, Gift, MapPin, User } from 'lucide-react'
 import { TonConnectButton, useTonConnectUI, useTonWallet, type SendTransactionResponse } from '@tonconnect/ui-react'
 import { useApp } from '../context/AppContext'
 import { api } from '../api/client'
@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../lib/format'
 import { getLocalizedCityName, getLocalizedUnit } from '../lib/localized'
 import i18n from '../lib/i18n'
-import type { DeliveryOption, Language, Order, Payment, PaymentMethod } from '../types'
+import type { CasinoReward, DeliveryOption, Language, Order, Payment, PaymentMethod } from '../types'
 
 function resolveTonChain(network: string | null | undefined) {
   return typeof network === 'string' && network.toLowerCase().includes('test') ? '-3' : '-239'
@@ -29,6 +29,10 @@ export default function CheckoutPage() {
   const [paymentLoading, setPaymentLoading] = useState(true)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<number | null>(null)
+  const [casinoRewards, setCasinoRewards] = useState<CasinoReward[]>([])
+  const [selectedRewardId, setSelectedRewardId] = useState<number | null>(null)
+  const [casinoCreditsBalance, setCasinoCreditsBalance] = useState(0)
+  const [casinoCreditsToUse, setCasinoCreditsToUse] = useState('0')
   const [discountCode, setDiscountCode] = useState('')
   const [discountAmount, setDiscountAmount] = useState(0)
   const [discountError, setDiscountError] = useState<string | null>(null)
@@ -74,9 +78,18 @@ export default function CheckoutPage() {
     }
   }, [t])
 
+  const loadCasino = useCallback(async () => {
+    try {
+      const response = await api.getCasinoState()
+      setCasinoRewards((response.rewards ?? []).filter((reward) => reward.rewardType === 'shop_discount' && reward.status === 'available'))
+      setCasinoCreditsBalance(response.balance.credits)
+    } catch {}
+  }, [])
+
   useEffect(() => {
     void Promise.all([loadDelivery(), loadPaymentMethods()])
-  }, [loadDelivery, loadPaymentMethods])
+    void loadCasino()
+  }, [loadCasino, loadDelivery, loadPaymentMethods])
 
   const selectedDelivery = useMemo(
     () => deliveryOptions.find((option) => option.id === selectedDeliveryId) ?? null,
@@ -89,7 +102,17 @@ export default function CheckoutPage() {
 
   const cityLabel = user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('profile.cityNotSelected')
   const safeSubtotal = cart?.subtotal ?? 0
-  const total = Math.max(0, safeSubtotal - discountAmount + (selectedDelivery?.price ?? 0))
+  const selectedReward = casinoRewards.find((reward) => reward.id === selectedRewardId) ?? null
+  const rewardDiscountAmount = selectedReward?.discountPercent ? Math.min(safeSubtotal, (safeSubtotal * selectedReward.discountPercent) / 100) : 0
+  const creditEligibleTotal = useMemo(
+    () => cart?.items.reduce((sum, item) => sum + (item.productCity.creditsEnabled && item.productCity.creditsPrice ? item.productCity.creditsPrice * item.quantity : 0), 0) ?? 0,
+    [cart],
+  )
+  const requestedCasinoCredits = Math.max(0, Number(casinoCreditsToUse) || 0)
+  const appliedCasinoCredits = Math.min(casinoCreditsBalance, requestedCasinoCredits, creditEligibleTotal)
+  const discountedSubtotal = Math.max(0, safeSubtotal - (selectedReward ? rewardDiscountAmount : discountAmount))
+  const creditDiscountAmount = creditEligibleTotal > 0 ? Math.min(discountedSubtotal, discountedSubtotal * (appliedCasinoCredits / creditEligibleTotal)) : 0
+  const total = Math.max(0, discountedSubtotal - creditDiscountAmount + (selectedDelivery?.price ?? 0))
 
   async function applyDiscount() {
     if (!discountCode.trim() || validatingDiscount || !cart) return
@@ -112,7 +135,7 @@ export default function CheckoutPage() {
       setSubmitError(t('checkout.deliveryRequired'))
       return
     }
-    if (!selectedPaymentMethodId) {
+    if (total > 0 && !selectedPaymentMethodId) {
       setSubmitError(t('checkout.paymentRequired'))
       return
     }
@@ -121,16 +144,20 @@ export default function CheckoutPage() {
     try {
       const createdOrder = await checkout({
         comment: comment.trim() || undefined,
-        discountCode: discountAmount > 0 ? discountCode.trim().toUpperCase() : undefined,
+        discountCode: selectedReward ? undefined : discountAmount > 0 ? discountCode.trim().toUpperCase() : undefined,
         deliveryOptionId: selectedDeliveryId ?? undefined,
-        paymentMethodId: selectedPaymentMethodId,
+        paymentMethodId: total > 0 ? selectedPaymentMethodId ?? undefined : undefined,
+        rewardId: selectedRewardId ?? undefined,
+        casinoCreditsToUse: appliedCasinoCredits > 0 ? appliedCasinoCredits : undefined,
       })
       setOrder(createdOrder)
-      try {
-        const paymentResponse = await api.createOrderPayment(createdOrder.id)
-        setPayment(paymentResponse.payment)
-      } catch (paymentError) {
-        setSubmitError(getErrorMessage(paymentError, t, 'request_failed'))
+      if (createdOrder.total > 0) {
+        try {
+          const paymentResponse = await api.createOrderPayment(createdOrder.id)
+          setPayment(paymentResponse.payment)
+        } catch (paymentError) {
+          setSubmitError(getErrorMessage(paymentError, t, 'request_failed'))
+        }
       }
     } catch (err) {
       setSubmitError(getErrorMessage(err, t, 'checkout_failed'))
@@ -251,8 +278,14 @@ export default function CheckoutPage() {
           </div>
           {order.discountAmount > 0 ? (
             <div className={styles.line}>
-              <span>{t('cart.discount')}{order.discount ? ` (${order.discount.code})` : ''}</span>
+              <span>{t('cart.discount')}{order.discount ? ` (${order.discount.code})` : order.reward ? ` (${order.reward.discountPercent}% OFF)` : ''}</span>
               <span>−{formatCurrency(order.discountAmount, language)}</span>
+            </div>
+          ) : null}
+          {(order.casinoCreditsUsed ?? 0) > 0 ? (
+            <div className={styles.line}>
+              <span>{t('checkout.casinoCredits', { defaultValue: 'Casino Credits' })}</span>
+              <span>−{(order.casinoCreditsUsed ?? 0).toFixed(0)}</span>
             </div>
           ) : null}
           <div className={styles.line}>
@@ -312,7 +345,9 @@ export default function CheckoutPage() {
             </>
           )}
           <p className={styles.value}>
-            {payment?.status === 'paid'
+            {order.total <= 0
+              ? t('checkout.paymentVerified', { defaultValue: 'Payment verified.' })
+              : payment?.status === 'paid'
               ? t('checkout.paymentVerified', { defaultValue: 'Payment verified.' })
               : payment?.status === 'failed'
                 ? t('checkout.paymentFailed', { defaultValue: 'Payment failed. Please contact support or try again.' })
@@ -415,6 +450,53 @@ export default function CheckoutPage() {
       </div>
 
       <div className={styles.card}>
+        <p className={styles.sectionTitle}>{t('profile.rewards', { defaultValue: 'My rewards' })}</p>
+        <div className={styles.infoRow}>
+          <Gift size={14} strokeWidth={1.6} />
+          <span>{selectedReward ? `${selectedReward.discountPercent}% OFF` : t('checkout.notSelected')}</span>
+        </div>
+        {casinoRewards.map((reward) => (
+          <label key={reward.id} className={styles.option}>
+            <input
+              type="radio"
+              checked={selectedRewardId === reward.id}
+              onChange={() => {
+                setSelectedRewardId(reward.id)
+                setDiscountAmount(0)
+                setDiscountError(null)
+              }}
+              name="reward"
+            />
+            <span>{reward.discountPercent}% OFF</span>
+            <span>{reward.expiresAt ? new Date(reward.expiresAt).toLocaleDateString() : reward.status}</span>
+          </label>
+        ))}
+        {selectedRewardId ? (
+          <button className={styles.secondaryBtn} onClick={() => setSelectedRewardId(null)} type="button">
+            {t('common.clear', { defaultValue: 'Clear' })}
+          </button>
+        ) : null}
+      </div>
+
+      <div className={styles.card}>
+        <p className={styles.sectionTitle}>{t('checkout.casinoCredits', { defaultValue: 'Casino Credits' })}</p>
+        <div className={styles.infoRow}>
+          <CreditCard size={14} strokeWidth={1.6} />
+          <span>{casinoCreditsBalance.toFixed(0)} available</span>
+        </div>
+        <input
+          className={styles.input}
+          type="number"
+          min="0"
+          max={Math.min(casinoCreditsBalance, creditEligibleTotal)}
+          value={casinoCreditsToUse}
+          onChange={(event) => setCasinoCreditsToUse(event.target.value)}
+          placeholder={t('checkout.casinoCreditsUse', { defaultValue: 'Credits to apply' })}
+        />
+        {creditEligibleTotal <= 0 ? <p className={styles.value}>{t('checkout.casinoCreditsUnavailable', { defaultValue: 'This cart is not eligible for casino credit purchases.' })}</p> : null}
+      </div>
+
+      <div className={styles.card}>
         <p className={styles.sectionTitle}>{t('cart.deliveryOption')}</p>
         {deliveryLoading && <p className={styles.value}>{t('common.loading')}</p>}
         {deliveryError && (
@@ -460,6 +542,7 @@ export default function CheckoutPage() {
         {!paymentLoading && !paymentError && paymentMethods.length === 0 && (
           <p className={styles.value}>{t('checkout.noPaymentMethods')}</p>
         )}
+        {total <= 0 ? <p className={styles.value}>{t('checkout.paymentOptional', { defaultValue: 'External payment is not required when credits cover the order.' })}</p> : null}
         {paymentMethods.map((method) => (
           <label key={method.id} className={styles.option}>
             <input
@@ -487,11 +570,12 @@ export default function CheckoutPage() {
 
       <div className={styles.card}>
         <div className={styles.line}><span>{t('cart.items', { count: cart.items.length })}</span><span>{formatCurrency(safeSubtotal, language)}</span></div>
-        {discountAmount > 0 && <div className={styles.line}><span>{t('cart.discount')}</span><span>−{formatCurrency(discountAmount, language)}</span></div>}
+        {(selectedReward ? rewardDiscountAmount : discountAmount) > 0 && <div className={styles.line}><span>{t('cart.discount')}</span><span>−{formatCurrency(selectedReward ? rewardDiscountAmount : discountAmount, language)}</span></div>}
+        {appliedCasinoCredits > 0 && <div className={styles.line}><span>{t('checkout.casinoCredits', { defaultValue: 'Casino Credits' })}</span><span>−{appliedCasinoCredits.toFixed(0)}</span></div>}
         <div className={styles.line}><span>{t('cart.delivery')}</span><span>{selectedDelivery ? formatCurrency(selectedDelivery.price, language) : t('checkout.notSelected')}</span></div>
         <div className={styles.total}><span>{t('cart.orderTotal')}</span><span>{formatCurrency(total, language)}</span></div>
         {submitError && <p className={styles.error}>{submitError}</p>}
-        <button className={styles.primaryBtn} onClick={() => void submitCheckout()} disabled={submitting || paymentMethods.length === 0} type="button">
+        <button className={styles.primaryBtn} onClick={() => void submitCheckout()} disabled={submitting || (total > 0 && paymentMethods.length === 0)} type="button">
           {submitting ? t('cart.checkingOut') : t('checkout.confirm')}
         </button>
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, ChevronRight, Coins, Heart, Languages, MapPin, RefreshCw, ShieldCheck, ShoppingBag, UserRound } from 'lucide-react'
+import { AlertCircle, ChevronRight, Coins, Gift, Heart, Languages, MapPin, RefreshCw, ShieldCheck, ShoppingBag, UserRound } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { api } from '../api/client'
 import { getErrorMessage } from '../lib/errors'
@@ -245,6 +245,16 @@ export default function ProfilePage() {
           <div className={styles.cardLeft}>
             <Heart size={16} strokeWidth={1.7} />
             <span>{t('wishlist.title')}</span>
+          </div>
+          <div className={styles.cardRight}>
+            <ChevronRight size={16} strokeWidth={1.8} />
+          </div>
+        </button>
+
+        <button className={styles.linkCard} onClick={() => navigate('/rewards')} type="button">
+          <div className={styles.cardLeft}>
+            <Gift size={16} strokeWidth={1.7} />
+            <span>{t('profile.rewards', { defaultValue: 'My rewards' })}</span>
           </div>
           <div className={styles.cardRight}>
             <ChevronRight size={16} strokeWidth={1.8} />

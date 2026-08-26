@@ -10,6 +10,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import CasinoPage from './pages/CasinoPage';
 import BalancePage from './pages/BalancePage';
 import ProfilePage from './pages/ProfilePage';
+import RewardsPage from './pages/RewardsPage';
 import SupportPage from './pages/SupportPage';
 import CitySelectPage from './pages/CitySelectPage';
 import OrdersPage from './pages/OrdersPage';
@@ -34,6 +35,7 @@ export default function App() {
             <Route path="casino" element={<CasinoPage />} />
             <Route path="balance" element={<BalancePage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="rewards" element={<RewardsPage />} />
             <Route path="support" element={<SupportPage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />

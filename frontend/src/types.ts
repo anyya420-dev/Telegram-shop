@@ -47,6 +47,9 @@ export type ProductSummary = {
   description: string
   descriptionTranslations?: LocalizedText | null
   price: number
+  creditsEnabled?: boolean
+  creditsPrice?: number | null
+  minCreditsRequired?: number | null
   image: string | null
   categoryId: number
   categoryName: string
@@ -181,6 +184,9 @@ export type Order = {
   paymentMethod: PaymentMethod | null
   deliveryOption: DeliveryOption | null
   discount: { id: number; code: string } | null
+  reward?: CasinoReward | null
+  rewardId?: number | null
+  casinoCreditsUsed?: number
   payments?: Payment[]
 }
 
@@ -203,13 +209,51 @@ export type CasinoRound = {
   id: number
   game: string
   betAmount: number
-  targetValue: number
-  outcomeValue: number
+  targetValue: string | null
+  outcomeValue: string | null
   payoutAmount: number
   netChange: number
   isWin: boolean
-  comment: string | null
   createdAt: string
+  reward?: CasinoReward | null
+}
+
+export type CasinoReward = {
+  id: number
+  userId: number
+  game: string
+  rewardType: string
+  status: string
+  discountPercent: number | null
+  creditAmount: number | null
+  minOrderAmount?: number | null
+  createdAt: string
+  expiresAt: string | null
+  usedAt: string | null
+  orderId: number | null
+}
+
+export type CasinoGameConfig = {
+  id: number
+  game: string
+  isEnabled: boolean
+  minBet: number
+  maxBet: number
+  spinLimit: number
+}
+
+export type CasinoRewardConfig = {
+  id: number
+  game: string
+  rewardType: string
+  title: string
+  resultKey: string | null
+  discountPercent: number | null
+  creditAmount: number | null
+  weight: number
+  isActive: boolean
+  expiresInHours: number | null
+  minOrderAmount: number | null
 }
 
 export type CasinoState = {
@@ -217,8 +261,12 @@ export type CasinoState = {
     id: number
     userId: number
     credits: number
+    lifetimeWon?: number
+    lifetimeSpent?: number
   }
   history: CasinoRound[]
+  rewards?: CasinoReward[]
+  games?: CasinoGameConfig[]
 }
 
 export type Review = {
@@ -312,6 +360,9 @@ export type AdminProduct = {
   description: string
   descriptionEn: string | null
   price: number
+  creditsEnabled?: boolean
+  creditsPrice?: number | null
+  minCreditsRequired?: number | null
   isActive: boolean
   isRecommended: boolean
   image: string | null
@@ -330,6 +381,11 @@ export type AdminOrder = Order & {
     username: string | null
     telegramId: string
   }
+}
+
+export type AdminCasinoConfig = {
+  games: CasinoGameConfig[]
+  rewardConfigs: CasinoRewardConfig[]
 }
 
 export type AdminDeliveryOption = DeliveryOption & {

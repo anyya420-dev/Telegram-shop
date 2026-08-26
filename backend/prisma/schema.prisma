@@ -131,7 +131,6 @@ model Order {
   paymentMethodId  Int?        @map("payment_method_id")
   deliveryOptionId Int?        @map("delivery_option_id")
   discountId       Int?        @map("discount_id")
-  rewardId         Int?        @unique @map("reward_id")
   casinoCreditsUsed Float      @default(0) @map("casino_credits_used")
   cancelledAt      DateTime?   @map("cancelled_at")
   refundStatus     String?     @map("refund_status") // none | requested | approved | rejected
@@ -145,7 +144,7 @@ model Order {
   paymentMethod  PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
   deliveryOption DeliveryOption?      @relation(fields: [deliveryOptionId], references: [id])
   discount       Discount?            @relation(fields: [discountId], references: [id])
-  reward         CasinoReward?        @relation(fields: [rewardId], references: [id])
+  reward         CasinoReward?        @relation("OrderReward")
   statusHistory  OrderStatusHistory[]
   payments       Payment[]
 
@@ -347,7 +346,7 @@ model CasinoReward {
   orderId         Int?     @unique @map("order_id")
 
   user  User       @relation(fields: [userId], references: [id])
-  order Order?
+  order Order?        @relation("OrderReward", fields: [orderId], references: [id])
   round CasinoRound?
 
   @@index([userId, status, expiresAt])

@@ -83,8 +83,8 @@ export default function HomePage() {
                 <Dices size={20} strokeWidth={1.7} />
               </span>
               <span className={styles.casinoContent}>
-                <span className={styles.sectionTitle}>{t('home.casinoTitle', { defaultValue: 'Casino' })}</span>
-                <span className={styles.casinoText}>{t('home.casinoText', { defaultValue: 'Play with separate virtual credits and track every round.' })}</span>
+                <span className={styles.sectionTitle}>{t('home.casinoTitle', { defaultValue: 'CASINO' })}</span>
+                <span className={styles.casinoText}>{t('home.casinoText', { defaultValue: 'PLAY & WIN · premium games, rewards and casino credits.' })}</span>
               </span>
               <ChevronRight size={18} strokeWidth={1.8} />
             </button>

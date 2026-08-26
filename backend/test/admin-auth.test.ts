@@ -1210,3 +1210,117 @@ test('admin discount and delivery management validate updates', async () => {
   assert.equal(validDeliveryUpdate.body.option.isActive, false)
   assert.equal(validDeliveryUpdate.body.option.price, 25)
 })
+
+test('casino gameplay stays server-side and admin discounts cannot exceed 30%', async () => {
+  const city = await prisma.city.create({ data: { name: 'Casino City' } })
+  const user = await prisma.user.create({
+    data: {
+      telegramId: '900000020',
+      firstName: 'Casino',
+      selectedCityId: city.id,
+    },
+  })
+  const token = createSessionToken!(user.telegramId)
+
+  const firstSpin = await requestJson('/api/casino/spin', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bet: 25, target: 3 }),
+  })
+  assert.equal(firstSpin.response.status, 200)
+  assert.equal(typeof firstSpin.body.dice, 'number')
+  assert.equal(typeof firstSpin.body.win, 'boolean')
+
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  const adminCookie = adminLogin.headers.get('set-cookie')!
+
+  const invalidReward = await requestJson('/api/admin/casino/reward-configs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ game: 'wheel', rewardType: 'shop_discount', title: 'Invalid', discountPercent: 35, weight: 1 }),
+  })
+  assert.equal(invalidReward.response.status, 400)
+  assert.equal(invalidReward.body.code, 'discount_limit_exceeded')
+})
+
+test('checkout applies casino credits and owned rewards server-side', async () => {
+  const city = await prisma.city.create({ data: { name: 'Credits City' } })
+  const category = await prisma.category.create({ data: { name: 'Casino Credits Category' } })
+  const product = await prisma.product.create({
+    data: {
+      name: 'Credits Product',
+      description: 'Credits product',
+      price: 1000,
+      categoryId: category.id,
+      creditsEnabled: true,
+      creditsPrice: 1000,
+      productCities: {
+        create: {
+          cityId: city.id,
+          stock: 10,
+          minimumQuantity: 1,
+          quantityStep: 1,
+          maximumQuantity: 5,
+          unit: 'pcs',
+          isAvailable: true,
+        },
+      },
+    },
+    include: { productCities: true },
+  })
+  const user = await prisma.user.create({
+    data: {
+      telegramId: '900000021',
+      firstName: 'Buyer',
+      selectedCityId: city.id,
+    },
+  })
+  const paymentMethod = await prisma.paymentMethod.create({
+    data: {
+      type: 'card',
+      title: 'Stripe',
+      provider: 'stripe',
+      providerMode: 'test',
+      providerKey: 'sk_test_checkout',
+      currency: 'USD',
+      isEnabled: true,
+    },
+  })
+  const reward = await prisma.casinoReward.create({
+    data: {
+      userId: user.id,
+      game: 'wheel',
+      rewardType: 'shop_discount',
+      discountPercent: 10,
+      status: 'available',
+    },
+  })
+  const token = createSessionToken!(user.telegramId)
+
+  const addCart = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: product.productCities[0].id, quantity: 1 }),
+  })
+  assert.equal(addCart.response.status, 200)
+
+  const checkout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, rewardId: reward.id, casinoCreditsToUse: 300 }),
+  })
+  assert.equal(checkout.response.status, 200)
+  assert.equal(checkout.body.order.casinoCreditsUsed, 300)
+  assert.equal(checkout.body.order.reward.id, reward.id)
+  assert.equal(checkout.body.order.total, 630)
+
+  const casinoState = await requestJson('/api/casino', {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(casinoState.response.status, 200)
+  assert.equal(casinoState.body.balance.credits, 700)
+})

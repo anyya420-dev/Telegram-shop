@@ -14,12 +14,8 @@ BEGIN
     WHERE constraint_name = 'orders_reward_id_fkey'
       AND table_name = 'orders'
   ) THEN
-    ALTER TABLE "orders"
-      ADD CONSTRAINT "orders_reward_id_fkey"
-      FOREIGN KEY ("reward_id") REFERENCES "casino_rewards"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    NULL;
   END IF;
-EXCEPTION
-  WHEN undefined_table THEN NULL;
 END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "orders_reward_id_key" ON "orders"("reward_id");
@@ -150,6 +146,15 @@ BEGIN
     ALTER TABLE "casino_rewards"
       ADD CONSTRAINT "casino_rewards_order_id_fkey"
       FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'orders_reward_id_fkey'
+      AND table_name = 'orders'
+  ) THEN
+    ALTER TABLE "orders"
+      ADD CONSTRAINT "orders_reward_id_fkey"
+      FOREIGN KEY ("reward_id") REFERENCES "casino_rewards"("id") ON DELETE SET NULL ON UPDATE CASCADE;
   END IF;
 END $$;
 

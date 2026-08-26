@@ -10,6 +10,7 @@ import {
   prisma,
   sendError,
 } from '../lib.js'
+import { getOrCreateCasinoBalance } from '../services/casino.js'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import { createOrRefreshOrderPayment } from '../services/payments.js'
 
@@ -32,6 +33,7 @@ const ORDER_INCLUDE = {
   paymentMethod: true,
   deliveryOption: true,
   discount: true,
+  reward: true,
   payments: {
     include: {
       paymentMethod: true,
@@ -92,11 +94,18 @@ router.post('/', authRateLimiter, async (request, response) => {
   const comment = typeof request.body.comment === 'string' ? request.body.comment.trim() : undefined
   const discountCode = typeof request.body.discountCode === 'string' ? request.body.discountCode.trim().toUpperCase() : null
   const deliveryOptionId = parsePositiveInt(request.body.deliveryOptionId) ?? null
-  const paymentMethodId = parsePositiveInt(request.body.paymentMethodId)
+  const paymentMethodId = parsePositiveInt(request.body.paymentMethodId) ?? null
+  const rewardId = parsePositiveInt(request.body.rewardId) ?? null
+  const requestedCasinoCreditsToUse = normalizeQuantity(Math.max(0, Number(request.body.casinoCreditsToUse) || 0))
 
-  if (!paymentMethodId) {
-    sendError(response, 400, 'payment_method_required', 'Payment method is required')
-    return
+  if (requestedCasinoCreditsToUse < 0) {
+   sendError(response, 400, 'invalid_casino_credits', 'Casino credits must be zero or positive')
+   return
+  }
+
+  if (discountCode && rewardId) {
+   sendError(response, 400, 'discount_conflict', 'Choose either a promo code or a casino reward')
+   return
   }
 
   let order
@@ -129,11 +138,6 @@ router.post('/', authRateLimiter, async (request, response) => {
 
       if (!cart || cart.items.length === 0) {
         throw new OrderRequestError(400, 'cart_empty', 'Cart is empty')
-      }
-
-      const paymentMethod = await tx.paymentMethod.findFirst({ where: { id: paymentMethodId, isEnabled: true } })
-      if (!paymentMethod) {
-        throw new OrderRequestError(400, 'payment_method_unavailable', 'Selected payment method is unavailable')
       }
 
       for (const item of cart.items) {
@@ -173,9 +177,19 @@ router.post('/', authRateLimiter, async (request, response) => {
       const subtotal = normalizeQuantity(
         cart.items.reduce((sum, item) => sum + item.productCity.product.price * item.quantity, 0),
       )
+      const creditsSubtotal = normalizeQuantity(
+        cart.items.reduce((sum, item) => {
+          if (!item.productCity.product.creditsEnabled || !item.productCity.product.creditsPrice) {
+            return sum
+          }
+          return sum + item.productCity.product.creditsPrice * item.quantity
+        }, 0),
+      )
 
       let discountAmount = 0
       let discountId: number | null = null
+      let rewardDiscountAmount = 0
+      let rewardRecordId: number | null = null
       if (discountCode) {
         const discount = await tx.discount.findFirst({ where: { code: discountCode, isActive: true } })
         if (!discount) {
@@ -198,7 +212,71 @@ router.post('/', authRateLimiter, async (request, response) => {
         discountId = discount.id
       }
 
-      const total = normalizeQuantity(Math.max(0, subtotal - discountAmount + deliveryFee))
+      if (rewardId) {
+        const reward = await tx.casinoReward.findFirst({
+          where: { id: rewardId, userId: user.id },
+        })
+        if (!reward) {
+          throw new OrderRequestError(404, 'reward_not_found', 'Reward not found')
+        }
+        if (reward.rewardType !== 'shop_discount') {
+          throw new OrderRequestError(400, 'reward_invalid', 'Only shop discount rewards can be used at checkout')
+        }
+        if (reward.status !== 'available' || reward.orderId || reward.usedAt) {
+          throw new OrderRequestError(400, 'reward_unavailable', 'Reward is no longer available')
+        }
+        if (reward.expiresAt && reward.expiresAt < new Date()) {
+          await tx.casinoReward.update({
+            where: { id: reward.id },
+            data: { status: 'expired' },
+          })
+          throw new OrderRequestError(400, 'reward_expired', 'Reward has expired')
+        }
+        if ((reward.discountPercent ?? 0) > 30) {
+          throw new OrderRequestError(400, 'reward_invalid', 'Reward discount exceeds the allowed maximum')
+        }
+        if (reward.minOrderAmount && subtotal < reward.minOrderAmount) {
+          throw new OrderRequestError(400, 'order_too_small', 'Order amount does not meet the reward minimum')
+        }
+        rewardDiscountAmount = normalizeQuantity((subtotal * (reward.discountPercent ?? 0)) / 100)
+        discountAmount = rewardDiscountAmount
+        rewardRecordId = reward.id
+      }
+
+      let casinoCreditsToUse = 0
+      if (requestedCasinoCreditsToUse > 0) {
+        const allItemsAllowCredits = cart.items.every((item) => item.productCity.product.creditsEnabled && (item.productCity.product.creditsPrice ?? 0) > 0)
+        if (!allItemsAllowCredits || creditsSubtotal <= 0) {
+          throw new OrderRequestError(400, 'credits_unavailable_for_order', 'Casino credits are unavailable for one or more products in this order')
+        }
+        const minimumCreditsRequired = cart.items.reduce((max, item) => Math.max(max, item.productCity.product.minCreditsRequired ?? 0), 0)
+        if (minimumCreditsRequired > 0 && requestedCasinoCreditsToUse < minimumCreditsRequired) {
+          throw new OrderRequestError(400, 'credits_minimum_not_met', 'Selected products require a higher casino credits amount')
+        }
+        const casinoBalance = await getOrCreateCasinoBalance(tx, user.id)
+        if (requestedCasinoCreditsToUse > casinoBalance.credits) {
+          throw new OrderRequestError(400, 'insufficient_casino_credits', 'Insufficient casino credits balance')
+        }
+        casinoCreditsToUse = normalizeQuantity(Math.min(requestedCasinoCreditsToUse, creditsSubtotal))
+      }
+
+      const discountedSubtotal = normalizeQuantity(Math.max(0, subtotal - discountAmount))
+      const creditsCashValue =
+        casinoCreditsToUse > 0 && creditsSubtotal > 0
+          ? normalizeQuantity(Math.min(discountedSubtotal, discountedSubtotal * (casinoCreditsToUse / creditsSubtotal)))
+          : 0
+      const total = normalizeQuantity(Math.max(0, discountedSubtotal - creditsCashValue + deliveryFee))
+
+      let paymentMethod: Awaited<ReturnType<typeof tx.paymentMethod.findFirst>> = null
+      if (total > 0) {
+        if (!paymentMethodId) {
+          throw new OrderRequestError(400, 'payment_method_required', 'Payment method is required')
+        }
+        paymentMethod = await tx.paymentMethod.findFirst({ where: { id: paymentMethodId, isEnabled: true } })
+        if (!paymentMethod) {
+          throw new OrderRequestError(400, 'payment_method_unavailable', 'Selected payment method is unavailable')
+        }
+      }
 
       if (discountId) {
         await tx.discount.update({
@@ -229,16 +307,17 @@ router.post('/', authRateLimiter, async (request, response) => {
         data: {
           userId: user.id,
           cityId: currentUser.selectedCityId,
-          status: 'pending',
+          status: total > 0 ? 'pending' : 'confirmed',
           subtotal,
           discountAmount,
           deliveryFee,
           total,
           comment: comment || null,
-          paymentStatus: 'pending',
+          paymentStatus: total > 0 ? 'pending' : 'confirmed',
           paymentMethodId,
           deliveryOptionId,
           discountId,
+          casinoCreditsUsed: casinoCreditsToUse,
           items: {
             create: cart.items.map((item) => ({
               productCityId: item.productCityId,
@@ -253,10 +332,42 @@ router.post('/', authRateLimiter, async (request, response) => {
         },
       })
 
-      await createOrRefreshOrderPayment(tx, newOrder, paymentMethod)
+      if (rewardRecordId) {
+        await tx.casinoReward.update({
+          where: { id: rewardRecordId },
+          data: { status: 'used', usedAt: new Date(), orderId: newOrder.id },
+        })
+      }
+
+      if (casinoCreditsToUse > 0) {
+        const casinoBalance = await getOrCreateCasinoBalance(tx, user.id)
+        const updatedBalance = await tx.casinoBalance.updateMany({
+          where: { id: casinoBalance.id, credits: { gte: casinoCreditsToUse } },
+          data: {
+            credits: { decrement: casinoCreditsToUse },
+            lifetimeSpent: { increment: casinoCreditsToUse },
+          },
+        })
+        if (updatedBalance.count !== 1) {
+          throw new OrderRequestError(400, 'insufficient_casino_credits', 'Insufficient casino credits balance')
+        }
+        await tx.casinoCreditTransaction.create({
+          data: {
+            casinoBalanceId: casinoBalance.id,
+            amount: -casinoCreditsToUse,
+            type: 'order_purchase',
+            orderId: newOrder.id,
+            reason: 'Casino credits applied to order',
+          },
+        })
+      }
+
+      if (total > 0 && paymentMethod) {
+        await createOrRefreshOrderPayment(tx, newOrder, paymentMethod)
+      }
 
       await tx.orderStatusHistory.create({
-        data: { orderId: newOrder.id, status: 'pending', comment: 'Order placed' },
+        data: { orderId: newOrder.id, status: total > 0 ? 'pending' : 'confirmed', comment: total > 0 ? 'Order placed' : 'Order paid with casino credits' },
       })
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
@@ -323,6 +434,30 @@ router.post('/:id/cancel', authRateLimiter, async (request, response) => {
       await tx.productCity.update({
         where: { id: item.productCityId },
         data: { stock: { increment: item.quantity } },
+      })
+    }
+
+    const reward = await tx.casinoReward.findFirst({ where: { orderId } })
+    if (reward) {
+      await tx.casinoReward.update({
+        where: { id: reward.id },
+        data: { status: 'available', usedAt: null, orderId: null },
+      })
+    }
+    if (order.casinoCreditsUsed > 0) {
+      const casinoBalance = await getOrCreateCasinoBalance(tx, user.id)
+      await tx.casinoBalance.update({
+        where: { id: casinoBalance.id },
+        data: { credits: { increment: order.casinoCreditsUsed } },
+      })
+      await tx.casinoCreditTransaction.create({
+        data: {
+          casinoBalanceId: casinoBalance.id,
+          amount: order.casinoCreditsUsed,
+          type: 'order_refund',
+          orderId,
+          reason: 'Cancelled order credit refund',
+        },
       })
     }
 

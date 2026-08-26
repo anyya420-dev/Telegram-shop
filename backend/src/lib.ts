@@ -187,6 +187,9 @@ export function mapProduct(productCity: {
     description: string
     descriptionEn: string | null
     price: number
+    creditsEnabled?: boolean
+    creditsPrice?: number | null
+    minCreditsRequired?: number | null
     image: string | null
     categoryId: number
     isActive: boolean
@@ -206,6 +209,9 @@ export function mapProduct(productCity: {
     description: productCity.product.description,
     descriptionTranslations: createTranslations(productCity.product.description, productCity.product.descriptionEn),
     price: productCity.product.price,
+    creditsEnabled: productCity.product.creditsEnabled ?? false,
+    creditsPrice: productCity.product.creditsPrice ?? null,
+    minCreditsRequired: productCity.product.minCreditsRequired ?? null,
     image: productCity.product.image,
     categoryId: productCity.product.categoryId,
     categoryName: productCity.product.category.name,

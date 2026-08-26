@@ -1,11 +1,13 @@
 import type {
   AdminCategory,
+  AdminCasinoConfig,
   AdminCity,
   AdminDeliveryOption,
   AdminOrder,
   AdminProduct,
   AdminStats,
   Balance,
+  CasinoReward,
   CasinoState,
   BootstrapResponse,
   Cart,
@@ -134,7 +136,7 @@ export const api = {
   removeCartItem(itemId: number) {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
   },
-  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId: number }) {
+  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
     return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload) })
   },
   markOrderPaid(id: number) {
@@ -164,11 +166,14 @@ export const api = {
     return publicRequest<CasinoState>('/casino')
   },
 
-  casinoSpin(bet: number, target: number) {
-    return publicRequest<{ dice: number; target: number; win: boolean; bet: number; payout: number; balance: { amount: number; credits: number }; round: { id: number; game: string; betAmount: number; targetValue: number; outcomeValue: number; payoutAmount: number; netChange: number; isWin: boolean; comment: string | null; createdAt: string } }>('/casino/spin', { method: 'POST', body: JSON.stringify({ bet, target }) })
+  getCasinoRewards() {
+    return publicRequest<{ rewards: CasinoReward[] }>('/casino')
+  },
+  playCasinoGame(game: 'wheel' | 'slots' | 'roulette' | 'chest', payload: Record<string, unknown>) {
+    return publicRequest<{ round: CasinoState['history'][number]; reward: { rewardType: string; discountPercent: number | null; creditAmount: number | null; title: string }; balance: CasinoState['balance'] }>(`/casino/${game}/play`, { method: 'POST', body: JSON.stringify(payload) })
   },
   getCasinoHistory() {
-    return publicRequest<{ history: { id: number; type: string; amount: number; comment: string | null; createdAt: string }[] }>('/casino/history')
+    return publicRequest<{ history: CasinoState['history'] }>('/casino/history')
   },
 
   getSupportTickets() {
@@ -268,13 +273,13 @@ export const api = {
   getAdminProducts() {
     return adminRequest<{ products: AdminProduct[] }>('/admin/products')
   },
-  createAdminProduct(data: { name: string; nameEn?: string; description?: string; descriptionEn?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }[] }) {
+  createAdminProduct(data: { name: string; nameEn?: string; description?: string; descriptionEn?: string; price: number; categoryId: number; image?: string; creditsEnabled?: boolean; creditsPrice?: number | null; minCreditsRequired?: number | null; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }[] }) {
     return adminRequest<{ product: unknown }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
   },
   createAdminProductCity(data: { productId: number; cityId: number; stock?: number; isAvailable?: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }) {
     return adminRequest<{ productCity: unknown }>('/admin/product-cities', { method: 'POST', body: JSON.stringify(data) })
   },
-  updateAdminProduct(id: number, data: Partial<{ name: string; nameEn: string | null; description: string; descriptionEn: string | null; image: string | null; categoryId: number; price: number; isActive: boolean; isRecommended: boolean }>) {
+  updateAdminProduct(id: number, data: Partial<{ name: string; nameEn: string | null; description: string; descriptionEn: string | null; image: string | null; categoryId: number; price: number; creditsEnabled: boolean; creditsPrice: number | null; minCreditsRequired: number | null; isActive: boolean; isRecommended: boolean }>) {
     return adminRequest<{ product: ProductDetail }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean; minimumQuantity: number; quantityStep: number; maximumQuantity: number; unit: string }>) {
@@ -328,6 +333,24 @@ export const api = {
   },
   updateAdminPaymentStatus(id: number, data: { status: string; reason: string }) {
     return adminRequest<{ payment: Payment }>(`/admin/payments/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminCasinoConfig() {
+    return adminRequest<AdminCasinoConfig>('/admin/casino/config')
+  },
+  updateAdminCasinoGame(game: string, data: Partial<{ isEnabled: boolean; minBet: number; maxBet: number; spinLimit: number }>) {
+    return adminRequest<{ game: unknown }>(`/admin/casino/games/${game}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  createAdminCasinoRewardConfig(data: Record<string, unknown>) {
+    return adminRequest<{ rewardConfig: unknown }>('/admin/casino/reward-configs', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCasinoRewardConfig(id: number, data: Record<string, unknown>) {
+    return adminRequest<{ rewardConfig: unknown }>(`/admin/casino/reward-configs/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminCasinoHistory() {
+    return adminRequest<{ history: unknown[] }>('/admin/casino/history')
+  },
+  adjustAdminCasinoCredits(data: { userId: number; amount: number; reason: string }) {
+    return adminRequest<{ balance: unknown }>('/admin/casino/credits/adjust', { method: 'POST', body: JSON.stringify(data) })
   },
   getAdminCategories() {
     return adminRequest<{ categories: AdminCategory[] }>('/admin/categories')

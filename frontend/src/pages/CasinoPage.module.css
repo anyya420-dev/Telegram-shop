@@ -1,180 +1,238 @@
 .page {
-  padding: 16px;
-  padding-bottom: 80px;
+  padding: 16px 16px 88px;
+  display: grid;
+  gap: 16px;
 }
 
-.title {
-  font-size: 22px;
-  font-weight: 700;
-  margin-bottom: 16px;
-  color: var(--tg-theme-text-color, #000);
+.hero,
+.primaryCard,
+.card,
+.notice,
+.result {
+  border-radius: 22px;
+  border: 1px solid rgba(168, 121, 85, 0.24);
+  background:
+    radial-gradient(circle at top right, rgba(106, 42, 65, 0.32), transparent 34%),
+    linear-gradient(180deg, rgba(28, 18, 25, 0.98), rgba(10, 9, 14, 0.98));
+  color: #f4eef5;
 }
 
-.balanceRow {
+.hero,
+.primaryCard,
+.card {
+  padding: 18px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hero h1,
+.sectionHeader h2,
+.sectionHeader h3 {
+  margin: 0;
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: #bc9aa8;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  margin: 10px 0 0;
+  color: #c7bcc7;
   font-size: 14px;
-  color: var(--tg-theme-hint-color, #888);
-  margin-bottom: 20px;
-  text-align: center;
+  line-height: 1.5;
 }
 
-.diceDisplay {
-  display: flex;
-  justify-content: center;
-  margin: 20px 0;
+.balance {
+  min-width: 116px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.diceFace {
-  font-size: 80px;
-  animation: bounce 0.3s ease;
+.balance strong {
+  font-size: 26px;
 }
 
-.dicePlaceholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.3;
-}
-
-@keyframes bounce {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.2); }
-}
-
-.resultBanner {
-  text-align: center;
-  padding: 12px 20px;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 20px;
-}
-
-.win {
-  background: #c6f6d5;
-  color: #276749;
-}
-
-.lose {
-  background: #fed7d7;
-  color: #9b2c2c;
-}
-
-.controls {
-  background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 24px;
-}
-
-.controlRow {
+.controlBar,
+.sectionHeader,
+.historyItem,
+.historyRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
   gap: 12px;
 }
 
-.label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--tg-theme-text-color, #000);
-  white-space: nowrap;
-}
-
-.input {
+.controlBar label {
   flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--tg-theme-hint-color, #ccc);
-  border-radius: 8px;
-  background: var(--tg-theme-bg-color, #fff);
-  color: var(--tg-theme-text-color, #000);
-  font-size: 14px;
-  max-width: 120px;
+  display: grid;
+  gap: 8px;
+  color: #c7bcc7;
 }
 
-.targetBtns {
-  display: flex;
-  gap: 6px;
-}
-
-.targetBtn {
-  min-width: 38px;
-  font-size: 18px;
-  font-weight: 700;
-  background: var(--tg-theme-bg-color, #fff);
-  border: 2px solid transparent;
-  border-radius: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.targetActive {
-  border-color: var(--tg-theme-button-color, #7C3AED);
-}
-
-.hint {
-  font-size: 12px;
-  color: var(--tg-theme-hint-color, #888);
-  margin-bottom: 12px;
-}
-
-.error {
-  color: #e53e3e;
-  font-size: 13px;
-  margin-bottom: 8px;
-}
-
-.spinBtn {
+.controlBar input,
+.numberInput {
   width: 100%;
-  display: flex;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  padding: 12px;
+}
+
+.primaryButton,
+.secondaryButton,
+.betChip,
+.chest {
+  border: 0;
+  cursor: pointer;
+  border-radius: 14px;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.primaryButton,
+.secondaryButton {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: var(--tg-theme-button-color, #7C3AED);
-  color: var(--tg-theme-button-text-color, #fff);
-  border: none;
-  border-radius: 12px;
-  padding: 14px;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
+  padding: 12px 16px;
 }
 
-.spinBtn:disabled {
+.primaryButton {
+  background: linear-gradient(135deg, #7d284f, #aa8150);
+  color: #fff;
+}
+
+.secondaryButton {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4eef5;
+}
+
+.primaryButton:disabled,
+.chest:disabled {
   opacity: 0.5;
 }
 
-.spinBtn + .spinBtn {
-  margin-top: 8px;
+.notice,
+.result {
+  padding: 14px 16px;
 }
 
-.history {
-  margin-top: 8px;
+.wheel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
 }
 
-.historyTitle {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  color: var(--tg-theme-text-color, #000);
+.segment,
+.slot,
+.rewardCard,
+.historyChip {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.historyRow {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-radius: 8px;
-  margin-bottom: 4px;
+.segment {
+  padding: 14px;
+  text-align: center;
+  color: #d6c6d1;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.segmentActive {
+  border-color: #f0c98d;
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(240, 201, 141, 0.18), 0 16px 30px rgba(125, 40, 79, 0.22);
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.slot {
+  min-height: 78px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.betGrid,
+.chests,
+.rewardList,
+.historyList {
+  display: grid;
+  gap: 10px;
+}
+
+.betGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.betChip,
+.chest {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5eff5;
+}
+
+.betChipActive {
+  background: rgba(125, 40, 79, 0.72);
+}
+
+.chests {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.rewardCard,
+.historyItem {
+  padding: 14px;
+}
+
+.rewardCard {
+  display: grid;
+  gap: 4px;
+}
+
+.historyItem span,
+.emptyInline {
+  color: #c7bcc7;
   font-size: 13px;
 }
 
-.historyRow.win {
-  background: #c6f6d5;
-  color: #276749;
-}
+@media (min-width: 720px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 
-.historyRow.lose {
-  background: #fed7d7;
-  color: #9b2c2c;
+  .wheel {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
