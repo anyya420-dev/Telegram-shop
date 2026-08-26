@@ -45,10 +45,10 @@ export default function CitySelectPage() {
     } finally {
       setSelecting(null)
     }
+  }
 
-    function handleLater() {
-      navigate('/shop', { replace: true })
-    }
+  function handleLater() {
+    navigate('/shop', { replace: true })
   }
 
   return (

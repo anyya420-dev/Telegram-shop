@@ -23,11 +23,11 @@ function buildCatalogOrderBy(sort: CatalogSort): Prisma.ProductCityOrderByWithRe
   }
 }
 
-function pickBrowseProductCities(productCities: Array<{
+function pickBrowseProductCities<T extends {
   productId: number
   city: { sortOrder: number }
   stock: number
-}>) {
+}>(productCities: T[]) {
   const uniqueByProduct = new Map<number, (typeof productCities)[number]>()
 
   for (const item of productCities) {
