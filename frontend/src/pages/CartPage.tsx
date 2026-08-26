@@ -5,10 +5,10 @@ import { useApp } from '../context/AppContext';
 import styles from './CartPage.module.css';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/format';
+import { getErrorMessage } from '../lib/errors';
 import { getLocalizedCityName, getLocalizedProductName, getLocalizedUnit } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
-import { ApiError } from '../api/client';
 
 export default function CartPage() {
   const { cart, cartLoading, recommended, user, updateCartItem, removeCartItem, openCityPicker } = useApp();
@@ -18,21 +18,13 @@ export default function CartPage() {
   const [pendingItemId, setPendingItemId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  function getErrorMessage(error: unknown, fallbackKey: string) {
-    if (error instanceof ApiError && error.code) {
-      return t(`errors.${error.code}`);
-    }
-
-    return t(`errors.${fallbackKey}`);
-  }
-
   async function handleQuantityChange(itemId: number, action: () => Promise<void>) {
     try {
       setPendingItemId(itemId);
       setActionError(null);
       await action();
     } catch (error) {
-      setActionError(getErrorMessage(error, 'cart_update_failed'));
+      setActionError(getErrorMessage(error, t, 'cart_update_failed'));
     } finally {
       setPendingItemId(null);
     }

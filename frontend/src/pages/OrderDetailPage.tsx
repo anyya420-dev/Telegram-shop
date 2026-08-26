@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CalendarDays, CreditCard, MapPin, Package, RefreshCw, Truck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { ApiError, api } from '../api/client'
+import { api } from '../api/client'
+import { getErrorMessage } from '../lib/errors'
 import { formatCurrency } from '../lib/format'
 import i18n from '../lib/i18n'
 import { getLocalizedUnit } from '../lib/localized'
@@ -35,14 +36,6 @@ export default function OrderDetailPage() {
   const [refunding, setRefunding] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  function getErrorMessage(error: unknown, fallbackKey: string) {
-    if (error instanceof ApiError && error.code) {
-      return t(`errors.${error.code}`)
-    }
-
-    return t(`errors.${fallbackKey}`)
-  }
-
   async function loadOrder() {
     if (!id) {
       setLoading(false)
@@ -56,7 +49,7 @@ export default function OrderDetailPage() {
       const response = await api.getOrder(Number(id))
       setOrder(response.order)
     } catch (error) {
-      setPageError(getErrorMessage(error, 'orders_fetch_failed'))
+      setPageError(getErrorMessage(error, t, 'orders_fetch_failed'))
       setOrder(null)
     } finally {
       setLoading(false)
@@ -75,7 +68,7 @@ export default function OrderDetailPage() {
       const response = await api.cancelOrder(order.id)
       setOrder(response.order)
     } catch (error) {
-      setActionError(getErrorMessage(error, 'request_failed'))
+      setActionError(getErrorMessage(error, t, 'request_failed'))
     } finally {
       setCancelling(false)
     }
@@ -89,7 +82,7 @@ export default function OrderDetailPage() {
       const response = await api.requestRefund(order.id)
       setOrder(response.order)
     } catch (error) {
-      setActionError(getErrorMessage(error, 'request_failed'))
+      setActionError(getErrorMessage(error, t, 'request_failed'))
     } finally {
       setRefunding(false)
     }

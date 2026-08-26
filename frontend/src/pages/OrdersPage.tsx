@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, MapPin, Package } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { ApiError } from '../api/client'
 import { useTranslation } from 'react-i18next'
+import { getErrorMessage } from '../lib/errors'
 import { formatCurrency } from '../lib/format'
 import i18n from '../lib/i18n'
 import { getLocalizedUnit } from '../lib/localized'
@@ -30,20 +30,12 @@ export default function OrdersPage() {
   const language = i18n.language as Language
   const [ordersError, setOrdersError] = useState<string | null>(null)
 
-  function getErrorMessage(error: unknown, fallbackKey: string) {
-    if (error instanceof ApiError && error.code) {
-      return t(`errors.${error.code}`)
-    }
-
-    return t(`errors.${fallbackKey}`)
-  }
-
   async function loadOrders() {
     try {
       setOrdersError(null)
       await fetchOrders()
     } catch (error) {
-      setOrdersError(getErrorMessage(error, 'orders_fetch_failed'))
+      setOrdersError(getErrorMessage(error, t, 'orders_fetch_failed'))
     }
   }
 

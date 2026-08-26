@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, ChevronRight, Coins, Heart, Languages, MapPin, RefreshCw, ShieldCheck, ShoppingBag, UserRound } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { ApiError, api } from '../api/client'
+import { api } from '../api/client'
+import { getErrorMessage } from '../lib/errors'
 import styles from './ProfilePage.module.css'
 import { useTranslation } from 'react-i18next'
 import { saveLanguage } from '../lib/i18n'
@@ -20,14 +21,6 @@ export default function ProfilePage() {
   const [profileError, setProfileError] = useState<string | null>(null)
   const [languageSaving, setLanguageSaving] = useState<Language | null>(null)
 
-  function getErrorMessage(error: unknown, fallbackKey: string) {
-    if (error instanceof ApiError && error.code) {
-      return t(`errors.${error.code}`)
-    }
-
-    return t(`errors.${fallbackKey}`)
-  }
-
   async function loadProfile() {
     try {
       setProfileLoading(true)
@@ -35,7 +28,7 @@ export default function ProfilePage() {
       const response = await api.getProfile()
       setProfile(response.user)
     } catch (error) {
-      setProfileError(getErrorMessage(error, 'request_failed'))
+      setProfileError(getErrorMessage(error, t, 'request_failed'))
     } finally {
       setProfileLoading(false)
     }
@@ -66,7 +59,7 @@ export default function ProfilePage() {
     } catch (error) {
       void i18n.changeLanguage(previousLanguage)
       saveLanguage(previousLanguage)
-      setProfileError(getErrorMessage(error, 'language_update_failed'))
+      setProfileError(getErrorMessage(error, t, 'language_update_failed'))
     } finally {
       setLanguageSaving(null)
     }

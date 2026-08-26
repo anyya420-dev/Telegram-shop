@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CreditCard, MapPin, User } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { ApiError, api } from '../api/client'
+import { api } from '../api/client'
+import { getErrorMessage } from '../lib/errors'
 import styles from './CheckoutPage.module.css'
 import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../lib/format'
@@ -34,14 +35,6 @@ export default function CheckoutPage() {
   const [markingPaid, setMarkingPaid] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  function getErrorMessage(error: unknown, fallbackKey: string) {
-    if (error instanceof ApiError && error.code) {
-      return t(`errors.${error.code}`)
-    }
-
-    return t(`errors.${fallbackKey}`)
-  }
-
   const loadDelivery = useCallback(async () => {
     try {
       setDeliveryLoading(true)
@@ -50,7 +43,7 @@ export default function CheckoutPage() {
       setDeliveryOptions(response.options)
       setSelectedDeliveryId((prev) => prev ?? response.options[0]?.id ?? null)
     } catch (err) {
-      setDeliveryError(getErrorMessage(err, 'request_failed'))
+      setDeliveryError(getErrorMessage(err, t, 'request_failed'))
     } finally {
       setDeliveryLoading(false)
     }
@@ -64,7 +57,7 @@ export default function CheckoutPage() {
       setPaymentMethods(response.methods)
       setSelectedPaymentMethodId((prev) => prev ?? response.methods[0]?.id ?? null)
     } catch (err) {
-      setPaymentError(getErrorMessage(err, 'request_failed'))
+      setPaymentError(getErrorMessage(err, t, 'request_failed'))
     } finally {
       setPaymentLoading(false)
     }
@@ -96,7 +89,7 @@ export default function CheckoutPage() {
       setDiscountAmount(response.discountAmount)
     } catch (err) {
       setDiscountAmount(0)
-      setDiscountError(getErrorMessage(err, 'request_failed'))
+      setDiscountError(getErrorMessage(err, t, 'request_failed'))
     } finally {
       setValidatingDiscount(false)
     }
@@ -123,7 +116,7 @@ export default function CheckoutPage() {
       })
       setOrder(createdOrder)
     } catch (err) {
-      setSubmitError(getErrorMessage(err, 'checkout_failed'))
+      setSubmitError(getErrorMessage(err, t, 'checkout_failed'))
     } finally {
       setSubmitting(false)
     }
@@ -147,7 +140,7 @@ export default function CheckoutPage() {
       const response = await api.markOrderPaid(order.id)
       setOrder(response.order)
     } catch (err) {
-      setSubmitError(getErrorMessage(err, 'request_failed'))
+      setSubmitError(getErrorMessage(err, t, 'request_failed'))
     } finally {
       setMarkingPaid(false)
     }
@@ -362,7 +355,7 @@ export default function CheckoutPage() {
         <p className={styles.sectionTitle}>{t('checkout.paymentMethod')}</p>
         <div className={styles.infoRow}>
           <CreditCard size={14} strokeWidth={1.6} />
-          <span>{t('checkout.paymentMethod')}</span>
+          <span>{selectedPaymentMethod?.title ?? t('checkout.notSelected')}</span>
         </div>
         {paymentLoading && <p className={styles.value}>{t('common.loading')}</p>}
         {paymentError && (
