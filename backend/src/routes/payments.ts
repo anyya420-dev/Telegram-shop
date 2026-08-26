@@ -197,7 +197,7 @@ router.post('/:paymentId/crypto/submit', authRateLimiter, async (request, respon
 
     await tx.order.update({
       where: { id: payment.orderId },
-      data: { paymentStatus: 'processing' },
+      data: { paymentStatus: 'processing', status: 'payment_pending' },
     })
 
     await tx.orderStatusHistory.create({
@@ -214,7 +214,7 @@ router.post('/:paymentId/crypto/submit', authRateLimiter, async (request, respon
   response.json({ payment: sanitizePayment(updated) })
 })
 
-router.post('/webhooks/stripe', async (request, response) => {
+router.post('/webhooks/stripe', authRateLimiter, async (request, response) => {
   const payload = (request as { rawBody?: Buffer }).rawBody
   if (!payload) {
     sendError(response, 400, 'invalid_payload', 'Webhook payload is missing')

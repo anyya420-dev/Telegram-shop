@@ -48,7 +48,7 @@ export function sendError(response: Response, status: number, code: string, mess
 
 export const authRateLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 60,
+  limit: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60),
   standardHeaders: true,
   legacyHeaders: false,
   message: { code: 'too_many_requests', message: 'Too many requests, please try again later' },

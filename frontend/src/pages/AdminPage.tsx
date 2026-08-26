@@ -771,22 +771,22 @@ export default function AdminPage() {
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to delete payment method'));
     }
+  }
 
-    async function handlePaymentStatusChange(paymentId: number, status: string) {
-      const reason = paymentStatusReason[paymentId]?.trim()
-      if (!reason) {
-        setError('Reason is required')
-        return
-      }
-      setError(null)
-      try {
-        const response = await api.updateAdminPaymentStatus(paymentId, { status, reason })
-        setPaymentRecords((current) => current.map((payment) => (payment.id === paymentId ? { ...payment, ...response.payment } : payment)))
-        setPaymentStatusReason((current) => ({ ...current, [paymentId]: '' }))
-        await loadTab('orders')
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to update payment status'))
-      }
+  async function handlePaymentStatusChange(paymentId: number, status: string) {
+    const reason = paymentStatusReason[paymentId]?.trim()
+    if (!reason) {
+      setError('Reason is required')
+      return
+    }
+    setError(null)
+    try {
+      const response = await api.updateAdminPaymentStatus(paymentId, { status, reason })
+      setPaymentRecords((current) => current.map((payment) => (payment.id === paymentId ? { ...payment, ...response.payment } : payment)))
+      setPaymentStatusReason((current) => ({ ...current, [paymentId]: '' }))
+      await loadTab('orders')
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update payment status'))
     }
   }
 

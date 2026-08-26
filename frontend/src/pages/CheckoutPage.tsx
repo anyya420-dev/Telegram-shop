@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CreditCard, MapPin, User } from 'lucide-react'
-import { TonConnectButton, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react'
+import { TonConnectButton, useTonConnectUI, useTonWallet, type SendTransactionResponse } from '@tonconnect/ui-react'
 import { useApp } from '../context/AppContext'
 import { api } from '../api/client'
 import { getErrorMessage } from '../lib/errors'
@@ -122,8 +122,12 @@ export default function CheckoutPage() {
         paymentMethodId: selectedPaymentMethodId,
       })
       setOrder(createdOrder)
-      const paymentResponse = await api.createOrderPayment(createdOrder.id)
-      setPayment(paymentResponse.payment)
+      try {
+        const paymentResponse = await api.createOrderPayment(createdOrder.id)
+        setPayment(paymentResponse.payment)
+      } catch (paymentError) {
+        setSubmitError(getErrorMessage(paymentError, t, 'request_failed'))
+      }
     } catch (err) {
       setSubmitError(getErrorMessage(err, t, 'checkout_failed'))
     } finally {
@@ -190,7 +194,7 @@ export default function CheckoutPage() {
       })
       const response = await api.submitCryptoPayment(payment.id, {
         senderAddress: wallet?.account.address,
-        tonConnectBoc: (result as { boc?: string }).boc,
+        tonConnectBoc: (result as SendTransactionResponse).boc,
       })
       setPayment(response.payment)
     } catch (err) {
@@ -303,7 +307,15 @@ export default function CheckoutPage() {
               </button>
             </>
           )}
-          <p className={styles.value}>{payment?.status === 'processing' ? t('checkout.paymentPending') : t('checkout.waitingForPayment')}</p>
+          <p className={styles.value}>
+            {payment?.status === 'paid'
+              ? t('checkout.paymentVerified', { defaultValue: 'Payment verified.' })
+              : payment?.status === 'failed'
+                ? t('checkout.paymentFailed', { defaultValue: 'Payment failed. Please contact support or try again.' })
+                : payment?.status === 'processing'
+                  ? t('checkout.paymentPending')
+                  : t('checkout.waitingForPayment')}
+          </p>
           {submitError && <p className={styles.error}>{submitError}</p>}
           <button className={styles.secondaryBtn} onClick={() => void refreshPayment()} disabled={!payment || paymentLoadingAction} type="button">
             {paymentLoadingAction ? t('common.loading') : t('common.refresh', { defaultValue: 'Refresh payment status' })}

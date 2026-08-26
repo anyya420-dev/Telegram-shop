@@ -40,6 +40,7 @@ before(async () => {
   process.env.NODE_ENV = 'production'
   process.env.ADMIN_PASSWORD = 'admin-secret'
   process.env.DATABASE_URL = databaseUrl
+  process.env.AUTH_RATE_LIMIT_MAX = '500'
   process.env.FRONTEND_URL = 'https://telegram-shop-3781.onrender.com/'
   process.env.WEB_APP_URL = 'https://telegram-shop-webapp.onrender.com/webapp'
   delete process.env.CORS_ALLOWED_ORIGINS
@@ -333,6 +334,7 @@ test('payment settings CRUD, payment sessions, crypto review flow, and duplicate
   assert.equal(markPaid.response.status, 400)
   assert.equal(markPaid.body.code, 'invalid_payment_type')
 
+  await prisma.cartItem.create({ data: { cartId: cart.id, productCityId: productCity.id, quantity: 2 } })
   const cryptoCheckout = await requestJson('/api/orders', {
     method: 'POST',
     headers: authHeader,
@@ -377,6 +379,7 @@ test('payment settings CRUD, payment sessions, crypto review flow, and duplicate
   assert.equal(confirmPayment.response.status, 200)
   assert.equal(confirmPayment.body.payment.status, 'paid')
 
+  await prisma.cartItem.create({ data: { cartId: cart.id, productCityId: productCity.id, quantity: 2 } })
   const duplicateCheckout = await requestJson('/api/orders', {
     method: 'POST',
     headers: authHeader,
@@ -405,7 +408,7 @@ test('stripe webhook verifies signature, marks payment paid, and ignores duplica
   const city = await prisma.city.create({ data: { name: 'Stripe City', nameEn: 'Stripe City', isActive: true } })
   const category = await prisma.category.create({ data: { name: 'Stripe Category', nameEn: 'Stripe Category', isActive: true } })
   const product = await prisma.product.create({
-    data: { name: 'Stripe Product', price: 19, categoryId: category.id, isActive: true },
+    data: { name: 'Stripe Product', description: 'Stripe product', price: 19, categoryId: category.id, isActive: true },
   })
   const productCity = await prisma.productCity.create({
     data: { productId: product.id, cityId: city.id, stock: 10, minimumQuantity: 1, quantityStep: 1, maximumQuantity: 10, unit: 'шт.', isAvailable: true },
