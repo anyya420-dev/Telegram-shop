@@ -28,19 +28,25 @@ import type {
   AdminPaymentRecord,
 } from '../types'
 
+function normalizeApiBase(value: string) {
+  const preparedValue = value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')
+    ? value
+    : `https://${value}`
+  const normalizedValue = preparedValue.replace(/\/+$/, '')
+  return normalizedValue.endsWith('/api') ? normalizedValue : `${normalizedValue}/api`
+}
+
 export function resolveApiUrl(env = (import.meta as { env?: Record<string, string | boolean> }).env) {
   const configuredValue = typeof env?.VITE_API_URL === 'string' ? env.VITE_API_URL.trim() : ''
+  const defaultProductionApiUrl = (typeof env?.VITE_DEFAULT_API_URL === 'string' && env.VITE_DEFAULT_API_URL.trim())
+    || 'https://narcos-shop.onrender.com/api'
   const isProduction = env?.PROD === true || env?.PROD === 'true' || env?.MODE === 'production'
 
   if (!configuredValue) {
-    return isProduction ? 'https://narcos-shop.onrender.com/api' : '/api'
+    return isProduction ? normalizeApiBase(defaultProductionApiUrl) : '/api'
   }
 
-  const preparedValue = configuredValue.startsWith('http://') || configuredValue.startsWith('https://') || configuredValue.startsWith('/')
-    ? configuredValue
-    : `https://${configuredValue}`
-  const normalizedValue = preparedValue.replace(/\/+$/, '')
-  return normalizedValue.endsWith('/api') ? normalizedValue : `${normalizedValue}/api`
+  return normalizeApiBase(configuredValue)
 }
 
 const API_URL = resolveApiUrl()

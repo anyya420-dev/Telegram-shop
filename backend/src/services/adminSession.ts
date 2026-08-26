@@ -2,6 +2,8 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import { prisma } from '../lib.js'
 
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000
+let lastSyncedAdminPassword: string | null = null
+let adminPasswordSyncInFlight: Promise<void> | null = null
 
 function hashPassword(password: string, salt: string) {
   return scryptSync(password, salt, 64).toString('hex')
@@ -9,6 +11,13 @@ function hashPassword(password: string, salt: string) {
 
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
+}
+
+function parseHexBuffer(value: string) {
+  if (!/^[a-fA-F0-9]+$/.test(value) || value.length % 2 !== 0) {
+    return null
+  }
+  return Buffer.from(value, 'hex')
 }
 
 export async function hasAdminPasswordConfigured() {
@@ -22,7 +31,10 @@ export async function verifyAdminPassword(password: string) {
     return { valid: false as const, reason: 'configuration_error' as const }
   }
 
-  const expectedHash = Buffer.from(row.passwordHash, 'hex')
+  const expectedHash = parseHexBuffer(row.passwordHash)
+  if (!expectedHash) {
+    return { valid: false as const, reason: 'configuration_error' as const }
+  }
   const candidateHash = Buffer.from(hashPassword(password, row.passwordSalt), 'hex')
   if (expectedHash.length === candidateHash.length && timingSafeEqual(expectedHash, candidateHash)) {
     return { valid: true as const }
@@ -58,21 +70,53 @@ export async function rotateAdminPassword(nextPassword: string) {
 
 export async function ensureAdminPasswordFromEnv() {
   const bootstrap = (process.env.ADMIN_PASSWORD ?? '').trim()
-  if (!bootstrap) return
+  if (!bootstrap) {
+    lastSyncedAdminPassword = null
+    return
+  }
+  if (bootstrap === lastSyncedAdminPassword) {
+    return
+  }
 
-  const current = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
-  if (!current) {
+  while (adminPasswordSyncInFlight) {
+    await adminPasswordSyncInFlight
+    if (bootstrap === lastSyncedAdminPassword) {
+      return
+    }
+  }
+
+  const syncPromise = (async () => {
+    const current = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
+    if (!current) {
+      await rotateAdminPassword(bootstrap)
+      lastSyncedAdminPassword = bootstrap
+      return
+    }
+
+    const expectedHash = parseHexBuffer(current.passwordHash)
+    if (!expectedHash) {
+      await rotateAdminPassword(bootstrap)
+      lastSyncedAdminPassword = bootstrap
+      return
+    }
+    const candidateHash = Buffer.from(hashPassword(bootstrap, current.passwordSalt), 'hex')
+    if (expectedHash.length === candidateHash.length && timingSafeEqual(expectedHash, candidateHash)) {
+      lastSyncedAdminPassword = bootstrap
+      return
+    }
+
     await rotateAdminPassword(bootstrap)
-    return
-  }
+    lastSyncedAdminPassword = bootstrap
+  })()
 
-  const expectedHash = Buffer.from(current.passwordHash, 'hex')
-  const candidateHash = Buffer.from(hashPassword(bootstrap, current.passwordSalt), 'hex')
-  if (expectedHash.length === candidateHash.length && timingSafeEqual(expectedHash, candidateHash)) {
-    return
+  adminPasswordSyncInFlight = syncPromise
+  try {
+    await syncPromise
+  } finally {
+    if (adminPasswordSyncInFlight === syncPromise) {
+      adminPasswordSyncInFlight = null
+    }
   }
-
-  await rotateAdminPassword(bootstrap)
 }
 
 export async function createAdminSession() {
