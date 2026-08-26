@@ -11,13 +11,12 @@
 }
 
 .back {
-  background: none;
-  border: none;
-  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--accent);
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .title {
@@ -46,47 +45,57 @@
   to { transform: rotate(360deg); }
 }
 
+.errorCard,
 .empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 60px 24px;
   gap: 12px;
-}
-
-.emptyIcon {
-  width: 64px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 24px;
+  margin-bottom: 16px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 50%;
-  color: var(--text-muted);
-}
-
-.emptyText {
-  font-size: 14px;
-  color: var(--text-secondary);
+  border-radius: var(--radius-xl);
   text-align: center;
 }
 
+.errorIcon,
+.emptyIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.errorText,
+.emptyText {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.retryBtn,
 .shopBtn {
-  margin-top: 8px;
-  padding: 12px 28px;
-  background: var(--accent);
-  color: #ffffff;
+  padding: 12px 18px;
   border-radius: var(--radius-lg);
   font-size: 14px;
   font-weight: 700;
-  cursor: pointer;
-  transition: opacity 0.15s;
 }
 
-.shopBtn:active {
-  opacity: 0.8;
+.retryBtn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.shopBtn {
+  background: var(--accent);
+  color: #fff;
 }
 
 .list {
@@ -96,36 +105,38 @@
 }
 
 .card {
+  width: 100%;
   background: var(--bg-card);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   padding: 16px;
-  cursor: pointer;
   border: 1px solid var(--border);
-  transition: border-color 0.15s;
+  color: var(--text-primary);
+  text-align: left;
 }
 
-.card:active {
-  border-color: var(--border-accent);
+.cardTop,
+.cardBottom,
+.metaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .cardTop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .orderId {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  color: var(--text-primary);
 }
 
 .status {
   font-size: 12px;
   font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 20px;
+  padding: 4px 10px;
+  border-radius: 999px;
   background: var(--border);
   color: var(--text-secondary);
 }
@@ -138,14 +149,32 @@
 .status_delivered { background: rgba(45, 158, 110, 0.15); color: #5ec89a; }
 .status_cancelled { background: rgba(192, 57, 74, 0.15); color: #f87171; }
 
-.cardItems {
+.metaList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.metaRow {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.metaRow span:last-child {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+
+.preview {
   display: flex;
   flex-direction: column;
   gap: 4px;
   margin-bottom: 12px;
 }
 
-.itemName {
+.previewLine {
   font-size: 13px;
   color: var(--text-primary);
 }
@@ -156,13 +185,6 @@
 }
 
 .cardBottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.date {
-  font-size: 12px;
   color: var(--text-secondary);
 }
 

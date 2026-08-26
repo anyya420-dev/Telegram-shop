@@ -31,7 +31,7 @@ type AppState = {
   updateCartItem: (itemId: number, quantity: number) => Promise<void>
   removeCartItem: (itemId: number) => Promise<void>
   checkout: (options?: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number }) => Promise<Order>
-  fetchOrders: () => Promise<void>
+  fetchOrders: () => Promise<Order[]>
   setError: (value: string | null) => void
 }
 
@@ -292,7 +292,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function fetchOrders() {
     if (!user) {
-      return
+      return []
     }
 
     try {
@@ -300,8 +300,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError(null)
       const response = await api.getOrders()
       setOrders(response.orders)
+      return response.orders
     } catch (ordersError) {
       setError(translateError(ordersError, t, 'orders_fetch_failed'))
+      throw ordersError
     } finally {
       setOrdersLoading(false)
     }

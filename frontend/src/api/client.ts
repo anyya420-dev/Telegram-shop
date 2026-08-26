@@ -88,7 +88,7 @@ export const api = {
   setSessionToken(token: string | null) {
     sessionToken = token
   },
-  bootstrap(payload: { initData: string; telegramUser: TelegramIdentity; isTelegramEnvironment: boolean }) {
+  bootstrap(payload: { initData: string; telegramUser?: TelegramIdentity; isTelegramEnvironment: boolean }) {
     return publicRequest<BootstrapResponse>('/session/bootstrap', {
       method: 'POST',
       body: JSON.stringify(payload),

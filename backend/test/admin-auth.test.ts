@@ -497,6 +497,71 @@ test('cart and checkout enforce quantity, delivery, stock, and cart clearing rul
   assert.equal(secondCheckout.body.code, 'cart_empty')
 })
 
+test('customer auth rejects invalid sessions and blocks access to other users or admin data', async () => {
+  const invalidProfile = await requestJson('/api/users/me', {
+    headers: { 'X-Session-Token': 'broken.token' },
+  })
+  assert.equal(invalidProfile.response.status, 401)
+  assert.equal(invalidProfile.body.code, 'invalid_session_token')
+
+  const ownerTelegramId = '900000003'
+  const otherTelegramId = '900000004'
+  const owner = await prisma.user.create({
+    data: { telegramId: ownerTelegramId, firstName: 'Owner', username: 'owner_user', language: 'ru' },
+  })
+  const otherUser = await prisma.user.create({
+    data: { telegramId: otherTelegramId, firstName: 'Other', username: 'other_user', language: 'ru' },
+  })
+
+  const city = await prisma.city.create({ data: { name: 'Owner City', nameEn: 'Owner City', isActive: true } })
+  const order = await prisma.order.create({
+    data: {
+      userId: owner.id,
+      cityId: city.id,
+      status: 'pending',
+      subtotal: 15,
+      total: 15,
+      paymentStatus: 'unpaid',
+    },
+  })
+
+  const otherToken = createSessionToken!(otherTelegramId)
+
+  const otherUsersOrder = await requestJson(`/api/orders/${order.id}`, {
+    headers: { 'X-Session-Token': otherToken },
+  })
+  assert.equal(otherUsersOrder.response.status, 404)
+  assert.equal(otherUsersOrder.body.code, 'not_found')
+
+  const customerAdminAttempt = await request('/api/admin/stats', {
+    headers: { 'X-Session-Token': otherToken },
+  })
+  assert.equal(customerAdminAttempt.status, 401)
+})
+
+test('session bootstrap requires real Telegram init data when demo mode is disabled', async () => {
+  const previousAllowDemoMode = process.env.ALLOW_DEMO_MODE
+  delete process.env.ALLOW_DEMO_MODE
+
+  const bootstrap = await requestJson('/api/session/bootstrap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      initData: '',
+      isTelegramEnvironment: false,
+    }),
+  })
+
+  assert.equal(bootstrap.response.status, 401)
+  assert.equal(bootstrap.body.code, 'telegram_init_data_required')
+
+  if (previousAllowDemoMode === undefined) {
+    delete process.env.ALLOW_DEMO_MODE
+  } else {
+    process.env.ALLOW_DEMO_MODE = previousAllowDemoMode
+  }
+})
+
 test('session bootstrap, city selection, and catalog stay city-aware', async () => {
   process.env.TELEGRAM_BOT_TOKEN = 'bootstrap-secret'
   process.env.ALLOW_DEMO_MODE = 'true'
@@ -600,6 +665,7 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
   })
   assert.equal(demoBootstrap.response.status, 200)
   assert.equal(demoBootstrap.body.user.selectedCityId, null)
+  assert.equal(demoBootstrap.body.user.lastName, 'Customer')
   assert.equal(demoBootstrap.body.cities.map((city: any) => city.name).includes('Hidden City'), false)
   assert.equal(demoBootstrap.body.categories.length >= 2, true)
   assert.equal(demoBootstrap.body.sessionToken.length > 0, true)
