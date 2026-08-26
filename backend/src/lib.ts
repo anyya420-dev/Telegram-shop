@@ -10,6 +10,7 @@ export const DEMO_TELEGRAM_USER = {
   id: '900000001',
   username: 'demo_customer',
   first_name: 'Demo',
+  last_name: 'Customer',
 }
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
@@ -20,6 +21,7 @@ type TelegramUserPayload = {
   id: string
   username?: string
   first_name: string
+  last_name?: string
 }
 
 type TranslationShape = {
@@ -46,7 +48,7 @@ export function sendError(response: Response, status: number, code: string, mess
 
 export const authRateLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 60,
+  limit: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 60),
   standardHeaders: true,
   legacyHeaders: false,
   message: { code: 'too_many_requests', message: 'Too many requests, please try again later' },
@@ -110,7 +112,7 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
   }
 
   try {
-    const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string }
+    const parsedUser = JSON.parse(rawUser) as { id?: number | string; username?: string; first_name?: string; last_name?: string }
 
     if (!parsedUser.id || !parsedUser.first_name) {
       return null
@@ -120,6 +122,7 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
       id: String(parsedUser.id),
       username: parsedUser.username,
       first_name: parsedUser.first_name,
+      last_name: parsedUser.last_name,
     } satisfies TelegramUserPayload
   } catch {
     return null
@@ -184,8 +187,12 @@ export function mapProduct(productCity: {
     description: string
     descriptionEn: string | null
     price: number
+    creditsEnabled?: boolean
+    creditsPrice?: number | null
+    minCreditsRequired?: number | null
     image: string | null
     categoryId: number
+    isActive: boolean
     isRecommended: boolean
     category: {
       name: string
@@ -202,17 +209,21 @@ export function mapProduct(productCity: {
     description: productCity.product.description,
     descriptionTranslations: createTranslations(productCity.product.description, productCity.product.descriptionEn),
     price: productCity.product.price,
+    creditsEnabled: productCity.product.creditsEnabled ?? false,
+    creditsPrice: productCity.product.creditsPrice ?? null,
+    minCreditsRequired: productCity.product.minCreditsRequired ?? null,
     image: productCity.product.image,
     categoryId: productCity.product.categoryId,
     categoryName: productCity.product.category.name,
     categoryNameTranslations: createTranslations(productCity.product.category.name, productCity.product.category.nameEn),
     isRecommended: productCity.product.isRecommended,
     stock: productCity.stock,
-    isAvailable: productCity.isAvailable,
+    isAvailable: productCity.product.isActive && productCity.isAvailable && productCity.stock > 0,
     minimumQuantity: productCity.minimumQuantity,
     quantityStep: productCity.quantityStep,
     maximumQuantity: productCity.maximumQuantity,
     unit: productCity.unit,
+    unitTranslations: createTranslations(productCity.unit),
   }
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
-import { api } from './client'
+import { api, resolveApiUrl } from './client'
 
 type Call = { url: string; init: RequestInit }
 
@@ -69,6 +69,7 @@ test('public client never switches to credentialed mode', async () => {
 
 test('payment and admin payment endpoints use correct paths and transports', async () => {
   await api.getPaymentMethods()
+  await api.getCasinoState()
   await api.getAdminPaymentSettings()
   await api.createAdminPaymentSetting({ type: 'crypto', title: 'USDT TRC20', currency: 'USDT', network: 'TRC20', walletAddress: 'T123' })
   await api.toggleAdminPaymentSetting(7)
@@ -76,9 +77,28 @@ test('payment and admin payment endpoints use correct paths and transports', asy
 
   assert.equal(calls[0].url.includes('/payments/methods'), true)
   assert.equal(calls[0].init.credentials, 'omit')
-  assert.equal(calls[1].url.includes('/admin/payment-settings'), true)
-  assert.equal(calls[1].init.credentials, 'include')
+  assert.equal(calls[1].url.includes('/casino'), true)
+  assert.equal(calls[1].init.credentials, 'omit')
   assert.equal(calls[2].url.includes('/admin/payment-settings'), true)
-  assert.equal(calls[3].url.includes('/admin/payment-settings/7/toggle'), true)
-  assert.equal(calls[4].url.includes('/admin/payment-settings/7'), true)
+  assert.equal(calls[2].init.credentials, 'include')
+  assert.equal(calls[3].url.includes('/admin/payment-settings'), true)
+  assert.equal(calls[4].url.includes('/admin/payment-settings/7/toggle'), true)
+  assert.equal(calls[5].url.includes('/admin/payment-settings/7'), true)
+})
+
+test('resolveApiUrl normalizes Render API env values', () => {
+  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://narcos-shop.onrender.com' }), 'https://narcos-shop.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://narcos-shop.onrender.com/api/' }), 'https://narcos-shop.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: '/api/' }), '/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: '   ' }), '')
+})
+
+test('catalog requests forward sort and filter params to the shared client', async () => {
+  await api.getCatalog({ cityId: 4, search: 'tea', categoryId: 7, sort: 'price_desc' })
+
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].url, /cityId=4/)
+  assert.match(calls[0].url, /search=tea/)
+  assert.match(calls[0].url, /categoryId=7/)
+  assert.match(calls[0].url, /sort=price_desc/)
 })

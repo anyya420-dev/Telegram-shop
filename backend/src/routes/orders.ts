@@ -1,16 +1,30 @@
 import { Router } from 'express'
+import { Prisma } from '@prisma/client'
 import {
   authRateLimiter,
   buildCartResponse,
   getAuthorizedUser,
+  isAllowedQuantity,
   normalizeQuantity,
   parsePositiveInt,
   prisma,
   sendError,
 } from '../lib.js'
+import { getOrCreateCasinoBalance } from '../services/casino.js'
 import { notifyOrderStatusChange } from '../services/notifier.js'
+import { createOrRefreshOrderPayment } from '../services/payments.js'
 
 const router = Router()
+
+class OrderRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message)
+  }
+}
 
 const ORDER_INCLUDE = {
   items: true,
@@ -19,6 +33,13 @@ const ORDER_INCLUDE = {
   paymentMethod: true,
   deliveryOption: true,
   discount: true,
+  reward: true,
+  payments: {
+    include: {
+      paymentMethod: true,
+    },
+    orderBy: { createdAt: 'desc' as const },
+  },
 }
 
 // GET /api/orders - history
@@ -73,141 +94,307 @@ router.post('/', authRateLimiter, async (request, response) => {
   const comment = typeof request.body.comment === 'string' ? request.body.comment.trim() : undefined
   const discountCode = typeof request.body.discountCode === 'string' ? request.body.discountCode.trim().toUpperCase() : null
   const deliveryOptionId = parsePositiveInt(request.body.deliveryOptionId) ?? null
-  const paymentMethodId = parsePositiveInt(request.body.paymentMethodId)
+  const paymentMethodId = parsePositiveInt(request.body.paymentMethodId) ?? null
+  const rewardId = parsePositiveInt(request.body.rewardId) ?? null
+  const requestedCasinoCreditsToUse = normalizeQuantity(Math.max(0, Number(request.body.casinoCreditsToUse) || 0))
 
-  if (!paymentMethodId) {
-    sendError(response, 400, 'payment_method_required', 'Payment method is required')
-    return
+  if (requestedCasinoCreditsToUse < 0) {
+   sendError(response, 400, 'invalid_casino_credits', 'Casino credits must be zero or positive')
+   return
   }
 
-  const paymentMethod = await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, isEnabled: true } })
-  if (!paymentMethod) {
-    sendError(response, 400, 'payment_method_unavailable', 'Selected payment method is unavailable')
-    return
+  if (discountCode && rewardId) {
+   sendError(response, 400, 'discount_conflict', 'Choose either a promo code or a casino reward')
+   return
   }
 
-  const cart = await prisma.cart.findUnique({
-    where: { userId: user.id },
-    include: {
-      items: {
+  let order
+
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      const currentUser = await tx.user.findUnique({
+        where: { id: user.id },
+        select: { selectedCityId: true },
+      })
+
+      if (!currentUser?.selectedCityId) {
+        throw new OrderRequestError(400, 'city_not_selected', 'Please select a city before placing an order')
+      }
+
+      const cart = await tx.cart.findUnique({
+        where: { userId: user.id },
         include: {
-          productCity: { include: { product: true } },
+          items: {
+            include: {
+              productCity: {
+                include: {
+                  product: true,
+                },
+              },
+            },
+          },
         },
-      },
-    },
-  })
+      })
 
-  if (!cart || cart.items.length === 0) {
-    sendError(response, 400, 'cart_empty', 'Cart is empty')
-    return
-  }
+      if (!cart || cart.items.length === 0) {
+        throw new OrderRequestError(400, 'cart_empty', 'Cart is empty')
+      }
 
-  // Verify all items are still available and in stock
-  for (const item of cart.items) {
-    const pc = item.productCity
-    if (!pc.isAvailable) {
-      sendError(response, 400, 'product_unavailable', `Product "${pc.product.name}" is no longer available`)
-      return
-    }
-    if (item.quantity > pc.stock) {
-      sendError(response, 400, 'stock_exceeded', `Insufficient stock for "${pc.product.name}"`)
-      return
-    }
-  }
+      for (const item of cart.items) {
+        const productCity = item.productCity
+        if (productCity.cityId !== currentUser.selectedCityId) {
+          throw new OrderRequestError(400, 'city_mismatch', 'Choose the same city before placing an order')
+        }
+        if (!productCity.product.isActive || !productCity.isAvailable || productCity.stock <= 0) {
+          throw new OrderRequestError(400, 'product_unavailable', `Product "${productCity.product.name}" is unavailable`)
+        }
+        if (
+          !isAllowedQuantity(
+            item.quantity,
+            productCity.minimumQuantity,
+            productCity.quantityStep,
+            productCity.maximumQuantity,
+          )
+        ) {
+          throw new OrderRequestError(400, 'quantity_invalid', `Quantity for "${productCity.product.name}" is invalid`)
+        }
+        if (item.quantity > productCity.stock) {
+          throw new OrderRequestError(400, 'stock_exceeded', `Insufficient stock for "${productCity.product.name}"`)
+        }
+      }
 
-  const subtotal = normalizeQuantity(
-    cart.items.reduce((sum, item) => sum + item.productCity.product.price * item.quantity, 0),
-  )
+      let deliveryFee = 0
+      if (deliveryOptionId) {
+        const deliveryOption = await tx.deliveryOption.findFirst({
+          where: { id: deliveryOptionId, isActive: true },
+        })
+        if (!deliveryOption) {
+          throw new OrderRequestError(400, 'delivery_option_unavailable', 'Selected delivery option is unavailable')
+        }
+        deliveryFee = deliveryOption.price
+      }
 
-  // Resolve delivery option
-  let deliveryFee = 0
-  if (deliveryOptionId) {
-    const opt = await prisma.deliveryOption.findFirst({ where: { id: deliveryOptionId, isActive: true } })
-    if (opt) deliveryFee = opt.price
-  }
+      const subtotal = normalizeQuantity(
+        cart.items.reduce((sum, item) => sum + item.productCity.product.price * item.quantity, 0),
+      )
+      const creditsSubtotal = normalizeQuantity(
+        cart.items.reduce((sum, item) => {
+          if (!item.productCity.product.creditsEnabled || !item.productCity.product.creditsPrice) {
+            return sum
+          }
+          return sum + item.productCity.product.creditsPrice * item.quantity
+        }, 0),
+      )
 
-  // Resolve discount code
-  let discountAmount = 0
-  let discountId: number | null = null
-  if (discountCode) {
-    const discount = await prisma.discount.findFirst({ where: { code: discountCode, isActive: true } })
-    if (discount) {
-      const now = new Date()
-      const expired = discount.expiresAt && discount.expiresAt < now
-      const exhausted = discount.usageLimit !== null && discount.usedCount >= discount.usageLimit
-      const tooSmall = subtotal < discount.minOrderAmount
-      if (!expired && !exhausted && !tooSmall) {
+      let discountAmount = 0
+      let discountId: number | null = null
+      let rewardDiscountAmount = 0
+      let rewardRecordId: number | null = null
+      if (discountCode) {
+        const discount = await tx.discount.findFirst({ where: { code: discountCode, isActive: true } })
+        if (!discount) {
+          throw new OrderRequestError(404, 'discount_not_found', 'Discount code not found or inactive')
+        }
+        if (discount.expiresAt && discount.expiresAt < new Date()) {
+          throw new OrderRequestError(400, 'discount_expired', 'Discount code has expired')
+        }
+        if (discount.usageLimit !== null && discount.usedCount >= discount.usageLimit) {
+          throw new OrderRequestError(400, 'discount_exhausted', 'Discount code usage limit reached')
+        }
+        if (subtotal < discount.minOrderAmount) {
+          throw new OrderRequestError(400, 'order_too_small', 'Order amount does not meet the discount minimum')
+        }
+
         discountAmount =
           discount.type === 'percent'
             ? normalizeQuantity((subtotal * discount.value) / 100)
             : Math.min(discount.value, subtotal)
         discountId = discount.id
       }
+
+      if (rewardId) {
+        const reward = await tx.casinoReward.findFirst({
+          where: { id: rewardId, userId: user.id },
+        })
+        if (!reward) {
+          throw new OrderRequestError(404, 'reward_not_found', 'Reward not found')
+        }
+        if (reward.rewardType !== 'shop_discount') {
+          throw new OrderRequestError(400, 'reward_invalid', 'Only shop discount rewards can be used at checkout')
+        }
+        if (reward.status !== 'available' || reward.orderId || reward.usedAt) {
+          throw new OrderRequestError(400, 'reward_unavailable', 'Reward is no longer available')
+        }
+        if (reward.expiresAt && reward.expiresAt < new Date()) {
+          await tx.casinoReward.update({
+            where: { id: reward.id },
+            data: { status: 'expired' },
+          })
+          throw new OrderRequestError(400, 'reward_expired', 'Reward has expired')
+        }
+        if ((reward.discountPercent ?? 0) > 30) {
+          throw new OrderRequestError(400, 'reward_invalid', 'Reward discount exceeds the allowed maximum')
+        }
+        if (reward.minOrderAmount && subtotal < reward.minOrderAmount) {
+          throw new OrderRequestError(400, 'order_too_small', 'Order amount does not meet the reward minimum')
+        }
+        rewardDiscountAmount = normalizeQuantity((subtotal * (reward.discountPercent ?? 0)) / 100)
+        discountAmount = rewardDiscountAmount
+        rewardRecordId = reward.id
+      }
+
+      let casinoCreditsToUse = 0
+      if (requestedCasinoCreditsToUse > 0) {
+        const allItemsAllowCredits = cart.items.every((item) => item.productCity.product.creditsEnabled && (item.productCity.product.creditsPrice ?? 0) > 0)
+        if (!allItemsAllowCredits || creditsSubtotal <= 0) {
+          throw new OrderRequestError(400, 'credits_unavailable_for_order', 'Casino credits are unavailable for one or more products in this order')
+        }
+        const minimumCreditsRequired = cart.items.reduce((max, item) => Math.max(max, item.productCity.product.minCreditsRequired ?? 0), 0)
+        if (minimumCreditsRequired > 0 && requestedCasinoCreditsToUse < minimumCreditsRequired) {
+          throw new OrderRequestError(400, 'credits_minimum_not_met', 'Selected products require a higher casino credits amount')
+        }
+        const casinoBalance = await getOrCreateCasinoBalance(tx, user.id)
+        if (requestedCasinoCreditsToUse > casinoBalance.credits) {
+          throw new OrderRequestError(400, 'insufficient_casino_credits', 'Insufficient casino credits balance')
+        }
+        casinoCreditsToUse = normalizeQuantity(Math.min(requestedCasinoCreditsToUse, creditsSubtotal))
+      }
+
+      const discountedSubtotal = normalizeQuantity(Math.max(0, subtotal - discountAmount))
+      const creditsCashValue =
+        casinoCreditsToUse > 0 && creditsSubtotal > 0
+          ? normalizeQuantity(Math.min(discountedSubtotal, discountedSubtotal * (casinoCreditsToUse / creditsSubtotal)))
+          : 0
+      const total = normalizeQuantity(Math.max(0, discountedSubtotal - creditsCashValue + deliveryFee))
+
+      let paymentMethod: Awaited<ReturnType<typeof tx.paymentMethod.findFirst>> = null
+      if (total > 0) {
+        if (!paymentMethodId) {
+          throw new OrderRequestError(400, 'payment_method_required', 'Payment method is required')
+        }
+        paymentMethod = await tx.paymentMethod.findFirst({ where: { id: paymentMethodId, isEnabled: true } })
+        if (!paymentMethod) {
+          throw new OrderRequestError(400, 'payment_method_unavailable', 'Selected payment method is unavailable')
+        }
+      }
+
+      if (discountId) {
+        await tx.discount.update({
+          where: { id: discountId },
+          data: { usedCount: { increment: 1 } },
+        })
+      }
+
+      for (const item of cart.items) {
+        const updatedProductCity = await tx.productCity.updateMany({
+          where: {
+            id: item.productCityId,
+            cityId: currentUser.selectedCityId,
+            isAvailable: true,
+            stock: { gte: item.quantity },
+          },
+          data: {
+            stock: { decrement: item.quantity },
+          },
+        })
+
+        if (updatedProductCity.count !== 1) {
+          throw new OrderRequestError(400, 'stock_exceeded', `Insufficient stock for "${item.productCity.product.name}"`)
+        }
+      }
+
+      const newOrder = await tx.order.create({
+        data: {
+          userId: user.id,
+          cityId: currentUser.selectedCityId,
+          status: total > 0 ? 'pending' : 'confirmed',
+          subtotal,
+          discountAmount,
+          deliveryFee,
+          total,
+          comment: comment || null,
+          paymentStatus: total > 0 ? 'pending' : 'confirmed',
+          paymentMethodId,
+          deliveryOptionId,
+          discountId,
+          casinoCreditsUsed: casinoCreditsToUse,
+          items: {
+            create: cart.items.map((item) => ({
+              productCityId: item.productCityId,
+              productName: item.productCity.product.name,
+              productImage: item.productCity.product.image,
+              unit: item.productCity.unit,
+              quantity: item.quantity,
+              price: item.productCity.product.price,
+              lineTotal: normalizeQuantity(item.productCity.product.price * item.quantity),
+            })),
+          },
+        },
+      })
+
+      if (rewardRecordId) {
+        await tx.casinoReward.update({
+          where: { id: rewardRecordId },
+          data: { status: 'used', usedAt: new Date(), orderId: newOrder.id },
+        })
+      }
+
+      if (casinoCreditsToUse > 0) {
+        const casinoBalance = await getOrCreateCasinoBalance(tx, user.id)
+        const updatedBalance = await tx.casinoBalance.updateMany({
+          where: { id: casinoBalance.id, credits: { gte: casinoCreditsToUse } },
+          data: {
+            credits: { decrement: casinoCreditsToUse },
+            lifetimeSpent: { increment: casinoCreditsToUse },
+          },
+        })
+        if (updatedBalance.count !== 1) {
+          throw new OrderRequestError(400, 'insufficient_casino_credits', 'Insufficient casino credits balance')
+        }
+        await tx.casinoCreditTransaction.create({
+          data: {
+            casinoBalanceId: casinoBalance.id,
+            amount: -casinoCreditsToUse,
+            type: 'order_purchase',
+            orderId: newOrder.id,
+            reason: 'Casino credits applied to order',
+          },
+        })
+      }
+
+      if (total > 0 && paymentMethod) {
+        await createOrRefreshOrderPayment(tx, newOrder, paymentMethod)
+      }
+
+      await tx.orderStatusHistory.create({
+        data: { orderId: newOrder.id, status: total > 0 ? 'pending' : 'confirmed', comment: total > 0 ? 'Order placed' : 'Order paid with casino credits' },
+      })
+
+      await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: newOrder.id },
+        include: ORDER_INCLUDE,
+      })
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    })
+  } catch (error) {
+    if (error instanceof OrderRequestError) {
+      sendError(response, error.status, error.code, error.message)
+      return
     }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      sendError(response, 409, 'order_submission_in_progress', 'Order submission is already being processed')
+      return
+    }
+
+    throw error
   }
 
-  const total = normalizeQuantity(Math.max(0, subtotal - discountAmount + deliveryFee))
-
-  // Create order and clear cart in a transaction
-  const order = await prisma.$transaction(async (tx) => {
-    const newOrder = await tx.order.create({
-      data: {
-        userId: user.id,
-        cityId: user.selectedCityId!,
-        status: 'pending',
-        subtotal,
-        discountAmount,
-        deliveryFee,
-        total,
-        comment: comment || null,
-        paymentStatus: 'unpaid',
-        paymentMethodId,
-        deliveryOptionId,
-        discountId,
-        items: {
-          create: cart.items.map((item) => ({
-            productCityId: item.productCityId,
-            productName: item.productCity.product.name,
-            productImage: item.productCity.product.image,
-            unit: item.productCity.unit,
-            quantity: item.quantity,
-            price: item.productCity.product.price,
-            lineTotal: normalizeQuantity(item.productCity.product.price * item.quantity),
-          })),
-        },
-      },
-      include: ORDER_INCLUDE,
-    })
-
-    // Record initial status history
-    await tx.orderStatusHistory.create({
-      data: { orderId: newOrder.id, status: 'pending', comment: 'Order placed' },
-    })
-
-    // Increment discount usage
-    if (discountId) {
-      await tx.discount.update({
-        where: { id: discountId },
-        data: { usedCount: { increment: 1 } },
-      })
-    }
-
-    // Reduce stock for each item
-    for (const item of cart.items) {
-      await tx.productCity.update({
-        where: { id: item.productCityId },
-        data: { stock: { decrement: item.quantity } },
-      })
-    }
-
-    // Clear cart items
-    await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
-
-    return newOrder
-  })
-
   await prisma.userActivityLog.create({
-    data: { userId: user.id, action: 'order_placed', meta: JSON.stringify({ orderId: order.id, total }) },
+    data: { userId: user.id, action: 'order_placed', meta: JSON.stringify({ orderId: order.id, total: order.total }) },
   })
 
   const cartResponse = await buildCartResponse(user.id)
@@ -231,8 +418,8 @@ router.post('/:id/cancel', authRateLimiter, async (request, response) => {
     return
   }
 
-  if (!['pending', 'confirmed'].includes(order.status)) {
-    sendError(response, 400, 'cannot_cancel', 'Only pending or confirmed orders can be cancelled')
+  if (!['pending', 'confirmed', 'payment_pending'].includes(order.status)) {
+    sendError(response, 400, 'cannot_cancel', 'Only pending, payment pending, or confirmed orders can be cancelled')
     return
   }
 
@@ -247,6 +434,30 @@ router.post('/:id/cancel', authRateLimiter, async (request, response) => {
       await tx.productCity.update({
         where: { id: item.productCityId },
         data: { stock: { increment: item.quantity } },
+      })
+    }
+
+    const reward = await tx.casinoReward.findFirst({ where: { orderId } })
+    if (reward) {
+      await tx.casinoReward.update({
+        where: { id: reward.id },
+        data: { status: 'available', usedAt: null, orderId: null },
+      })
+    }
+    if (order.casinoCreditsUsed > 0) {
+      const casinoBalance = await getOrCreateCasinoBalance(tx, user.id)
+      await tx.casinoBalance.update({
+        where: { id: casinoBalance.id },
+        data: { credits: { increment: order.casinoCreditsUsed } },
+      })
+      await tx.casinoCreditTransaction.create({
+        data: {
+          casinoBalanceId: casinoBalance.id,
+          amount: order.casinoCreditsUsed,
+          type: 'order_refund',
+          orderId,
+          reason: 'Cancelled order credit refund',
+        },
       })
     }
 
@@ -326,24 +537,39 @@ router.post('/:id/mark-paid', authRateLimiter, async (request, response) => {
     return
   }
 
-  if (!order.paymentMethodId) {
-    sendError(response, 400, 'payment_method_missing', 'Payment method is not set for this order')
+  const payment = await prisma.payment.findFirst({
+    where: { orderId, order: { userId: user.id } },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (!order.paymentMethodId || !payment) {
+    sendError(response, 400, 'payment_method_missing', 'Payment is not initialized for this order')
     return
   }
 
-  if (!['pending', 'payment_pending'].includes(order.status)) {
+  const method = await prisma.paymentMethod.findUnique({ where: { id: order.paymentMethodId } })
+  if (!method || method.type !== 'crypto') {
+    sendError(response, 400, 'invalid_payment_type', 'Manual payment confirmation is only available for crypto payments')
+    return
+  }
+
+  if (!['pending', 'payment_pending'].includes(order.status) || !['pending', 'processing'].includes(payment.status)) {
     sendError(response, 400, 'invalid_order_status', 'Order is not eligible for manual payment confirmation')
     return
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: 'processing' },
+    })
     await tx.orderStatusHistory.create({
-      data: { orderId, status: 'payment_pending', comment: 'Customer confirmed manual payment' },
+      data: { orderId, status: 'payment_pending', comment: 'Customer requested manual crypto payment review' },
     })
 
     return tx.order.update({
       where: { id: orderId },
-      data: { status: 'payment_pending', paymentStatus: 'pending' },
+      data: { status: 'payment_pending', paymentStatus: 'processing' },
       include: ORDER_INCLUDE,
     })
   })

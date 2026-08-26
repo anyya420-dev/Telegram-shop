@@ -1,0 +1,80 @@
+.page {
+  padding: 16px 16px 84px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.retry,
+.empty,
+.card {
+  width: 100%;
+  border: 1px solid rgba(166, 124, 82, 0.22);
+  background: linear-gradient(180deg, rgba(30, 18, 26, 0.98), rgba(13, 10, 16, 0.98));
+  color: var(--text-primary);
+  border-radius: 18px;
+}
+
+.retry,
+.empty {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.error {
+  margin: 0 0 10px;
+  color: #f2a8b4;
+  font-size: 13px;
+}
+
+.retry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.list {
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.game {
+  margin: 0 0 6px;
+  color: #b99ab0;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.reward {
+  font-size: 18px;
+}
+
+.meta {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.status {
+  color: #f0c98d;
+  text-transform: uppercase;
+}

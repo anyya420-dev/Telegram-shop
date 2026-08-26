@@ -11,12 +11,14 @@
   },
   "home": {
     "title": "Магазин",
-    "featured": "🔥 Рекомендуем",
-    "newest": "✨ Новинки",
-    "popular": "⭐ Популярное",
-    "viewAll": "Все →",
+    "featured": "Рекомендуем",
+    "newest": "Новинки",
+    "popular": "Популярное",
+    "viewAll": "Все",
     "categories": "Категории",
-    "searchPlaceholder": "🔍 Поиск товаров..."
+    "searchPlaceholder": "Поиск товаров",
+    "casinoTitle": "Казино",
+    "casinoText": "Играйте на отдельных виртуальных кредитах и отслеживайте каждый раунд."
   },
   "catalog": {
     "title": "Каталог",
@@ -27,14 +29,14 @@
     "sortPriceDesc": "Цена ↓",
     "sortPopular": "Популярные",
     "empty": "Товары не найдены",
-    "searchPlaceholder": "🔍 Поиск товаров...",
+    "searchPlaceholder": "Поиск товаров",
     "clearSearch": "Очистить поиск",
     "resetFilters": "Сбросить фильтры",
     "nothingFound": "По вашему запросу ничего не найдено"
   },
   "shop": {
     "title": "Магазин",
-    "searchPlaceholder": "🔍 Поиск товаров...",
+    "searchPlaceholder": "Поиск товаров",
     "allCategories": "Все",
     "loading": "Загрузка...",
     "empty": "Товары не найдены"
@@ -45,11 +47,11 @@
     "outOfStock": "Нет в наличии",
     "quantity": "Количество",
     "total": "Итого",
-    "addToCart": "🛒 Добавить в корзину",
-    "updateCart": "🛒 Обновить корзину",
-    "added": "✓ Добавлено",
+    "addToCart": "Добавить в корзину",
+    "updateCart": "Обновить корзину",
+    "added": "Добавлено",
     "adding": "Добавляем...",
-    "goToCart": "Перейти в корзину →",
+    "goToCart": "Перейти в корзину",
     "notInCity": "Товар недоступен в выбранном городе",
     "notFound": "Товар не найден",
     "related": "Похожие товары",
@@ -82,17 +84,18 @@
     "delivery": "Доставка",
     "orderTotal": "Итого",
     "soon": "— (скоро)",
-    "checkout": "💳 Оформить заказ",
+    "checkout": "Оформить заказ",
     "checkingOut": "Оформляем...",
     "checkoutFailed": "Не удалось оформить заказ. Попробуйте ещё раз.",
     "checkoutNote": "Оплата будет доступна в следующей версии",
-    "recommended": "🔥 Вам может понравиться",
+    "recommended": "Вам может понравиться",
     "discountCode": "Промокод",
     "applyCode": "Применить",
     "invalidDiscount": "Неверный или просроченный код",
     "deliveryOption": "Способ доставки",
     "free": "Бесплатно",
-    "continueShopping": "Продолжить покупки"
+    "continueShopping": "Продолжить покупки",
+    "itemUnavailable": "Этот товар больше недоступен."
   },
   "checkout": {
     "title": "Оформление заказа",
@@ -119,7 +122,12 @@
     "noDeliveryOptions": "Варианты доставки пока недоступны",
     "successTitle": "Заказ создан",
     "successText": "Ваш заказ успешно оформлен.",
-    "viewOrder": "Открыть заказ"
+    "viewOrder": "Открыть заказ",
+    "viewOrders": "Все заказы",
+    "goToProfile": "Перейти в профиль",
+    "selectCity": "Выбрать город",
+    "customerInfo": "Данные покупателя",
+    "notSelected": "Не выбран"
   },
   "profile": {
     "title": "Профиль",
@@ -137,11 +145,18 @@
     "ordersCount_many": "{{count}} заказов",
     "ordersCount_other": "{{count}} заказов",
     "language": "Язык",
-    "selectCity": "📍 Выберите город",
+    "selectCity": "Выберите город",
     "cancel": "Отмена",
-    "languageRu": "🇷🇺 Русский",
-    "languageEn": "🇬🇧 English",
-    "telegramWebAppOnly": "Откройте магазин в Telegram Web App для полного доступа к профилю."
+    "languageRu": "Русский",
+    "languageEn": "English",
+    "telegramWebAppOnly": "Откройте магазин в Telegram Web App для полного доступа к профилю.",
+    "notAvailable": "Данные профиля недоступны.",
+    "accountInfo": "Информация об аккаунте",
+    "firstName": "Имя",
+    "lastName": "Фамилия",
+    "username": "Имя пользователя",
+    "settings": "Настройки",
+    "activity": "Активность"
   },
   "city": {
     "title": "Выберите город",
@@ -160,6 +175,8 @@
     "topupSuccess": "Баланс пополнен на {{amount}}",
     "topupError": "Не удалось пополнить",
     "history": "История операций",
+    "shopOnly": "Только баланс магазина",
+    "notice": "Этот баланс используется только для возвратов и внутренних корректировок магазина. Его нельзя пополнять, выводить или конвертировать в кредиты казино.",
     "txType": {
       "topup": "Пополнение",
       "spend": "Покупка",
@@ -176,12 +193,13 @@
     "bet": "Ставка",
     "target": "Выберите число",
     "hint": "Если кубик совпадёт с вашим числом — вы выиграете 5× ставку",
-    "spin": "🎲 Бросить кубик",
+    "spin": "Бросить кубик",
     "rolling": "Бросаем...",
-    "won": "🎉 Вы выиграли {{payout}}!",
-    "lost": "😢 Вы проиграли {{bet}}",
+    "won": "Вы выиграли {{payout}}!",
+    "lost": "Вы проиграли {{bet}}",
     "history": "Последние игры",
-    "error": "Ошибка"
+    "error": "Ошибка",
+    "credits": "Кредиты"
   },
   "support": {
     "title": "Поддержка",
@@ -200,7 +218,8 @@
     "admin": "Поддержка",
     "you": "Вы",
     "replyPlaceholder": "Ваш ответ...",
-    "error": "Ошибка отправки"
+    "error": "Ошибка отправки",
+    "empty": "Обращений пока нет"
   },
   "common": {
     "loading": "Загрузка...",
@@ -214,7 +233,7 @@
   },
   "cityPicker": {
     "badge": "Локация",
-    "title": "📍 Выберите город",
+    "title": "Выберите город",
     "helper": "Каталог, наличие и шаг количества зависят от выбранного города.",
     "changeCity": "Изменить город",
     "cityChangeNotice": "При смене города корзина очищается, чтобы не смешивать товары из разных локаций."
@@ -225,9 +244,13 @@
     "empty": "Заказов пока нет",
     "goToShop": "Перейти в магазин",
     "orderTitle": "Заказ #{{id}}",
+    "info": "Информация о заказе",
     "items": "Состав заказа",
     "comment": "Комментарий",
     "notFound": "Заказ не найден",
+    "city": "Город",
+    "itemCount": "Товары",
+    "createdAt": "Создан",
     "moreItems_one": "+{{count}} товар",
     "moreItems_few": "+{{count}} товара",
     "moreItems_many": "+{{count}} товаров",
@@ -303,6 +326,12 @@
     "language_update_failed": "Не удалось сохранить язык.",
     "checkout_failed": "Не удалось оформить заказ.",
     "orders_fetch_failed": "Не удалось загрузить заказы.",
-    "cart_empty": "Корзина пуста."
+    "cart_empty": "Корзина пуста.",
+    "delivery_option_unavailable": "Выбранный способ доставки недоступен.",
+    "discount_not_found": "Промокод не найден.",
+    "discount_expired": "Срок действия промокода истёк.",
+    "discount_exhausted": "Лимит использования промокода исчерпан.",
+    "order_too_small": "Сумма заказа слишком мала для этого промокода.",
+    "order_submission_in_progress": "Заказ уже обрабатывается. Пожалуйста, подождите."
   }
 }

@@ -23,10 +23,12 @@ const demoUser: TelegramIdentity = {
   id: '900000001',
   username: 'demo_customer',
   first_name: 'Demo',
+  last_name: 'Customer',
 }
 
 export function getTelegramContext() {
   const webApp = window.Telegram?.WebApp
+  const allowDemoMode = (import.meta as { env?: Record<string, string | boolean> }).env?.PROD !== true
 
   if (webApp) {
     webApp.ready()
@@ -37,7 +39,7 @@ export function getTelegramContext() {
 
   return {
     initData: webApp?.initData ?? '',
-    user: webApp?.initDataUnsafe?.user ?? demoUser,
+    user: webApp?.initDataUnsafe?.user ?? (allowDemoMode ? demoUser : undefined),
     isTelegramEnvironment: Boolean(webApp),
   }
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
@@ -8,6 +8,8 @@ import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile
 type AppState = {
   loading: boolean
   error: string | null
+  citiesLoading: boolean
+  cartLoading: boolean
   telegramEnvironment: boolean
   user: UserProfile | null
   cities: City[]
@@ -20,14 +22,16 @@ type AppState = {
   cityPickerOpen: boolean
   openCityPicker: () => void
   closeCityPicker: () => void
-  refreshCatalog: (search?: string, categoryId?: number | 'all') => Promise<void>
+  reloadCities: () => Promise<City[]>
+  refreshCart: () => Promise<Cart>
+  refreshCatalog: (search?: string, categoryId?: number | 'all', sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular') => Promise<void>
   selectCity: (cityId: number) => Promise<void>
   updateLanguagePreference: (language: Language) => Promise<void>
   addToCart: (productCityId: number, quantity: number) => Promise<void>
   updateCartItem: (itemId: number, quantity: number) => Promise<void>
   removeCartItem: (itemId: number) => Promise<void>
-  checkout: (options?: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number }) => Promise<Order>
-  fetchOrders: () => Promise<void>
+  checkout: (options: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) => Promise<Order>
+  fetchOrders: () => Promise<Order[]>
   setError: (value: string | null) => void
 }
 
@@ -55,6 +59,8 @@ function translateError(error: unknown, t: (key: string) => string, fallbackKey:
 export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [citiesLoading, setCitiesLoading] = useState(false)
+  const [cartLoading, setCartLoading] = useState(false)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [cities, setCities] = useState<City[]>([])
@@ -74,7 +80,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void i18n.changeLanguage(lang)
   }
 
-  async function refreshCatalog(search = '', categoryId: number | 'all' = 'all') {
+  async function reloadCities() {
+    try {
+      setCitiesLoading(true)
+      const response = await api.getCities()
+      setCities(response)
+      return response
+    } finally {
+      setCitiesLoading(false)
+    }
+  }
+
+  const refreshCatalog = useCallback(async (
+    search = '',
+    categoryId: number | 'all' = 'all',
+    sort: 'newest' | 'price_asc' | 'price_desc' | 'popular' = 'newest',
+  ) => {
     if (!user?.selectedCityId) {
       setProducts([])
       return
@@ -82,11 +103,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     try {
       setError(null)
-      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId })
+      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId, sort })
       setProducts(response.products)
     } catch (catalogError) {
       setError(translateError(catalogError, t, 'catalog_refresh_failed'))
       throw catalogError
+    }
+  }, [t, user?.selectedCityId])
+
+  async function refreshCart() {
+    if (!user) {
+      const nextCart = emptyCart()
+      setCart(nextCart)
+      setRecommended([])
+      return nextCart
+    }
+
+    try {
+      setCartLoading(true)
+      setError(null)
+      const cartResponse = await api.getCart()
+      setCart(cartResponse.cart)
+      setRecommended(cartResponse.recommended)
+      return cartResponse.cart
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    } finally {
+      setCartLoading(false)
     }
   }
 
@@ -108,6 +152,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setUser(response.user)
         void i18n.changeLanguage(response.user.language)
         setCities(response.cities)
+        setCitiesLoading(false)
         setCategories(response.categories)
 
         if (!response.user.selectedCityId) {
@@ -115,6 +160,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCart(emptyCart())
           setRecommended([])
         } else {
+          setCartLoading(true)
           const [catalogResponse, cartResponse] = await Promise.all([
             api.getCatalog({ cityId: response.user.selectedCityId }),
             api.getCart(),
@@ -122,10 +168,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setProducts(catalogResponse.products)
           setCart(cartResponse.cart)
           setRecommended(cartResponse.recommended)
+          setCartLoading(false)
         }
       } catch (bootstrapError) {
         setError(translateError(bootstrapError, t, 'shop_load_failed'))
       } finally {
+        setCartLoading(false)
         setLoading(false)
       }
     }
@@ -144,14 +192,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUser(response.user)
       setCityPickerOpen(false)
 
-      const productsResponse = await api.getCatalog({ cityId })
-      const cartResponse = await api.getCart()
+      setCartLoading(true)
+      const [productsResponse, cartResponse] = await Promise.all([
+        api.getCatalog({ cityId }),
+        api.getCart(),
+      ])
       setProducts(productsResponse.products)
       setCart(cartResponse.cart)
       setRecommended(cartResponse.recommended)
     } catch (cityError) {
       setError(translateError(cityError, t, 'city_not_found'))
       throw cityError
+    } finally {
+      setCartLoading(false)
     }
   }
 
@@ -219,7 +272,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function checkout(options?: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number }) {
+  async function checkout(options: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
     if (!user) {
       throw new Error('User not loaded')
     }
@@ -239,7 +292,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function fetchOrders() {
     if (!user) {
-      return
+      return []
     }
 
     try {
@@ -247,8 +300,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError(null)
       const response = await api.getOrders()
       setOrders(response.orders)
+      return response.orders
     } catch (ordersError) {
       setError(translateError(ordersError, t, 'orders_fetch_failed'))
+      throw ordersError
     } finally {
       setOrdersLoading(false)
     }
@@ -257,6 +312,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = {
     loading,
     error,
+    citiesLoading,
+    cartLoading,
     telegramEnvironment,
     user,
     cities,
@@ -269,6 +326,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     cityPickerOpen,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
+    reloadCities,
+    refreshCart,
     refreshCatalog,
     selectCity,
     updateLanguagePreference,

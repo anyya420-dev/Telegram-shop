@@ -1,13 +1,22 @@
 import type {
+  AdminCategory,
+  AdminCasinoConfig,
+  AdminCity,
+  AdminDeliveryOption,
+  AdminOrder,
+  AdminProduct,
   AdminStats,
   Balance,
+  CasinoState,
   BootstrapResponse,
   Cart,
   Category,
   City,
+  DeliveryOption,
   Discount,
   Language,
   Order,
+  Payment,
   PaymentMethod,
   ProductDetail,
   ProductSummary,
@@ -16,9 +25,21 @@ import type {
   TelegramIdentity,
   UserProfile,
   WishlistItem,
+  AdminPaymentRecord,
 } from '../types'
 
-const API_URL: string = (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL ?? ''
+export function resolveApiUrl(env = (import.meta as { env?: Record<string, string> }).env) {
+  const configuredValue = env?.VITE_API_URL?.trim() ?? ''
+
+  if (!configuredValue) {
+    return ''
+  }
+
+  const normalizedValue = configuredValue.replace(/\/+$/, '')
+  return normalizedValue.endsWith('/api') ? normalizedValue : `${normalizedValue}/api`
+}
+
+const API_URL = resolveApiUrl()
 let sessionToken: string | null = null
 
 export class ApiError extends Error {
@@ -77,16 +98,17 @@ export const api = {
   setSessionToken(token: string | null) {
     sessionToken = token
   },
-  bootstrap(payload: { initData: string; telegramUser: TelegramIdentity; isTelegramEnvironment: boolean }) {
+  bootstrap(payload: { initData: string; telegramUser?: TelegramIdentity; isTelegramEnvironment: boolean }) {
     return publicRequest<BootstrapResponse>('/session/bootstrap', {
       method: 'POST',
       body: JSON.stringify(payload),
     }, { includeSessionToken: false })
   },
-  getCatalog(params: { cityId: number; search?: string; categoryId?: number | 'all' }) {
+  getCatalog(params: { cityId: number; search?: string; categoryId?: number | 'all'; sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular' }) {
     const searchParams = new URLSearchParams({ cityId: String(params.cityId) })
     if (params.search) searchParams.set('search', params.search)
     if (params.categoryId && params.categoryId !== 'all') searchParams.set('categoryId', String(params.categoryId))
+    if (params.sort) searchParams.set('sort', params.sort)
     return publicRequest<{ products: ProductSummary[] }>(`/catalog?${searchParams.toString()}`)
   },
   getCities() {
@@ -113,8 +135,8 @@ export const api = {
   removeCartItem(itemId: number) {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
   },
-  checkout(payload?: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number }) {
-    return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload ?? {}) })
+  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
+    return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload) })
   },
   markOrderPaid(id: number) {
     return publicRequest<{ order: Order }>(`/orders/${id}/mark-paid`, { method: 'POST' })
@@ -139,15 +161,15 @@ export const api = {
   getBalance() {
     return publicRequest<{ balance: Balance }>('/balance')
   },
-  topupBalance(amount: number) {
-    return publicRequest<{ balance: Balance }>('/balance/topup', { method: 'POST', body: JSON.stringify({ amount }) })
+  getCasinoState() {
+    return publicRequest<CasinoState>('/casino')
   },
 
-  casinoSpin(bet: number, target: number) {
-    return publicRequest<{ dice: number; target: number; win: boolean; bet: number; payout: number; balance: { amount: number } }>('/casino/spin', { method: 'POST', body: JSON.stringify({ bet, target }) })
+  playCasinoGame(game: 'wheel' | 'slots' | 'roulette' | 'chest', payload: Record<string, unknown>) {
+    return publicRequest<{ round: CasinoState['history'][number]; reward: { rewardType: string; discountPercent: number | null; creditAmount: number | null; title: string }; balance: CasinoState['balance'] }>(`/casino/${game}/play`, { method: 'POST', body: JSON.stringify(payload) })
   },
   getCasinoHistory() {
-    return publicRequest<{ history: { id: number; type: string; amount: number; comment: string | null; createdAt: string }[] }>('/casino/history')
+    return publicRequest<{ history: CasinoState['history'] }>('/casino/history')
   },
 
   getSupportTickets() {
@@ -190,6 +212,15 @@ export const api = {
   getPaymentMethods() {
     return publicRequest<{ methods: PaymentMethod[] }>('/payments/methods')
   },
+  createOrderPayment(orderId: number) {
+    return publicRequest<{ payment: Payment }>(`/payments/orders/${orderId}/session`, { method: 'POST' })
+  },
+  getPayment(paymentId: number) {
+    return publicRequest<{ payment: Payment }>(`/payments/${paymentId}`)
+  },
+  submitCryptoPayment(paymentId: number, payload: { transactionHash?: string; senderAddress?: string; tonConnectBoc?: string }) {
+    return publicRequest<{ payment: Payment }>(`/payments/${paymentId}/crypto/submit`, { method: 'POST', body: JSON.stringify(payload) })
+  },
 
   adminLogin(data: { password: string }) {
     return adminRequest<{ ok: boolean }>('/admin/auth/login', {
@@ -209,7 +240,7 @@ export const api = {
   getAdminOrders(page = 1, status?: string) {
     const params = new URLSearchParams({ page: String(page) })
     if (status) params.set('status', status)
-    return adminRequest<{ orders: Order[]; total: number; page: number; pages: number }>(`/admin/orders?${params}`)
+    return adminRequest<{ orders: AdminOrder[]; total: number; page: number; pages: number }>(`/admin/orders?${params}`)
   },
   updateAdminOrderStatus(orderId: number, status: string, comment?: string) {
     return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/status`, { method: 'PATCH', body: JSON.stringify({ status, comment }) })
@@ -226,19 +257,28 @@ export const api = {
   getAdminUsers(page = 1) {
     return adminRequest<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)
   },
-  getAdminProducts() {
-    return adminRequest<{ products: ProductDetail[] }>('/admin/products')
+  getAdminCities() {
+    return adminRequest<{ cities: AdminCity[] }>('/admin/cities')
   },
-  createAdminProduct(data: { name: string; nameEn?: string; description?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean }[] }) {
+  createAdminCity(data: { name: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ city: AdminCity }>('/admin/cities', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCity(id: number, data: { name?: string; nameEn?: string | null; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ city: AdminCity }>(`/admin/cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminProducts() {
+    return adminRequest<{ products: AdminProduct[] }>('/admin/products')
+  },
+  createAdminProduct(data: { name: string; nameEn?: string; description?: string; descriptionEn?: string; price: number; categoryId: number; image?: string; creditsEnabled?: boolean; creditsPrice?: number | null; minCreditsRequired?: number | null; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }[] }) {
     return adminRequest<{ product: unknown }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
   },
-  createAdminProductCity(data: { productId: number; cityId: number; stock?: number; isAvailable?: boolean }) {
+  createAdminProductCity(data: { productId: number; cityId: number; stock?: number; isAvailable?: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }) {
     return adminRequest<{ productCity: unknown }>('/admin/product-cities', { method: 'POST', body: JSON.stringify(data) })
   },
-  updateAdminProduct(id: number, data: Partial<{ name: string; price: number; isActive: boolean; isRecommended: boolean }>) {
+  updateAdminProduct(id: number, data: Partial<{ name: string; nameEn: string | null; description: string; descriptionEn: string | null; image: string | null; categoryId: number; price: number; creditsEnabled: boolean; creditsPrice: number | null; minCreditsRequired: number | null; isActive: boolean; isRecommended: boolean }>) {
     return adminRequest<{ product: ProductDetail }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
-  updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean }>) {
+  updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean; minimumQuantity: number; quantityStep: number; maximumQuantity: number; unit: string }>) {
     return adminRequest<{ productCity: unknown }>(`/admin/product-cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminDiscounts() {
@@ -246,6 +286,18 @@ export const api = {
   },
   createAdminDiscount(data: { code: string; type: string; value: number; minOrderAmount?: number; usageLimit?: number }) {
     return adminRequest<{ discount: Discount }>('/admin/discounts', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminDiscount(id: number, data: { isActive?: boolean; usageLimit?: number | null; expiresAt?: string | null }) {
+    return adminRequest<{ discount: Discount }>(`/admin/discounts/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminDeliveryOptions() {
+    return adminRequest<{ options: AdminDeliveryOption[] }>('/admin/delivery-options')
+  },
+  createAdminDeliveryOption(data: { name: string; nameEn?: string; type?: string; price?: number; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ option: AdminDeliveryOption }>('/admin/delivery-options', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminDeliveryOption(id: number, data: { name?: string; nameEn?: string | null; type?: string; price?: number; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ option: AdminDeliveryOption }>(`/admin/delivery-options/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminSupportTickets(status?: string) {
     const params = status ? `?status=${status}` : ''
@@ -272,13 +324,37 @@ export const api = {
   toggleAdminPaymentSetting(id: number) {
     return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}/toggle`, { method: 'PATCH' })
   },
+  getAdminPayments() {
+    return adminRequest<{ payments: AdminPaymentRecord[] }>('/admin/payments')
+  },
+  updateAdminPaymentStatus(id: number, data: { status: string; reason: string }) {
+    return adminRequest<{ payment: Payment }>(`/admin/payments/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminCasinoConfig() {
+    return adminRequest<AdminCasinoConfig>('/admin/casino/config')
+  },
+  updateAdminCasinoGame(game: string, data: Partial<{ isEnabled: boolean; minBet: number; maxBet: number; spinLimit: number }>) {
+    return adminRequest<{ game: unknown }>(`/admin/casino/games/${game}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  createAdminCasinoRewardConfig(data: Record<string, unknown>) {
+    return adminRequest<{ rewardConfig: unknown }>('/admin/casino/reward-configs', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCasinoRewardConfig(id: number, data: Record<string, unknown>) {
+    return adminRequest<{ rewardConfig: unknown }>(`/admin/casino/reward-configs/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminCasinoHistory() {
+    return adminRequest<{ history: unknown[] }>('/admin/casino/history')
+  },
+  adjustAdminCasinoCredits(data: { userId: number; amount: number; reason: string }) {
+    return adminRequest<{ balance: unknown }>('/admin/casino/credits/adjust', { method: 'POST', body: JSON.stringify(data) })
+  },
   getAdminCategories() {
-    return adminRequest<{ categories: (Category & { _count: { products: number } })[] }>('/admin/categories')
+    return adminRequest<{ categories: AdminCategory[] }>('/admin/categories')
   },
   createAdminCategory(data: { name: string; nameEn?: string; sortOrder?: number }) {
-    return adminRequest<{ category: Category & { _count: { products: number } } }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
+    return adminRequest<{ category: AdminCategory }>('/admin/categories', { method: 'POST', body: JSON.stringify(data) })
   },
   updateAdminCategory(id: number, data: { name?: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
-    return adminRequest<{ category: Category & { _count: { products: number } } }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    return adminRequest<{ category: AdminCategory }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
 }

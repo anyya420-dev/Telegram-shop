@@ -40,9 +40,10 @@ router.post('/items', authRateLimiter, async (request, response) => {
 
   const productCity = await prisma.productCity.findUnique({
     where: { id: productCityId },
+    include: { product: true },
   })
 
-  if (!productCity || !productCity.isAvailable) {
+  if (!productCity || !productCity.product.isActive || !productCity.isAvailable) {
     sendError(response, 404, 'product_unavailable', 'Product is unavailable')
     return
   }
@@ -63,6 +64,25 @@ router.post('/items', authRateLimiter, async (request, response) => {
   }
 
   const cart = await getOrCreateCart(user.id)
+  const existingItem = await prisma.cartItem.findUnique({
+    where: {
+      cartId_productCityId: {
+        cartId: cart.id,
+        productCityId,
+      },
+    },
+  })
+  const nextQuantity = existingItem ? existingItem.quantity + quantity : quantity
+
+  if (!isAllowedQuantity(nextQuantity, productCity.minimumQuantity, productCity.quantityStep, productCity.maximumQuantity)) {
+    sendError(response, 400, 'quantity_invalid', 'Quantity does not match product rules')
+    return
+  }
+
+  if (nextQuantity > productCity.stock) {
+    sendError(response, 400, 'stock_exceeded', 'Requested quantity exceeds stock')
+    return
+  }
 
   await prisma.cartItem.upsert({
     where: {
@@ -74,10 +94,10 @@ router.post('/items', authRateLimiter, async (request, response) => {
     create: {
       cartId: cart.id,
       productCityId,
-      quantity,
+      quantity: nextQuantity,
     },
     update: {
-      quantity,
+      quantity: nextQuantity,
     },
   })
 

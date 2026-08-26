@@ -11,12 +11,14 @@
   },
   "home": {
     "title": "Shop",
-    "featured": "🔥 Featured",
-    "newest": "✨ New arrivals",
-    "popular": "⭐ Popular",
-    "viewAll": "All →",
+    "featured": "Featured",
+    "newest": "New arrivals",
+    "popular": "Popular",
+    "viewAll": "All",
     "categories": "Categories",
-    "searchPlaceholder": "🔍 Search products..."
+    "searchPlaceholder": "Search products",
+    "casinoTitle": "Casino",
+    "casinoText": "Play with separate virtual credits and track every round."
   },
   "catalog": {
     "title": "Catalog",
@@ -27,14 +29,14 @@
     "sortPriceDesc": "Price ↓",
     "sortPopular": "Popular",
     "empty": "No products found",
-    "searchPlaceholder": "🔍 Search products...",
+    "searchPlaceholder": "Search products",
     "clearSearch": "Clear search",
     "resetFilters": "Reset filters",
     "nothingFound": "Nothing found for your request"
   },
   "shop": {
     "title": "Shop",
-    "searchPlaceholder": "🔍 Search products...",
+    "searchPlaceholder": "Search products",
     "allCategories": "All",
     "loading": "Loading...",
     "empty": "No products found"
@@ -45,11 +47,11 @@
     "outOfStock": "Out of stock",
     "quantity": "Quantity",
     "total": "Total",
-    "addToCart": "🛒 Add to cart",
-    "updateCart": "🛒 Update cart",
-    "added": "✓ Added",
+    "addToCart": "Add to cart",
+    "updateCart": "Update cart",
+    "added": "Added",
     "adding": "Adding...",
-    "goToCart": "Go to cart →",
+    "goToCart": "Go to cart",
     "notInCity": "Product is not available in the selected city",
     "notFound": "Product not found",
     "related": "Related products",
@@ -80,17 +82,18 @@
     "delivery": "Delivery",
     "orderTotal": "Total",
     "soon": "— (soon)",
-    "checkout": "💳 Checkout",
+    "checkout": "Checkout",
     "checkingOut": "Placing order...",
     "checkoutFailed": "Could not place order. Please try again.",
     "checkoutNote": "Payment will be available in the next version",
-    "recommended": "🔥 You might also like",
+    "recommended": "You might also like",
     "discountCode": "Promo code",
     "applyCode": "Apply",
     "invalidDiscount": "Invalid or expired code",
     "deliveryOption": "Delivery method",
     "free": "Free",
-    "continueShopping": "Continue shopping"
+    "continueShopping": "Continue shopping",
+    "itemUnavailable": "This item is no longer available."
   },
   "checkout": {
     "title": "Checkout",
@@ -117,7 +120,12 @@
     "noDeliveryOptions": "No delivery methods available",
     "successTitle": "Order created",
     "successText": "Your order was placed successfully.",
-    "viewOrder": "View order"
+    "viewOrder": "View order",
+    "viewOrders": "View orders",
+    "goToProfile": "Go to profile",
+    "selectCity": "Select city",
+    "customerInfo": "Customer information",
+    "notSelected": "Not selected"
   },
   "profile": {
     "title": "Profile",
@@ -133,11 +141,18 @@
     "ordersCount_one": "{{count}} order",
     "ordersCount_other": "{{count}} orders",
     "language": "Language",
-    "selectCity": "📍 Select city",
+    "selectCity": "Select city",
     "cancel": "Cancel",
-    "languageRu": "🇷🇺 Russian",
-    "languageEn": "🇬🇧 English",
-    "telegramWebAppOnly": "Open this store from Telegram Web App for full account features."
+    "languageRu": "Russian",
+    "languageEn": "English",
+    "telegramWebAppOnly": "Open this store from Telegram Web App for full account features.",
+    "notAvailable": "Profile data is unavailable.",
+    "accountInfo": "Account information",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "username": "Username",
+    "settings": "Settings",
+    "activity": "Activity"
   },
   "city": {
     "title": "Select city",
@@ -156,6 +171,8 @@
     "topupSuccess": "Added {{amount}} to your balance",
     "topupError": "Failed to top up",
     "history": "Transaction history",
+    "shopOnly": "Shop balance only",
+    "notice": "This balance is reserved for shop-side adjustments such as refunds. It cannot be topped up, withdrawn, or converted into casino credits.",
     "txType": {
       "topup": "Top up",
       "spend": "Purchase",
@@ -172,12 +189,13 @@
     "bet": "Bet amount",
     "target": "Pick a number",
     "hint": "If the dice matches your number, you win 5× your bet",
-    "spin": "🎲 Roll dice",
+    "spin": "Roll dice",
     "rolling": "Rolling...",
-    "won": "🎉 You won {{payout}}!",
-    "lost": "😢 You lost {{bet}}",
+    "won": "You won {{payout}}!",
+    "lost": "You lost {{bet}}",
     "history": "Recent games",
-    "error": "Spin failed"
+    "error": "Spin failed",
+    "credits": "Credits"
   },
   "support": {
     "title": "Support",
@@ -196,7 +214,8 @@
     "admin": "Support",
     "you": "You",
     "replyPlaceholder": "Your reply...",
-    "error": "Failed to submit"
+    "error": "Failed to submit",
+    "empty": "No support tickets yet"
   },
   "common": {
     "loading": "Loading...",
@@ -210,7 +229,7 @@
   },
   "cityPicker": {
     "badge": "Location",
-    "title": "📍 Choose a city",
+    "title": "Choose a city",
     "helper": "Catalog, stock, and quantity steps depend on the selected city.",
     "changeCity": "Change city",
     "cityChangeNotice": "When you change the city, the cart is cleared so products from different locations are not mixed."
@@ -221,9 +240,13 @@
     "empty": "No orders yet",
     "goToShop": "Go to shop",
     "orderTitle": "Order #{{id}}",
+    "info": "Order information",
     "items": "Order items",
     "comment": "Comment",
     "notFound": "Order not found",
+    "city": "City",
+    "itemCount": "Items",
+    "createdAt": "Created",
     "moreItems_one": "+{{count}} item",
     "moreItems_other": "+{{count}} items",
     "statusPending": "Pending",
@@ -297,6 +320,12 @@
     "language_update_failed": "Failed to save the language.",
     "checkout_failed": "Failed to place the order.",
     "orders_fetch_failed": "Failed to load orders.",
-    "cart_empty": "Cart is empty."
+    "cart_empty": "Cart is empty.",
+    "delivery_option_unavailable": "The selected delivery method is unavailable.",
+    "discount_not_found": "The promo code was not found.",
+    "discount_expired": "The promo code has expired.",
+    "discount_exhausted": "The promo code limit has been reached.",
+    "order_too_small": "The order amount is too small for this promo code.",
+    "order_submission_in_progress": "Your order is already being processed. Please wait."
   }
 }

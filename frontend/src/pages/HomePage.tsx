@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin } from 'lucide-react';
+import { ChevronRight, Dices, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ProductCard from '../components/ProductCard/ProductCard';
 import { useTranslation } from 'react-i18next';
 import styles from './HomePage.module.css';
-import { getLocalizedCategoryName } from '../lib/localized';
+import { getLocalizedCategoryName, getLocalizedCityName } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
 
@@ -34,7 +34,7 @@ export default function HomePage() {
           <h1 className={styles.logo}>{t('home.title')}</h1>
           {user?.selectedCity ? (
             <button className={styles.cityBadge} onClick={openCityPicker}>
-              <MapPin size={14} strokeWidth={1.5} /> {user.selectedCity.name}
+              <MapPin size={14} strokeWidth={1.5} /> {getLocalizedCityName(user.selectedCity, language)}
             </button>
           ) : (
             <button className={styles.cityBadge} onClick={openCityPicker}>
@@ -77,6 +77,19 @@ export default function HomePage() {
         </div>
       ) : (
         <>
+          <section className={styles.section}>
+            <button className={styles.casinoCard} onClick={() => navigate('/casino')} type="button">
+              <span className={styles.casinoIcon}>
+                <Dices size={20} strokeWidth={1.7} />
+              </span>
+              <span className={styles.casinoContent}>
+                <span className={styles.sectionTitle}>{t('home.casinoTitle', { defaultValue: 'CASINO' })}</span>
+                <span className={styles.casinoText}>{t('home.casinoText', { defaultValue: 'PLAY & WIN · premium games, rewards and casino credits.' })}</span>
+              </span>
+              <ChevronRight size={18} strokeWidth={1.8} />
+            </button>
+          </section>
+
           {categories.length > 0 && (
             <section className={styles.section}>
               <div className={styles.sectionHeader}>

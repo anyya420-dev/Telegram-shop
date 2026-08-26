@@ -93,6 +93,10 @@
   align-items: center;
   padding: 12px 14px;
   cursor: pointer;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
 }
 
 .ticketSubject {
@@ -116,7 +120,8 @@
 
 .ticketArrow {
   color: var(--tg-theme-hint-color, #888);
-  font-size: 12px;
+  display: flex;
+  align-items: center;
 }
 
 .ticketBody {

@@ -94,6 +94,48 @@
   margin-bottom: 28px;
 }
 
+.casinoCard {
+  width: calc(100% - 32px);
+  margin: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(255, 215, 96, 0.16), transparent 42%),
+    linear-gradient(135deg, rgba(26, 31, 53, 0.98), rgba(13, 16, 27, 0.98));
+  color: var(--text-primary);
+  text-align: left;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.casinoIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f6c453;
+  background: rgba(246, 196, 83, 0.12);
+  border: 1px solid rgba(246, 196, 83, 0.24);
+}
+
+.casinoContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.casinoText {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
 .sectionHeader {
   display: flex;
   align-items: center;

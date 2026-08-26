@@ -1,29 +1,45 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, MapPin, Minus, Package, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import styles from './CartPage.module.css';
 import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../lib/format';
+import { getErrorMessage } from '../lib/errors';
+import { getLocalizedCityName, getLocalizedProductName, getLocalizedUnit } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
 
 export default function CartPage() {
-  const { cart, recommended, updateCartItem, removeCartItem } = useApp();
+  const { cart, cartLoading, recommended, user, updateCartItem, removeCartItem, openCityPicker } = useApp();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const language = i18n.language as Language;
+  const [pendingItemId, setPendingItemId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function handleQuantityChange(itemId: number, action: () => Promise<void>) {
+    try {
+      setPendingItemId(itemId);
+      setActionError(null);
+      await action();
+    } catch (error) {
+      setActionError(getErrorMessage(error, t, 'cart_update_failed'));
+    } finally {
+      setPendingItemId(null);
+    }
+  }
 
   if (!cart || cart.items.length === 0) {
     return (
       <div className={styles.empty}>
-        <button className={styles.back} onClick={() => navigate('/shop')}>{t('common.back')}</button>
+        <button className={styles.back} onClick={() => navigate('/shop')} type="button">
+          <ArrowLeft size={16} strokeWidth={1.8} />
+          {t('common.back')}
+        </button>
         <div className={styles.emptyContent}>
           <div className={styles.emptyIcon}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <path d="M16 10a4 4 0 0 1-8 0" />
-            </svg>
+            <ShoppingBag size={28} strokeWidth={1.5} />
           </div>
           <h2 className={styles.emptyTitle}>{t('cart.empty')}</h2>
           <p className={styles.emptyText}>{t('cart.emptyHint')}</p>
@@ -38,21 +54,50 @@ export default function CartPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button className={styles.back} onClick={() => navigate(-1)}>{t('cart.back')}</button>
+        <button className={styles.back} onClick={() => navigate(-1)} type="button">
+          <ArrowLeft size={16} strokeWidth={1.8} />
+          {t('common.back')}
+        </button>
         <h1 className={styles.title}>{t('cart.title')}</h1>
         <span className={styles.count}>
           {t('cart.itemCount', { count: cart.items.length })}
         </span>
       </div>
 
+      <div className={styles.cityCard}>
+        <div>
+          <p className={styles.cityLabel}>{t('profile.city')}</p>
+          <div className={styles.cityValue}>
+            <MapPin size={14} strokeWidth={1.6} />
+            <span>
+              {user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('profile.cityNotSelected')}
+            </span>
+          </div>
+        </div>
+        <button className={styles.changeCityBtn} onClick={openCityPicker} type="button">
+          {t('cityPicker.changeCity')}
+        </button>
+      </div>
+
+      {actionError ? (
+        <div className={styles.alert}>
+          <AlertCircle size={16} strokeWidth={1.7} />
+          <span>{actionError}</span>
+        </div>
+      ) : null}
+
       <div className={styles.items}>
         {cart.items.map((item) => {
           const pc = item.productCity;
+          const localizedName = getLocalizedProductName(pc, language);
+          const localizedUnit = getLocalizedUnit(pc.unit, language, pc.unitTranslations);
           const step = pc.quantityStep || 1;
           const minimum = pc.minimumQuantity || step;
           const maximum = pc.maximumQuantity;
           const nextDown = item.quantity - step;
           const nextUp = item.quantity + step;
+          const itemBusy = cartLoading || pendingItemId === item.id;
+          const canIncrease = pc.isAvailable && nextUp <= maximum && nextUp <= pc.stock;
 
           return (
             <div key={item.id} className={styles.item}>
@@ -60,40 +105,47 @@ export default function CartPage() {
                 {pc.image ? (
                   <img src={pc.image} alt={pc.name} />
                 ) : (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  </svg>
+                  <Package size={24} strokeWidth={1.5} />
                 )}
               </div>
               <div className={styles.itemInfo}>
-                <p className={styles.itemName}>{pc.name}</p>
+                <p className={styles.itemName}>{localizedName}</p>
                 <p className={styles.itemPrice}>
-                  {pc.unit
-                    ? t('cart.pricePerUnit', { price: formatCurrency(pc.price, language), unit: pc.unit })
+                  {localizedUnit
+                    ? t('cart.pricePerUnit', { price: formatCurrency(pc.price, language), unit: localizedUnit })
                     : formatCurrency(pc.price, language)}
                 </p>
                 <p className={styles.itemTotal}>
                   {t('cart.itemTotal', { total: formatCurrency(item.lineTotal, language) })}
                 </p>
+                {!pc.isAvailable ? (
+                  <p className={styles.itemWarning}>{t('cart.itemUnavailable')}</p>
+                ) : (
+                  <p className={styles.itemMeta}>
+                    {t('product.stockAvailable', { count: pc.stock, unit: localizedUnit })}
+                  </p>
+                )}
               </div>
               <div className={styles.itemActions}>
                 <button
                   className={styles.qtyBtn}
-                  onClick={() =>
-                    nextDown >= minimum
-                      ? void updateCartItem(item.id, nextDown)
-                      : void removeCartItem(item.id)
-                  }
+                  onClick={() => void handleQuantityChange(
+                    item.id,
+                    () => nextDown >= minimum ? updateCartItem(item.id, nextDown) : removeCartItem(item.id),
+                  )}
+                  disabled={itemBusy}
+                  type="button"
                 >
-                  {nextDown < minimum ? <Trash2 size={14} strokeWidth={1.5} /> : '−'}
+                  {nextDown < minimum ? <Trash2 size={14} strokeWidth={1.5} /> : <Minus size={14} strokeWidth={1.8} />}
                 </button>
                 <span className={styles.qty}>{item.quantity}</span>
                 <button
                   className={styles.qtyBtn}
-                  onClick={() => void updateCartItem(item.id, nextUp)}
-                  disabled={maximum !== undefined && nextUp > maximum}
+                  onClick={() => void handleQuantityChange(item.id, () => updateCartItem(item.id, nextUp))}
+                  disabled={itemBusy || !canIncrease}
+                  type="button"
                 >
-                  +
+                  <Plus size={14} strokeWidth={1.8} />
                 </button>
               </div>
             </div>
@@ -119,6 +171,7 @@ export default function CartPage() {
             {t('cart.checkout')}
           </button>
         </div>
+        {cartLoading ? <p className={styles.summaryNote}>{t('common.loading')}</p> : null}
       </div>
 
       {recommended && recommended.length > 0 && (
@@ -135,9 +188,7 @@ export default function CartPage() {
                   {p.image ? (
                     <img src={p.image} alt={p.name} />
                   ) : (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                    </svg>
+                    <Package size={24} strokeWidth={1.5} />
                   )}
                 </div>
                 <p className={styles.recName}>{p.name}</p>

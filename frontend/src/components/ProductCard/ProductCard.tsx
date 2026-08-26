@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
-import type { Language, ProductSummary } from '../../types';
-import styles from './ProductCard.module.css';
-import { useTranslation } from 'react-i18next';
-import { useApp } from '../../context/AppContext';
-import { formatCurrency } from '../../lib/format';
-import i18n from '../../lib/i18n';
-import { getLocalizedProductDescription, getLocalizedProductName, getLocalizedUnit } from '../../lib/localized';
+import { Minus, Package, Plus, ShoppingBag } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useApp } from '../../context/AppContext'
+import { formatCurrency } from '../../lib/format'
+import { getLocalizedProductCategoryName, getLocalizedProductDescription, getLocalizedProductName, getLocalizedUnit } from '../../lib/localized'
+import { clampProductQuantity, getProductQuantityBounds } from '../../lib/storefront'
+import i18n from '../../lib/i18n'
+import styles from './ProductCard.module.css'
+import type { Language, ProductSummary } from '../../types'
 
 interface Props {
   product: ProductSummary
@@ -13,27 +15,28 @@ interface Props {
 }
 
 export default function ProductCard({ product, onClick }: Props) {
-  const { t } = useTranslation();
-  const { addToCart } = useApp();
-  const language = i18n.language as Language;
-  const [quantity, setQuantity] = useState(product.minimumQuantity || 1);
+  const { t } = useTranslation()
+  const { addToCart } = useApp()
+  const language = i18n.language as Language
+  const [quantity, setQuantity] = useState(product.minimumQuantity || 1)
+
+  const localizedName = getLocalizedProductName(product, language)
+  const localizedDescription = getLocalizedProductDescription(product, language)
+  const localizedCategory = getLocalizedProductCategoryName(product, language)
+  const localizedUnit = getLocalizedUnit(product.unit, language, product.unitTranslations)
+  const { step, minimum, maximum, canOrder } = getProductQuantityBounds(product)
 
   useEffect(() => {
-    setQuantity(product.minimumQuantity || 1);
-  }, [product.productCityId, product.minimumQuantity]);
+    setQuantity(clampProductQuantity(product, product.minimumQuantity || 1))
+  }, [product.productCityId, product.minimumQuantity, product.quantityStep, product.maximumQuantity, product.stock])
 
-  async function handleAdd(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (!product.isAvailable) return;
-    await addToCart(product.productCityId, quantity);
+  async function handleAdd(event: React.MouseEvent) {
+    event.stopPropagation()
+    if (!canOrder || !product.isAvailable) {
+      return
+    }
+    await addToCart(product.productCityId, quantity)
   }
-
-  const step = product.quantityStep || 1;
-  const minimum = product.minimumQuantity || step;
-  const maximum = Math.min(product.maximumQuantity || product.stock, product.stock);
-  const localizedName = getLocalizedProductName(product, language);
-  const localizedDescription = getLocalizedProductDescription(product, language);
-  const localizedUnit = getLocalizedUnit(product.unit, language, product.unitTranslations);
 
   return (
     <div
@@ -42,75 +45,71 @@ export default function ProductCard({ product, onClick }: Props) {
       role="button"
       tabIndex={0}
       aria-label={localizedName}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          onClick()
+        }
+      }}
     >
       <div className={styles.imageWrap}>
         {product.image ? (
           <img src={product.image} alt={localizedName} className={styles.image} loading="lazy" />
         ) : (
           <div className={styles.noImage}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            </svg>
+            <Package size={28} strokeWidth={1.5} />
           </div>
         )}
-        {!product.isAvailable && (
+        {!product.isAvailable || !canOrder ? (
           <div className={styles.outOfStock}>{t('product.outOfStock')}</div>
-        )}
-        {product.isRecommended && (
-          <div className={styles.badge}>{t('product.featured', { defaultValue: 'TOP' })}</div>
-        )}
+        ) : null}
+        {product.isRecommended ? <div className={styles.badge}>{t('product.featured', { defaultValue: 'TOP' })}</div> : null}
       </div>
       <div className={styles.info}>
+        <div className={styles.metaRow}>
+          <p className={styles.category}>{localizedCategory}</p>
+          <p className={styles.stock}>
+            {product.isAvailable && canOrder ? t('product.stockAvailable', { count: product.stock, unit: localizedUnit }) : t('product.outOfStock')}
+          </p>
+        </div>
         <p className={styles.name}>{localizedName}</p>
         <p className={styles.description}>{localizedDescription}</p>
-        <p className={styles.stock}>
-          {product.isAvailable
-            ? t('product.stockAvailable', { count: product.stock, unit: localizedUnit })
-            : t('product.outOfStock')}
-        </p>
         <div className={styles.bottom}>
           <div className={styles.priceWrap}>
             <span className={styles.price}>{formatCurrency(product.price, language)}</span>
-            {localizedUnit && <span className={styles.unit}>/{localizedUnit}</span>}
+            {localizedUnit ? <span className={styles.unit}>/{localizedUnit}</span> : null}
           </div>
-          {product.isAvailable && (
-            <div className={styles.actionWrap} onClick={(e) => e.stopPropagation()}>
+          {product.isAvailable && canOrder ? (
+            <div className={styles.actionWrap} onClick={(event) => event.stopPropagation()}>
               <button
                 className={styles.qtyBtn}
-                onClick={() => setQuantity((prev) => Math.max(minimum, prev - step))}
+                onClick={() => setQuantity((current) => clampProductQuantity(product, current - step))}
                 disabled={quantity <= minimum}
                 type="button"
               >
-                −
+                <Minus size={12} strokeWidth={1.8} />
               </button>
               <span className={styles.qtyValue}>{quantity}</span>
               <button
                 className={styles.qtyBtn}
-                onClick={() => setQuantity((prev) => Math.min(maximum, prev + step))}
+                onClick={() => setQuantity((current) => clampProductQuantity(product, current + step))}
                 disabled={quantity >= maximum}
                 type="button"
               >
-                +
+                <Plus size={12} strokeWidth={1.8} />
               </button>
               <button
                 className={styles.addBtn}
-                onClick={(e) => void handleAdd(e)}
+                onClick={(event) => void handleAdd(event)}
                 title={t('common.addToCart')}
                 aria-label={t('common.addToCart')}
                 type="button"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <path d="M12 10v6" />
-                  <path d="M9 13h6" />
-                </svg>
+                <ShoppingBag size={12} strokeWidth={1.8} />
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
-  );
+  )
 }

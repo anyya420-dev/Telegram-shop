@@ -1,46 +1,58 @@
-import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { api } from '../api/client';
-import type { Balance } from '../types';
-import { formatCurrency } from '../lib/format';
-import i18n from '../lib/i18n';
-import type { Language } from '../types';
-import styles from './BalancePage.module.css';
-
-const TOPUP_AMOUNTS = [100, 250, 500, 1000, 2500, 5000];
+import { useEffect, useState } from 'react'
+import { AlertCircle, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { api } from '../api/client'
+import { getErrorMessage } from '../lib/errors'
+import type { Balance } from '../types'
+import { formatCurrency } from '../lib/format'
+import i18n from '../lib/i18n'
+import type { Language } from '../types'
+import styles from './BalancePage.module.css'
 
 export default function BalancePage() {
-  const { t } = useTranslation();
-  const language = i18n.language as Language;
-  const [balance, setBalance] = useState<Balance | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [topping, setTopping] = useState(false);
-  const [customAmount, setCustomAmount] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const { t } = useTranslation()
+  const language = i18n.language as Language
+  const [balance, setBalance] = useState<Balance | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    void api.getBalance().then((r) => { setBalance(r.balance); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
-
-  async function handleTopup(amount: number) {
-    if (topping || amount <= 0) return;
-    setTopping(true);
-    setError(null);
-    setSuccess(null);
+  async function loadBalance() {
     try {
-      const r = await api.topupBalance(amount);
-      setBalance(r.balance);
-      setSuccess(t('balance.topupSuccess', { amount: formatCurrency(amount, language) }));
-      setCustomAmount('');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t('balance.topupError'));
+      setLoading(true)
+      setError(null)
+      const response = await api.getBalance()
+      setBalance(response.balance)
+    } catch (loadError) {
+      setError(getErrorMessage(loadError, t, 'request_failed'))
+      setBalance(null)
     } finally {
-      setTopping(false);
+      setLoading(false)
     }
   }
 
-  if (loading) return <div className={styles.loading}><div className={styles.spinner} /></div>;
+  useEffect(() => {
+    void loadBalance()
+  }, [])
+
+  if (loading) return <div className={styles.loading}><div className={styles.spinner} /></div>
+
+  if (!balance) {
+    return (
+      <div className={styles.page}>
+        <h1 className={styles.title}>{t('balance.title')}</h1>
+        <div className={styles.section}>
+          <p className={styles.errorRow}>
+            <AlertCircle size={16} strokeWidth={1.8} />
+            <span>{error ?? t('balance.topupError')}</span>
+          </p>
+          <button className={styles.customBtn} onClick={() => void loadBalance()} type="button">
+            <RefreshCw size={16} strokeWidth={1.5} />
+            {t('common.retry')}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.page}>
@@ -48,41 +60,16 @@ export default function BalancePage() {
 
       <div className={styles.card}>
         <span className={styles.cardLabel}>{t('balance.current')}</span>
-        <span className={styles.amount}>{formatCurrency(balance?.amount ?? 0, language)}</span>
+        <span className={styles.amount}>{formatCurrency(balance.amount, language)}</span>
       </div>
 
       <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>{t('balance.topup')}</h3>
-        <div className={styles.amounts}>
-          {TOPUP_AMOUNTS.map((a) => (
-            <button key={a} className={styles.amountBtn} onClick={() => void handleTopup(a)} disabled={topping}>
-              +{formatCurrency(a, language)}
-            </button>
-          ))}
-        </div>
-        <div className={styles.customRow}>
-          <input
-            className={styles.customInput}
-            type="number"
-            min="1"
-            max="100000"
-            placeholder={t('balance.customAmount')}
-            value={customAmount}
-            onChange={(e) => setCustomAmount(e.target.value)}
-          />
-          <button
-            className={styles.customBtn}
-            disabled={topping || !customAmount}
-            onClick={() => void handleTopup(Number(customAmount))}
-          >
-            {t('balance.topupBtn')}
-          </button>
-        </div>
-        {error && <p className={styles.error}>{error}</p>}
-        {success && <p className={styles.success}>{success}</p>}
+        <h3 className={styles.sectionTitle}>{t('balance.shopOnly', { defaultValue: 'Shop balance only' })}</h3>
+        <p className={styles.txComment}>{t('balance.notice', { defaultValue: 'This balance is reserved for shop-side adjustments such as refunds. It cannot be topped up, withdrawn, or converted into casino credits.' })}</p>
+        {error ? <p className={styles.error}>{error}</p> : null}
       </div>
 
-      {balance && balance.transactions.length > 0 && (
+      {balance.transactions.length > 0 ? (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>{t('balance.history')}</h3>
           <div className={styles.txList}>
@@ -90,7 +77,7 @@ export default function BalancePage() {
               <div key={tx.id} className={`${styles.tx} ${tx.amount >= 0 ? styles.txIn : styles.txOut}`}>
                 <div>
                   <span className={styles.txType}>{t(`balance.txType.${tx.type}`, { defaultValue: tx.type })}</span>
-                  {tx.comment && <span className={styles.txComment}> — {tx.comment}</span>}
+                  {tx.comment ? <span className={styles.txComment}> — {tx.comment}</span> : null}
                 </div>
                 <span className={styles.txAmount}>
                   {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount, language)}
@@ -99,8 +86,7 @@ export default function BalancePage() {
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
-  );
+  )
 }
-

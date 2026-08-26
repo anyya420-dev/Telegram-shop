@@ -12,6 +12,9 @@
 }
 
 .back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--accent);
   font-size: 14px;
   font-weight: 500;
@@ -41,6 +44,15 @@
   font-size: 14px;
 }
 
+.infoRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .sectionTitle {
   margin: 0 0 10px;
   font-size: 13px;
@@ -55,6 +67,12 @@
   font-size: 14px;
   color: var(--text-primary);
   padding: 5px 0;
+}
+
+.sectionDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0;
 }
 
 .total {
@@ -110,6 +128,12 @@
 
 .primaryBtn:disabled {
   opacity: 0.5;
+}
+
+.actionGroup {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .option {
