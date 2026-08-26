@@ -27,6 +27,18 @@ type ProductCityInput = {
   unit: string
 }
 
+type ProductCityValidationResult =
+  | { value: ProductCityInput }
+  | { error: { code: string; message: string } }
+
+function isOrderStatus(value: string): value is (typeof ORDER_STATUSES)[number] {
+  return ORDER_STATUSES.includes(value as (typeof ORDER_STATUSES)[number])
+}
+
+function isDeliveryType(value: string): value is (typeof DELIVERY_TYPES)[number] {
+  return DELIVERY_TYPES.includes(value as (typeof DELIVERY_TYPES)[number])
+}
+
 function getAdminCookieOptions() {
   const sameSite: CookieOptions['sameSite'] = IS_PRODUCTION ? 'none' : 'lax'
   return {
@@ -94,7 +106,7 @@ function getPositiveInteger(value: unknown) {
   return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
-function validateProductCityPayload(input: unknown) {
+function validateProductCityPayload(input: unknown): ProductCityValidationResult {
   const cityId = parsePositiveInt(String((input as Record<string, unknown>)?.cityId ?? ''))
   const stock = getNonNegativeNumber((input as Record<string, unknown>)?.stock) ?? 0
   const minimumQuantity = getPositiveInteger((input as Record<string, unknown>)?.minimumQuantity) ?? 1
@@ -157,7 +169,7 @@ async function getAdminUser(request: Request, response: Response) {
     return null
   }
 
-  return { id: null } satisfies AdminContext
+  return { id: session.id } satisfies AdminContext
 }
 
 router.post('/auth/login', authRateLimiter, async (request, response) => {
@@ -250,7 +262,7 @@ router.patch('/orders/:id/status', authRateLimiter, async (request, response) =>
   }
 
   const status = typeof request.body.status === 'string' ? request.body.status : ''
-  if (!ORDER_STATUSES.includes(status)) {
+  if (!isOrderStatus(status)) {
     sendError(response, 400, 'invalid_status', `Status must be one of: ${ORDER_STATUSES.join(', ')}`)
     return
   }
@@ -546,6 +558,17 @@ router.patch('/payment-settings/:id/toggle', authRateLimiter, async (request, re
     where: { id },
     data: { isEnabled: !method.isEnabled },
   })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'payment_method_toggled',
+      entity: 'payment_method',
+      entityId: id,
+      meta: JSON.stringify({ isEnabled: updated.isEnabled }),
+    },
+  })
+
   response.json({ method: updated })
 })
 
@@ -569,6 +592,14 @@ router.patch('/orders/:id/refund', authRateLimiter, async (request, response) =>
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { user: true } })
   if (!order) {
     sendError(response, 404, 'not_found', 'Order not found')
+    return
+  }
+  if (!['delivered', 'cancelled'].includes(order.status)) {
+    sendError(response, 400, 'cannot_refund', 'Refunds are only allowed for delivered or cancelled orders')
+    return
+  }
+  if (!order.refundStatus || order.refundStatus !== 'requested') {
+    sendError(response, 400, 'refund_not_requested', 'The customer has not requested a refund for this order')
     return
   }
 
@@ -962,7 +993,7 @@ router.post('/delivery-options', authRateLimiter, async (request, response) => {
     sendError(response, 400, 'name_required', 'name is required')
     return
   }
-  if (type !== undefined && !DELIVERY_TYPES.includes(type)) {
+  if (type !== undefined && !isDeliveryType(type)) {
     sendError(response, 400, 'invalid_type', 'type must be delivery or pickup')
     return
   }
@@ -1014,7 +1045,7 @@ router.patch('/delivery-options/:id', authRateLimiter, async (request, response)
   }
   if (typeof nameEn === 'string' || nameEn === null) data.nameEn = getOptionalTrimmedString(nameEn)
   if (type !== undefined) {
-    if (!DELIVERY_TYPES.includes(type)) {
+    if (!isDeliveryType(type)) {
       sendError(response, 400, 'invalid_type', 'type must be delivery or pickup')
       return
     }
@@ -1280,7 +1311,6 @@ router.post('/product-cities', authRateLimiter, async (request, response) => {
     sendError(response, 409, 'already_exists', 'Product is already available in this city')
     return
   }
-
   const parsedCityPayload = validateProductCityPayload(request.body)
   if ('error' in parsedCityPayload) {
     sendError(response, 400, parsedCityPayload.error.code, parsedCityPayload.error.message)

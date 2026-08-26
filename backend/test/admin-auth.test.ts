@@ -775,3 +775,173 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
   assert.equal(unavailableDetail.body.product.isAvailable, false)
   assert.equal(unavailableDetail.body.product.stock, 0)
 })
+
+test('admin city and product management enforce authorization and validation', async () => {
+  const login = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(login.status, 200)
+  const adminCookie = login.headers.get('set-cookie') ?? ''
+  assert.ok(adminCookie)
+
+  const customer = await prisma.user.create({
+    data: { telegramId: '710000001', firstName: 'Admin', lastName: 'Customer', username: 'admin_customer', language: 'ru' },
+  })
+
+  const unauthorizedMutation = await request('/api/admin/cities', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Blocked City' }),
+  })
+  assert.equal(unauthorizedMutation.status, 401)
+
+  const createdCity = await requestJson('/api/admin/cities', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ name: 'Admin City One', nameEn: 'Admin City One', sortOrder: 5, isActive: true }),
+  })
+  assert.equal(createdCity.response.status, 201)
+  assert.equal(createdCity.body.city.name, 'Admin City One')
+
+  const duplicateCity = await requestJson('/api/admin/cities', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ name: 'Admin City One' }),
+  })
+  assert.equal(duplicateCity.response.status, 409)
+  assert.equal(duplicateCity.body.code, 'city_exists')
+
+  const secondCity = await requestJson('/api/admin/cities', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ name: 'Admin City Two', nameEn: 'Admin City Two', sortOrder: 10, isActive: true }),
+  })
+  assert.equal(secondCity.response.status, 201)
+
+  const createdCategory = await requestJson('/api/admin/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ name: 'Admin Category', nameEn: 'Admin Category', sortOrder: 1 }),
+  })
+  assert.equal(createdCategory.response.status, 201)
+
+  const badProduct = await requestJson('/api/admin/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ name: 'Broken Product', price: 100, categoryId: 999999 }),
+  })
+  assert.equal(badProduct.response.status, 404)
+  assert.equal(badProduct.body.code, 'category_not_found')
+
+  const createdProduct = await requestJson('/api/admin/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      name: 'Admin Product',
+      nameEn: 'Admin Product',
+      description: 'Product description',
+      descriptionEn: 'Product description',
+      price: 250,
+      image: 'https://example.com/product.png',
+      categoryId: createdCategory.body.category.id,
+      cities: [
+        {
+          cityId: createdCity.body.city.id,
+          stock: 12,
+          isAvailable: true,
+          minimumQuantity: 2,
+          quantityStep: 2,
+          maximumQuantity: 10,
+          unit: 'pcs',
+        },
+      ],
+    }),
+  })
+  assert.equal(createdProduct.response.status, 201)
+  assert.equal(createdProduct.body.product.productCities.length, 1)
+  assert.equal(createdProduct.body.product.productCities[0].minimumQuantity, 2)
+
+  const invalidProductUpdate = await requestJson(`/api/admin/products/${createdProduct.body.product.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ price: 0 }),
+  })
+  assert.equal(invalidProductUpdate.response.status, 400)
+  assert.equal(invalidProductUpdate.body.code, 'price_required')
+
+  const updatedProduct = await requestJson(`/api/admin/products/${createdProduct.body.product.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      name: 'Admin Product Updated',
+      description: 'Updated description',
+      categoryId: createdCategory.body.category.id,
+      price: 300,
+      isActive: false,
+      isRecommended: true,
+    }),
+  })
+  assert.equal(updatedProduct.response.status, 200)
+  assert.equal(updatedProduct.body.product.name, 'Admin Product Updated')
+  assert.equal(updatedProduct.body.product.isRecommended, true)
+
+  const invalidProductCityUpdate = await requestJson(`/api/admin/product-cities/${createdProduct.body.product.productCities[0].id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ stock: 3, minimumQuantity: 4, quantityStep: 1, maximumQuantity: 4 }),
+  })
+  assert.equal(invalidProductCityUpdate.response.status, 400)
+  assert.equal(invalidProductCityUpdate.body.code, 'quantity_invalid')
+
+  const addedProductCity = await requestJson('/api/admin/product-cities', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      productId: createdProduct.body.product.id,
+      cityId: secondCity.body.city.id,
+      stock: 8,
+      isAvailable: true,
+      minimumQuantity: 1,
+      quantityStep: 1,
+      maximumQuantity: 8,
+      unit: 'pcs',
+    }),
+  })
+  assert.equal(addedProductCity.response.status, 201)
+  assert.equal(addedProductCity.body.productCity.city.name, 'Admin City Two')
+
+  const updatedCity = await requestJson(`/api/admin/cities/${createdCity.body.city.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ isActive: false }),
+  })
+  assert.equal(updatedCity.response.status, 200)
+  assert.equal(updatedCity.body.city.isActive, false)
+
+  const publicCities = await requestJson('/api/cities')
+  assert.equal(publicCities.response.status, 200)
+  assert.equal(publicCities.body.some((city: { id: number }) => city.id === createdCity.body.city.id), false)
+  assert.equal(publicCities.body.some((city: { id: number }) => city.id === secondCity.body.city.id), true)
+
+  await prisma.user.update({ where: { id: customer.id }, data: { selectedCityId: secondCity.body.city.id } })
+  await prisma.balance.create({ data: { userId: customer.id, amount: 999 } })
+
+  const users = await requestJson('/api/admin/users', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(users.response.status, 200)
+  const listedCustomer = users.body.users.find((user: { id: number }) => user.id === customer.id)
+  assert.ok(listedCustomer)
+  assert.equal(listedCustomer.balance, 999)
+  assert.equal(listedCustomer.selectedCity.name, 'Admin City Two')
+
+  const auditLogs = await requestJson('/api/admin/audit-logs', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(auditLogs.response.status, 200)
+  const cityAuditLog = auditLogs.body.logs.find((log: { action: string; entityId: number; userId?: number | null }) => log.action === 'city_created' && log.entityId === createdCity.body.city.id)
+  assert.ok(cityAuditLog)
+  assert.equal(typeof cityAuditLog.userId, 'number')
+})

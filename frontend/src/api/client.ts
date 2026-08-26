@@ -238,19 +238,28 @@ export const api = {
   getAdminUsers(page = 1) {
     return adminRequest<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)
   },
+  getAdminCities() {
+    return adminRequest<{ cities: City[] }>('/admin/cities')
+  },
+  createAdminCity(data: { name: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ city: City }>('/admin/cities', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminCity(id: number, data: { name?: string; nameEn?: string | null; isActive?: boolean; sortOrder?: number }) {
+    return adminRequest<{ city: City }>(`/admin/cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
   getAdminProducts() {
     return adminRequest<{ products: ProductDetail[] }>('/admin/products')
   },
-  createAdminProduct(data: { name: string; nameEn?: string; description?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean }[] }) {
+  createAdminProduct(data: { name: string; nameEn?: string; description?: string; descriptionEn?: string; price: number; categoryId: number; image?: string; isActive?: boolean; isRecommended?: boolean; cities?: { cityId: number; stock: number; isAvailable: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }[] }) {
     return adminRequest<{ product: unknown }>('/admin/products', { method: 'POST', body: JSON.stringify(data) })
   },
-  createAdminProductCity(data: { productId: number; cityId: number; stock?: number; isAvailable?: boolean }) {
+  createAdminProductCity(data: { productId: number; cityId: number; stock?: number; isAvailable?: boolean; minimumQuantity?: number; quantityStep?: number; maximumQuantity?: number; unit?: string }) {
     return adminRequest<{ productCity: unknown }>('/admin/product-cities', { method: 'POST', body: JSON.stringify(data) })
   },
-  updateAdminProduct(id: number, data: Partial<{ name: string; price: number; isActive: boolean; isRecommended: boolean }>) {
+  updateAdminProduct(id: number, data: Partial<{ name: string; nameEn: string | null; description: string; descriptionEn: string | null; image: string | null; categoryId: number; price: number; isActive: boolean; isRecommended: boolean }>) {
     return adminRequest<{ product: ProductDetail }>(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
-  updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean }>) {
+  updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean; minimumQuantity: number; quantityStep: number; maximumQuantity: number; unit: string }>) {
     return adminRequest<{ productCity: unknown }>(`/admin/product-cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminDiscounts() {
