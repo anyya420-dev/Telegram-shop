@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments';
+type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
 
 type ProductCityDraft = {
   cityId: string;
@@ -25,6 +25,9 @@ type ProductEditDraft = Partial<{
   description: string;
   descriptionEn: string;
   price: string;
+  creditsEnabled: boolean;
+  creditsPrice: string;
+  minCreditsRequired: string;
   image: string;
   categoryId: string;
   isActive: boolean;
@@ -180,6 +183,16 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentRecords, setPaymentRecords] = useState<AdminPaymentRecord[]>([]);
+  const [casinoConfig, setCasinoConfig] = useState<AdminCasinoConfig>({ games: [], rewardConfigs: [] });
+  const [casinoAdjustmentUserId, setCasinoAdjustmentUserId] = useState('');
+  const [casinoAdjustmentAmount, setCasinoAdjustmentAmount] = useState('');
+  const [casinoAdjustmentReason, setCasinoAdjustmentReason] = useState('');
+  const [newCasinoRewardGame, setNewCasinoRewardGame] = useState('wheel');
+  const [newCasinoRewardType, setNewCasinoRewardType] = useState('shop_discount');
+  const [newCasinoRewardTitle, setNewCasinoRewardTitle] = useState('');
+  const [newCasinoRewardWeight, setNewCasinoRewardWeight] = useState('1');
+  const [newCasinoRewardDiscount, setNewCasinoRewardDiscount] = useState('');
+  const [newCasinoRewardCredits, setNewCasinoRewardCredits] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const [newCode, setNewCode] = useState('');
@@ -242,6 +255,9 @@ export default function AdminPage() {
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdCategoryId, setNewProdCategoryId] = useState('');
   const [newProdImage, setNewProdImage] = useState('');
+  const [newProdCreditsEnabled, setNewProdCreditsEnabled] = useState(false);
+  const [newProdCreditsPrice, setNewProdCreditsPrice] = useState('');
+  const [newProdMinCreditsRequired, setNewProdMinCreditsRequired] = useState('');
   const [newProdIsActive, setNewProdIsActive] = useState(true);
   const [newProdIsRecommended, setNewProdIsRecommended] = useState(false);
   const [newProdCities, setNewProdCities] = useState<Record<number, ProductCityDraft>>({});
@@ -256,7 +272,7 @@ export default function AdminPage() {
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
 
   const tabs = useMemo(
-    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments'] as Tab[],
+    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
     [],
   );
 
@@ -361,6 +377,8 @@ export default function AdminPage() {
         const [methodsResponse, paymentsResponse] = await Promise.all([api.getAdminPaymentSettings(), api.getAdminPayments()]);
         setPaymentMethods(methodsResponse.methods);
         setPaymentRecords(paymentsResponse.payments);
+      } else if (tabName === 'casino') {
+        setCasinoConfig(await api.getAdminCasinoConfig());
       }
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to load admin data'));
@@ -401,6 +419,63 @@ export default function AdminPage() {
       setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to reject payment'));
+    }
+  }
+
+  async function handleSaveCasinoGame(game: string, data: Record<string, unknown>) {
+    setError(null);
+    try {
+      await api.updateAdminCasinoGame(game, data);
+      setCasinoConfig(await api.getAdminCasinoConfig());
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update casino game'));
+    }
+  }
+
+  async function handleCreateCasinoReward() {
+    setError(null);
+    try {
+      await api.createAdminCasinoRewardConfig({
+        game: newCasinoRewardGame,
+        rewardType: newCasinoRewardType,
+        title: newCasinoRewardTitle.trim(),
+        weight: Number(newCasinoRewardWeight) || 1,
+        discountPercent: newCasinoRewardDiscount ? Number(newCasinoRewardDiscount) : null,
+        creditAmount: newCasinoRewardCredits ? Number(newCasinoRewardCredits) : null,
+      });
+      setNewCasinoRewardTitle('');
+      setNewCasinoRewardWeight('1');
+      setNewCasinoRewardDiscount('');
+      setNewCasinoRewardCredits('');
+      setCasinoConfig(await api.getAdminCasinoConfig());
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to create casino reward'));
+    }
+  }
+
+  async function handleToggleCasinoReward(id: number, isActive: boolean) {
+    setError(null);
+    try {
+      await api.updateAdminCasinoRewardConfig(id, { isActive: !isActive });
+      setCasinoConfig(await api.getAdminCasinoConfig());
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update casino reward'));
+    }
+  }
+
+  async function handleAdjustCasinoCredits() {
+    setError(null);
+    try {
+      await api.adjustAdminCasinoCredits({
+        userId: Number(casinoAdjustmentUserId),
+        amount: Number(casinoAdjustmentAmount),
+        reason: casinoAdjustmentReason.trim(),
+      });
+      setCasinoAdjustmentAmount('');
+      setCasinoAdjustmentReason('');
+      setCasinoAdjustmentUserId('');
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to adjust casino credits'));
     }
   }
 
@@ -508,6 +583,9 @@ export default function AdminPage() {
         price,
         categoryId: Number(newProdCategoryId),
         image: newProdImage.trim() || undefined,
+        creditsEnabled: newProdCreditsEnabled,
+        creditsPrice: newProdCreditsEnabled && newProdCreditsPrice ? Number(newProdCreditsPrice) : null,
+        minCreditsRequired: newProdCreditsEnabled && newProdMinCreditsRequired ? Number(newProdMinCreditsRequired) : null,
         isActive: newProdIsActive,
         isRecommended: newProdIsRecommended,
         cities: cityPayload,
@@ -520,6 +598,9 @@ export default function AdminPage() {
       setNewProdPrice('');
       setNewProdCategoryId('');
       setNewProdImage('');
+      setNewProdCreditsEnabled(false);
+      setNewProdCreditsPrice('');
+      setNewProdMinCreditsRequired('');
       setNewProdIsActive(true);
       setNewProdIsRecommended(false);
       setNewProdCities({});
@@ -546,6 +627,9 @@ export default function AdminPage() {
       if (typeof edits.image === 'string') payload.image = edits.image.trim() || null;
       if (typeof edits.categoryId === 'string' && edits.categoryId) payload.categoryId = Number(edits.categoryId);
       if (typeof edits.price === 'string' && edits.price) payload.price = Number(edits.price);
+      if (typeof edits.creditsEnabled === 'boolean') payload.creditsEnabled = edits.creditsEnabled;
+      if (typeof edits.creditsPrice === 'string') payload.creditsPrice = edits.creditsPrice ? Number(edits.creditsPrice) : null;
+      if (typeof edits.minCreditsRequired === 'string') payload.minCreditsRequired = edits.minCreditsRequired ? Number(edits.minCreditsRequired) : null;
       if (typeof edits.isActive === 'boolean') payload.isActive = edits.isActive;
       if (typeof edits.isRecommended === 'boolean') payload.isRecommended = edits.isRecommended;
       await api.updateAdminProduct(productId, payload);
@@ -1010,6 +1094,11 @@ export default function AdminPage() {
                 </select>
               </div>
               <div className={styles.formRow}>
+                <label className={styles.checkLabel}><input type="checkbox" checked={newProdCreditsEnabled} onChange={(event) => setNewProdCreditsEnabled(event.target.checked)} /> Casino Credits</label>
+                <input className={styles.input} type="number" placeholder="Credits price" value={newProdCreditsPrice} onChange={(event) => setNewProdCreditsPrice(event.target.value)} />
+                <input className={styles.input} type="number" placeholder="Min credits" value={newProdMinCreditsRequired} onChange={(event) => setNewProdMinCreditsRequired(event.target.value)} />
+              </div>
+              <div className={styles.formRow}>
                 <input className={styles.input} placeholder="Image URL" value={newProdImage} onChange={(event) => setNewProdImage(event.target.value)} />
               </div>
               <div className={styles.formRow}>
@@ -1099,6 +1188,14 @@ export default function AdminPage() {
                         <select className={styles.select} value={productEdits[product.id]?.categoryId ?? String(product.categoryId)} onChange={(event) => setProductEdits((current) => ({ ...current, [product.id]: { ...current[product.id], categoryId: event.target.value } }))}>
                           {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                         </select>
+                      </div>
+                      <div className={styles.formRow}>
+                        <label className={styles.checkLabel}>
+                          <input type="checkbox" checked={productEdits[product.id]?.creditsEnabled ?? Boolean(product.creditsEnabled)} onChange={(event) => setProductEdits((current) => ({ ...current, [product.id]: { ...current[product.id], creditsEnabled: event.target.checked } }))} />
+                          Casino Credits
+                        </label>
+                        <input className={styles.input} type="number" placeholder="Credits price" value={productEdits[product.id]?.creditsPrice ?? String(product.creditsPrice ?? '')} onChange={(event) => setProductEdits((current) => ({ ...current, [product.id]: { ...current[product.id], creditsPrice: event.target.value } }))} />
+                        <input className={styles.input} type="number" placeholder="Min credits" value={productEdits[product.id]?.minCreditsRequired ?? String(product.minCreditsRequired ?? '')} onChange={(event) => setProductEdits((current) => ({ ...current, [product.id]: { ...current[product.id], minCreditsRequired: event.target.value } }))} />
                       </div>
                       <div className={styles.formRow}>
                         <input className={styles.input} placeholder="Image URL" value={productEdits[product.id]?.image ?? (product.image ?? '')} onChange={(event) => setProductEdits((current) => ({ ...current, [product.id]: { ...current[product.id], image: event.target.value } }))} />
@@ -1668,6 +1765,88 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'casino' && (
+        <div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>Casino games</h3>
+            <div className={styles.orderList}>
+              {casinoConfig.games.map((game) => (
+                <div key={game.id} className={styles.orderCard}>
+                  <div className={styles.orderHeader}>
+                    <span className={styles.orderId}>{game.game.toUpperCase()}</span>
+                    <span className={styles.orderTotal}>{game.isEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+                  <div className={styles.formRow}>
+                    <input className={styles.input} type="number" defaultValue={String(game.minBet)} onBlur={(event) => void handleSaveCasinoGame(game.game, { minBet: Number(event.target.value) || game.minBet })} />
+                    <input className={styles.input} type="number" defaultValue={String(game.maxBet)} onBlur={(event) => void handleSaveCasinoGame(game.game, { maxBet: Number(event.target.value) || game.maxBet })} />
+                    <input className={styles.input} type="number" defaultValue={String(game.spinLimit)} onBlur={(event) => void handleSaveCasinoGame(game.game, { spinLimit: Number(event.target.value) || game.spinLimit })} />
+                  </div>
+                  <button className={styles.replyBtn} onClick={() => void handleSaveCasinoGame(game.game, { isEnabled: !game.isEnabled })}>
+                    {game.isEnabled ? 'Disable' : 'Enable'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.form} style={{ marginTop: 16 }}>
+            <h3 className={styles.formTitle}>New casino reward</h3>
+            <div className={styles.formRow}>
+              <select className={styles.select} value={newCasinoRewardGame} onChange={(event) => setNewCasinoRewardGame(event.target.value)}>
+                <option value="wheel">Wheel</option>
+                <option value="slots">Slots</option>
+                <option value="roulette">Roulette</option>
+                <option value="chest">Chest</option>
+              </select>
+              <select className={styles.select} value={newCasinoRewardType} onChange={(event) => setNewCasinoRewardType(event.target.value)}>
+                <option value="shop_discount">Discount</option>
+                <option value="casino_credits">Casino credits</option>
+                <option value="none">No reward</option>
+              </select>
+              <input className={styles.input} placeholder="Title" value={newCasinoRewardTitle} onChange={(event) => setNewCasinoRewardTitle(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} type="number" placeholder="Weight" value={newCasinoRewardWeight} onChange={(event) => setNewCasinoRewardWeight(event.target.value)} />
+              <input className={styles.input} type="number" placeholder="Discount %" value={newCasinoRewardDiscount} onChange={(event) => setNewCasinoRewardDiscount(event.target.value)} />
+              <input className={styles.input} type="number" placeholder="Credits" value={newCasinoRewardCredits} onChange={(event) => setNewCasinoRewardCredits(event.target.value)} />
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleCreateCasinoReward()} disabled={!newCasinoRewardTitle.trim()}>
+              {t('common.save', { defaultValue: 'Save' })}
+            </button>
+          </div>
+
+          <div className={styles.discountList} style={{ marginTop: 16 }}>
+            {casinoConfig.rewardConfigs.map((rewardConfig) => (
+              <div key={rewardConfig.id} className={styles.discountCard}>
+                <div>
+                  <div className={styles.discountCode}>{rewardConfig.title}</div>
+                  <div>{rewardConfig.game} • {rewardConfig.rewardType} • weight {rewardConfig.weight}</div>
+                  <div className={styles.orderMeta}>
+                    {rewardConfig.discountPercent ? `${rewardConfig.discountPercent}%` : ''}
+                    {rewardConfig.creditAmount ? ` • ${rewardConfig.creditAmount} credits` : ''}
+                  </div>
+                </div>
+                <button className={styles.replyBtn} onClick={() => void handleToggleCasinoReward(rewardConfig.id, rewardConfig.isActive)}>
+                  {rewardConfig.isActive ? 'Deactivate' : 'Activate'}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.form} style={{ marginTop: 16 }}>
+            <h3 className={styles.formTitle}>Casino credit adjustment</h3>
+            <div className={styles.formRow}>
+              <input className={styles.input} type="number" placeholder="User ID" value={casinoAdjustmentUserId} onChange={(event) => setCasinoAdjustmentUserId(event.target.value)} />
+              <input className={styles.input} type="number" placeholder="Amount" value={casinoAdjustmentAmount} onChange={(event) => setCasinoAdjustmentAmount(event.target.value)} />
+              <input className={styles.input} placeholder="Reason" value={casinoAdjustmentReason} onChange={(event) => setCasinoAdjustmentReason(event.target.value)} />
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleAdjustCasinoCredits()} disabled={!casinoAdjustmentUserId || !casinoAdjustmentAmount || !casinoAdjustmentReason.trim()}>
+              Adjust credits
+            </button>
           </div>
         </div>
       )}

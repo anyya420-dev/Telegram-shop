@@ -10,19 +10,25 @@ const WHEEL_SEGMENTS = ['credits_50', 'credits_120', 'discount_2', 'discount_5',
 const SLOT_SYMBOLS = ['cherry', 'lemon', 'orange', 'watermelon', 'grape', 'bell', 'bar', 'golden7']
 const ROULETTE_BETS = ['red', 'black', 'odd', 'even', 'low', 'high']
 
-function rewardLabel(reward: CasinoReward | { rewardType: string; discountPercent: number | null; creditAmount: number | null; title?: string } | null) {
-  if (!reward) return 'No reward'
+function rewardLabel(
+  reward: CasinoReward | { rewardType: string; discountPercent: number | null; creditAmount: number | null; title?: string } | null,
+  creditsLabel: string,
+  emptyLabel: string,
+) {
+  if (!reward) return emptyLabel
   if (reward.rewardType === 'shop_discount' && reward.discountPercent) return `${reward.discountPercent}% OFF`
-  if (reward.rewardType === 'casino_credits' && reward.creditAmount) return `${reward.creditAmount} Credits`
+  if (reward.rewardType === 'casino_credits' && reward.creditAmount) return `${reward.creditAmount} ${creditsLabel}`
   return ('title' in reward ? reward.title : undefined) ?? reward.rewardType
 }
 
-function historyReward(entry: CasinoRound) {
-  return entry.reward ? rewardLabel(entry.reward) : entry.isWin ? `${entry.payoutAmount} Credits` : 'No reward'
+function historyReward(entry: CasinoRound, creditsLabel: string, emptyLabel: string) {
+  return entry.reward ? rewardLabel(entry.reward, creditsLabel, emptyLabel) : entry.isWin ? `${entry.payoutAmount} ${creditsLabel}` : emptyLabel
 }
 
 export default function CasinoPage() {
   const { t } = useTranslation()
+  const creditsLabel = t('casino.credits', { defaultValue: 'Credits' })
+  const emptyRewardLabel = t('casino.noReward', { defaultValue: 'No reward' })
   const [state, setState] = useState<CasinoState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -103,7 +109,7 @@ export default function CasinoPage() {
             }
           : current,
       )
-      setResult({ game, reward: rewardLabel(response.reward), outcome: response.round.outcomeValue })
+      setResult({ game, reward: rewardLabel(response.reward, creditsLabel, emptyRewardLabel), outcome: response.round.outcomeValue })
     } catch (playError) {
       setError(getErrorMessage(playError, t, 'request_failed'))
     } finally {
@@ -230,7 +236,7 @@ export default function CasinoPage() {
           {rewards.length === 0 ? <span className={styles.emptyInline}>{t('profile.noRewards', { defaultValue: 'No rewards yet.' })}</span> : null}
           {rewards.slice(0, 6).map((reward) => (
             <div key={reward.id} className={styles.rewardCard}>
-              <strong>{rewardLabel(reward)}</strong>
+              <strong>{rewardLabel(reward, creditsLabel, emptyRewardLabel)}</strong>
               <span>{reward.game}</span>
               <span>{reward.status}</span>
             </div>
@@ -251,7 +257,7 @@ export default function CasinoPage() {
                 <span>{new Date(entry.createdAt).toLocaleString()}</span>
               </div>
               <div>
-                <span>{historyReward(entry)}</span>
+                <span>{historyReward(entry, creditsLabel, emptyRewardLabel)}</span>
                 <strong>{entry.netChange >= 0 ? '+' : ''}{entry.netChange}</strong>
               </div>
             </div>

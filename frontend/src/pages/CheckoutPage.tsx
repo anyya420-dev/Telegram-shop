@@ -33,6 +33,7 @@ export default function CheckoutPage() {
   const [selectedRewardId, setSelectedRewardId] = useState<number | null>(null)
   const [casinoCreditsBalance, setCasinoCreditsBalance] = useState(0)
   const [casinoCreditsToUse, setCasinoCreditsToUse] = useState('0')
+  const [casinoLoadError, setCasinoLoadError] = useState<string | null>(null)
   const [discountCode, setDiscountCode] = useState('')
   const [discountAmount, setDiscountAmount] = useState(0)
   const [discountError, setDiscountError] = useState<string | null>(null)
@@ -80,11 +81,14 @@ export default function CheckoutPage() {
 
   const loadCasino = useCallback(async () => {
     try {
+      setCasinoLoadError(null)
       const response = await api.getCasinoState()
       setCasinoRewards((response.rewards ?? []).filter((reward) => reward.rewardType === 'shop_discount' && reward.status === 'available'))
       setCasinoCreditsBalance(response.balance.credits)
-    } catch {}
-  }, [])
+    } catch (err) {
+      setCasinoLoadError(getErrorMessage(err, t, 'request_failed'))
+    }
+  }, [t])
 
   useEffect(() => {
     void Promise.all([loadDelivery(), loadPaymentMethods()])
@@ -476,6 +480,7 @@ export default function CheckoutPage() {
             {t('common.clear', { defaultValue: 'Clear' })}
           </button>
         ) : null}
+        {casinoLoadError ? <p className={styles.error}>{casinoLoadError}</p> : null}
       </div>
 
       <div className={styles.card}>
@@ -494,6 +499,7 @@ export default function CheckoutPage() {
           placeholder={t('checkout.casinoCreditsUse', { defaultValue: 'Credits to apply' })}
         />
         {creditEligibleTotal <= 0 ? <p className={styles.value}>{t('checkout.casinoCreditsUnavailable', { defaultValue: 'This cart is not eligible for casino credit purchases.' })}</p> : null}
+        {casinoLoadError ? <button className={styles.secondaryBtn} onClick={() => void loadCasino()} type="button">{t('common.retry')}</button> : null}
       </div>
 
       <div className={styles.card}>

@@ -6,18 +6,19 @@ import { getErrorMessage } from '../lib/errors'
 import type { CasinoReward } from '../types'
 import styles from './RewardsPage.module.css'
 
-function rewardLabel(reward: CasinoReward) {
+function rewardLabel(reward: CasinoReward, creditsLabel: string) {
   if (reward.rewardType === 'shop_discount' && reward.discountPercent) {
     return `${reward.discountPercent}% OFF`
   }
   if (reward.rewardType === 'casino_credits' && reward.creditAmount) {
-    return `${reward.creditAmount} Credits`
+    return `${reward.creditAmount} ${creditsLabel}`
   }
   return reward.rewardType
 }
 
 export default function RewardsPage() {
   const { t } = useTranslation()
+  const creditsLabel = t('casino.credits', { defaultValue: 'Credits' })
   const [rewards, setRewards] = useState<CasinoReward[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +60,7 @@ export default function RewardsPage() {
           <article key={reward.id} className={styles.card}>
             <div>
               <p className={styles.game}>{reward.game}</p>
-              <strong className={styles.reward}>{rewardLabel(reward)}</strong>
+              <strong className={styles.reward}>{rewardLabel(reward, creditsLabel)}</strong>
             </div>
             <div className={styles.meta}>
               <span className={styles.status}>{reward.status}</span>
