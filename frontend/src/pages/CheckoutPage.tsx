@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CreditCard, MapPin, User } from 'lucide-react'
+import { TonConnectButton, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react'
 import { useApp } from '../context/AppContext'
 import { api } from '../api/client'
 import { getErrorMessage } from '../lib/errors'
@@ -9,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../lib/format'
 import { getLocalizedCityName, getLocalizedUnit } from '../lib/localized'
 import i18n from '../lib/i18n'
-import type { DeliveryOption, Language, Order, PaymentMethod } from '../types'
+import type { DeliveryOption, Language, Order, Payment, PaymentMethod } from '../types'
 
 export default function CheckoutPage() {
   const { cart, user, checkout, openCityPicker } = useApp()
@@ -32,8 +33,14 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [order, setOrder] = useState<Order | null>(null)
+  const [payment, setPayment] = useState<Payment | null>(null)
   const [markingPaid, setMarkingPaid] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [transactionHash, setTransactionHash] = useState('')
+  const [senderAddress, setSenderAddress] = useState('')
+  const [paymentLoadingAction, setPaymentLoadingAction] = useState(false)
+  const wallet = useTonWallet()
+  const [tonConnectUI] = useTonConnectUI()
 
   const loadDelivery = useCallback(async () => {
     try {
@@ -115,6 +122,8 @@ export default function CheckoutPage() {
         paymentMethodId: selectedPaymentMethodId,
       })
       setOrder(createdOrder)
+      const paymentResponse = await api.createOrderPayment(createdOrder.id)
+      setPayment(paymentResponse.payment)
     } catch (err) {
       setSubmitError(getErrorMessage(err, t, 'checkout_failed'))
     } finally {
@@ -132,13 +141,30 @@ export default function CheckoutPage() {
     }
   }
 
-  async function markPaid() {
-    if (!order || markingPaid) return
+  async function refreshPayment() {
+    if (!payment) return
+    setPaymentLoadingAction(true)
+    setSubmitError(null)
+    try {
+      const response = await api.getPayment(payment.id)
+      setPayment(response.payment)
+    } catch (err) {
+      setSubmitError(getErrorMessage(err, t, 'request_failed'))
+    } finally {
+      setPaymentLoadingAction(false)
+    }
+  }
+
+  async function submitCryptoEvidence() {
+    if (!payment || markingPaid) return
     setMarkingPaid(true)
     setSubmitError(null)
     try {
-      const response = await api.markOrderPaid(order.id)
-      setOrder(response.order)
+      const response = await api.submitCryptoPayment(payment.id, {
+        transactionHash: transactionHash.trim() || undefined,
+        senderAddress: senderAddress.trim() || undefined,
+      })
+      setPayment(response.payment)
     } catch (err) {
       setSubmitError(getErrorMessage(err, t, 'request_failed'))
     } finally {
@@ -146,10 +172,39 @@ export default function CheckoutPage() {
     }
   }
 
+  async function sendTonPayment() {
+    if (!payment || !selectedPaymentMethod?.walletAddress || !payment.expiresAt) return
+    setPaymentLoadingAction(true)
+    setSubmitError(null)
+    try {
+      const amountNano = String(Math.round(payment.amount * 1_000_000_000))
+      const result = await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(new Date(payment.expiresAt).getTime() / 1000),
+        network: '-239',
+        messages: [
+          {
+            address: selectedPaymentMethod.walletAddress,
+            amount: amountNano,
+          },
+        ],
+      })
+      const response = await api.submitCryptoPayment(payment.id, {
+        senderAddress: wallet?.account.address,
+        tonConnectBoc: (result as { boc?: string }).boc,
+      })
+      setPayment(response.payment)
+    } catch (err) {
+      setSubmitError(getErrorMessage(err, t, 'request_failed'))
+    } finally {
+      setPaymentLoadingAction(false)
+    }
+  }
+
   if (order) {
-    const method = order.paymentMethod
-    const isCryptoLike = method?.type === 'crypto' || method?.type === 'ton'
-    const canShowCryptoAddress = Boolean(isCryptoLike && method?.network && method?.walletAddress)
+    const method = payment?.paymentMethod ?? order.paymentMethod
+    const isCryptoLike = method?.type === 'crypto'
+    const canShowCryptoAddress = Boolean(isCryptoLike && payment?.network && payment?.recipient)
+    const isTonPayment = Boolean(isCryptoLike && method?.isTonConnectEnabled && payment?.network?.toUpperCase() === 'TON')
     return (
       <div className={styles.page}>
         <div className={styles.header}>
@@ -208,31 +263,51 @@ export default function CheckoutPage() {
               <span>{method.currency}</span>
             </div>
           )}
-          {method?.type === 'card' && method.cardNumber && (
-            <>
-              <div className={styles.line}><span>{t('checkout.cardNumber')}</span><span>{method.cardNumber}</span></div>
-              {method.cardholderName && <div className={styles.line}><span>{t('checkout.cardholder')}</span><span>{method.cardholderName}</span></div>}
-            </>
-          )}
+          {payment && <div className={styles.line}><span>{t('checkout.paymentStatus', { defaultValue: 'Payment status' })}</span><span>{payment.status}</span></div>}
           {canShowCryptoAddress && (
             <>
-              <div className={styles.line}><span>{t('checkout.network')}</span><span>{method?.network}</span></div>
-              <div className={styles.line}><span>{t('checkout.walletAddress')}</span><span>{method?.walletAddress}</span></div>
-              <button className={styles.secondaryBtn} type="button" onClick={() => method?.walletAddress && void copyAddress(method.walletAddress)}>
+              <div className={styles.line}><span>{t('checkout.asset', { defaultValue: 'Asset' })}</span><span>{payment?.asset ?? payment?.currency ?? '—'}</span></div>
+              <div className={styles.line}><span>{t('checkout.network')}</span><span>{payment?.network}</span></div>
+              <div className={styles.line}><span>{t('checkout.walletAddress')}</span><span>{payment?.recipient}</span></div>
+              <div className={styles.line}><span>{t('checkout.amount', { defaultValue: 'Amount' })}</span><span>{payment?.amount}</span></div>
+              <button className={styles.secondaryBtn} type="button" onClick={() => payment?.recipient && void copyAddress(payment.recipient)}>
                 {copied ? t('checkout.copiedAddress') : t('checkout.copyAddress')}
               </button>
+              {method?.instructions ? <p className={styles.value}>{method.instructions}</p> : null}
+              <p className={styles.error}>{t('checkout.cryptoMissingNetwork', { defaultValue: 'Send only on the specified network.' })}</p>
             </>
           )}
           {isCryptoLike && !canShowCryptoAddress && (
             <p className={styles.error}>{t('checkout.cryptoMissingNetwork')}</p>
           )}
-          <p className={styles.value}>{order.paymentStatus === 'pending' ? t('checkout.paymentPending') : t('checkout.waitingForPayment')}</p>
-          {submitError && <p className={styles.error}>{submitError}</p>}
-          {order.paymentStatus !== 'pending' && (
-            <button className={styles.primaryBtn} onClick={() => void markPaid()} disabled={markingPaid} type="button">
-              {markingPaid ? t('common.loading') : t('checkout.iPaid')}
+          {method?.type === 'card' && payment?.checkoutUrl && (
+            <button className={styles.primaryBtn} onClick={() => window.open(payment.checkoutUrl ?? '', '_blank', 'noopener,noreferrer')} type="button">
+              {t('checkout.confirm', { defaultValue: 'Pay now' })}
             </button>
           )}
+          {isTonPayment && (
+            <>
+              <TonConnectButton />
+              <p className={styles.value}>{wallet ? wallet.account.address : t('checkout.notSelected')}</p>
+              <button className={styles.primaryBtn} onClick={() => void sendTonPayment()} disabled={!wallet || paymentLoadingAction} type="button">
+                {paymentLoadingAction ? t('common.loading') : t('checkout.confirm', { defaultValue: 'Send TON payment' })}
+              </button>
+            </>
+          )}
+          {isCryptoLike && !isTonPayment && payment?.status === 'pending' && (
+            <>
+              <input className={styles.input} placeholder={t('checkout.transactionHash', { defaultValue: 'Transaction hash' })} value={transactionHash} onChange={(event) => setTransactionHash(event.target.value)} />
+              <input className={styles.input} placeholder={t('checkout.senderAddress', { defaultValue: 'Sender address (optional)' })} value={senderAddress} onChange={(event) => setSenderAddress(event.target.value)} />
+              <button className={styles.primaryBtn} onClick={() => void submitCryptoEvidence()} disabled={markingPaid} type="button">
+                {markingPaid ? t('common.loading') : t('checkout.iPaid')}
+              </button>
+            </>
+          )}
+          <p className={styles.value}>{payment?.status === 'processing' ? t('checkout.paymentPending') : t('checkout.waitingForPayment')}</p>
+          {submitError && <p className={styles.error}>{submitError}</p>}
+          <button className={styles.secondaryBtn} onClick={() => void refreshPayment()} disabled={!payment || paymentLoadingAction} type="button">
+            {paymentLoadingAction ? t('common.loading') : t('common.refresh', { defaultValue: 'Refresh payment status' })}
+          </button>
           <div className={styles.actionGroup}>
             <button className={styles.secondaryBtn} onClick={() => navigate(`/orders/${order.id}`)} type="button">
               {t('checkout.viewOrder')}
@@ -378,7 +453,7 @@ export default function CheckoutPage() {
               name="payment"
             />
             <span>{method.title}</span>
-            <span>{method.currency ?? method.type.toUpperCase()}</span>
+            <span>{method.type === 'card' ? (method.provider ?? 'CARD') : [method.asset ?? method.currency, method.network].filter(Boolean).join(' • ')}</span>
           </label>
         ))}
       </div>

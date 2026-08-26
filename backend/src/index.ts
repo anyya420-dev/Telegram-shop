@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { pathToFileURL } from 'node:url'
 import express from 'express'
+import type { Request } from 'express'
 import adminRouter from './routes/admin.js'
 import balanceRouter from './routes/balance.js'
 import cartRouter from './routes/cart.js'
@@ -130,7 +131,11 @@ export function createApp() {
     }
   })
 
-  app.use(express.json())
+  app.use(express.json({
+    verify(request: Request & { rawBody?: Buffer }, _response, buffer) {
+      request.rawBody = Buffer.from(buffer)
+    },
+  }))
 
   app.use('/api/session', sessionRouter)
   app.use('/api/cities', citiesRouter)

@@ -11,6 +11,7 @@ import {
   sendError,
 } from '../lib.js'
 import { notifyOrderStatusChange } from '../services/notifier.js'
+import { createOrRefreshOrderPayment } from '../services/payments.js'
 
 const router = Router()
 
@@ -31,6 +32,12 @@ const ORDER_INCLUDE = {
   paymentMethod: true,
   deliveryOption: true,
   discount: true,
+  payments: {
+    include: {
+      paymentMethod: true,
+    },
+    orderBy: { createdAt: 'desc' as const },
+  },
 }
 
 // GET /api/orders - history
@@ -228,7 +235,7 @@ router.post('/', authRateLimiter, async (request, response) => {
           deliveryFee,
           total,
           comment: comment || null,
-          paymentStatus: 'unpaid',
+          paymentStatus: 'pending',
           paymentMethodId,
           deliveryOptionId,
           discountId,
@@ -244,8 +251,9 @@ router.post('/', authRateLimiter, async (request, response) => {
             })),
           },
         },
-        include: ORDER_INCLUDE,
       })
+
+      await createOrRefreshOrderPayment(tx, newOrder, paymentMethod)
 
       await tx.orderStatusHistory.create({
         data: { orderId: newOrder.id, status: 'pending', comment: 'Order placed' },
@@ -253,7 +261,10 @@ router.post('/', authRateLimiter, async (request, response) => {
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
 
-      return newOrder
+      return tx.order.findUniqueOrThrow({
+        where: { id: newOrder.id },
+        include: ORDER_INCLUDE,
+      })
     }, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     })
@@ -391,24 +402,39 @@ router.post('/:id/mark-paid', authRateLimiter, async (request, response) => {
     return
   }
 
-  if (!order.paymentMethodId) {
-    sendError(response, 400, 'payment_method_missing', 'Payment method is not set for this order')
+  const payment = await prisma.payment.findFirst({
+    where: { orderId, order: { userId: user.id } },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (!order.paymentMethodId || !payment) {
+    sendError(response, 400, 'payment_method_missing', 'Payment is not initialized for this order')
     return
   }
 
-  if (!['pending', 'payment_pending'].includes(order.status)) {
+  const method = await prisma.paymentMethod.findUnique({ where: { id: order.paymentMethodId } })
+  if (!method || method.type !== 'crypto') {
+    sendError(response, 400, 'invalid_payment_type', 'Manual payment confirmation is only available for crypto payments')
+    return
+  }
+
+  if (!['pending', 'payment_pending'].includes(order.status) || !['pending', 'processing'].includes(payment.status)) {
     sendError(response, 400, 'invalid_order_status', 'Order is not eligible for manual payment confirmation')
     return
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: 'processing' },
+    })
     await tx.orderStatusHistory.create({
-      data: { orderId, status: 'payment_pending', comment: 'Customer confirmed manual payment' },
+      data: { orderId, status: 'payment_pending', comment: 'Customer requested manual crypto payment review' },
     })
 
     return tx.order.update({
       where: { id: orderId },
-      data: { status: 'payment_pending', paymentStatus: 'pending' },
+      data: { status: 'payment_pending', paymentStatus: 'processing' },
       include: ORDER_INCLUDE,
     })
   })

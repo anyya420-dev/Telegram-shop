@@ -9,11 +9,16 @@ import {
   revokeAdminSession,
   verifyAdminPassword,
 } from '../services/adminSession.js'
+import {
+  parsePaymentMethodInput,
+  sanitizePayment,
+  sanitizePaymentMethod,
+} from '../services/payments.js'
 
 const router = Router()
 const ADMIN_SESSION_COOKIE_NAME = 'tg_shop_admin_session'
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
-const PAYMENT_TYPES = ['card', 'ton', 'crypto'] as const
+const PAYMENT_TYPES = ['card', 'crypto'] as const
 const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'] as const
 const DELIVERY_TYPES = ['delivery', 'pickup'] as const
 
@@ -332,19 +337,32 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
     return
   }
 
-  if (order.status !== 'payment_pending' || order.paymentStatus !== 'pending') {
+  const payment = await prisma.payment.findFirst({
+    where: { orderId, status: { in: ['pending', 'processing'] } },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (!payment) {
+    sendError(response, 404, 'payment_not_found', 'Payment record not found')
+    return
+  }
+
+  if (!['payment_pending', 'pending', 'processing'].includes(order.status) || !['pending', 'processing'].includes(order.paymentStatus ?? '')) {
     sendError(response, 400, 'invalid_payment_state', 'Order payment is not pending')
     return
   }
 
   const updated = await prisma.$transaction(async (tx) => {
     if (action === 'confirm') {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { status: 'paid', paidAt: new Date(), failureReason: null },
+      })
       await tx.orderStatusHistory.create({
-        data: { orderId, status: 'confirmed', comment: 'Payment confirmed by admin' },
+        data: { orderId, status: 'processing', comment: 'Payment confirmed by admin' },
       })
       return tx.order.update({
         where: { id: orderId },
-        data: { status: 'confirmed', paymentStatus: 'confirmed' },
+        data: { status: 'processing', paymentStatus: 'paid' },
         include: {
           items: true,
           city: true,
@@ -357,12 +375,16 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
       })
     }
 
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: 'failed', failureReason: 'rejected_by_admin' },
+    })
     await tx.orderStatusHistory.create({
       data: { orderId, status: 'pending', comment: 'Payment rejected by admin' },
     })
     return tx.order.update({
       where: { id: orderId },
-      data: { status: 'pending', paymentStatus: 'rejected' },
+      data: { status: 'pending', paymentStatus: 'failed' },
       include: {
         items: true,
         city: true,
@@ -382,63 +404,24 @@ router.get('/payment-settings', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const methods = await prisma.paymentMethod.findMany({ orderBy: [{ type: 'asc' }, { id: 'asc' }] })
-  response.json({ methods })
+  const methods = await prisma.paymentMethod.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] })
+  response.json({ methods: methods.map(sanitizePaymentMethod) })
 })
 
 router.post('/payment-settings', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const type = typeof request.body.type === 'string' ? request.body.type.trim().toLowerCase() : ''
-  if (!PAYMENT_TYPES.includes(type as (typeof PAYMENT_TYPES)[number])) {
-    sendError(response, 400, 'invalid_type', 'type must be card, ton or crypto')
+  let data
+  try {
+    data = parsePaymentMethodInput(request.body as Record<string, unknown> as never)
+  } catch (error) {
+    sendError(response, 400, 'invalid_payment_settings', error instanceof Error ? error.message : 'Invalid payment settings')
     return
-  }
-
-  const title = typeof request.body.title === 'string' ? request.body.title.trim() : ''
-  if (!title) {
-    sendError(response, 400, 'title_required', 'title is required')
-    return
-  }
-
-  const isEnabled = typeof request.body.isEnabled === 'boolean' ? request.body.isEnabled : true
-  const cardNumber = typeof request.body.cardNumber === 'string' ? request.body.cardNumber.trim() : null
-  const cardholderName = typeof request.body.cardholderName === 'string' ? request.body.cardholderName.trim() : null
-  const currency = typeof request.body.currency === 'string' ? request.body.currency.trim().toUpperCase() : null
-  const network = typeof request.body.network === 'string' ? request.body.network.trim() : null
-  const walletAddress = typeof request.body.walletAddress === 'string' ? request.body.walletAddress.trim() : null
-
-  if (type === 'card') {
-    if (!cardNumber || !currency) {
-      sendError(response, 400, 'invalid_payment_settings', 'card_number and currency are required for card payments')
-      return
-    }
-  }
-  if (type === 'ton') {
-    if (!walletAddress || !network) {
-      sendError(response, 400, 'invalid_payment_settings', 'wallet_address and network are required for TON payments')
-      return
-    }
-  }
-  if (type === 'crypto') {
-    if (!walletAddress || !network || !currency) {
-      sendError(response, 400, 'invalid_payment_settings', 'currency, network and wallet_address are required for crypto payments')
-      return
-    }
   }
 
   const method = await prisma.paymentMethod.create({
-    data: {
-      type,
-      title,
-      cardNumber,
-      cardholderName,
-      currency,
-      network,
-      walletAddress,
-      isEnabled,
-    },
+    data,
   })
 
   await prisma.auditLog.create({
@@ -447,11 +430,11 @@ router.post('/payment-settings', authRateLimiter, async (request, response) => {
       action: 'payment_method_created',
       entity: 'payment_method',
       entityId: method.id,
-      meta: JSON.stringify({ type, title }),
+      meta: JSON.stringify({ type: method.type, title: method.title }),
     },
   })
 
-  response.status(201).json({ method })
+  response.status(201).json({ method: sanitizePaymentMethod(method) })
 })
 
 router.patch('/payment-settings/:id', authRateLimiter, async (request, response) => {
@@ -470,26 +453,11 @@ router.patch('/payment-settings/:id', authRateLimiter, async (request, response)
     return
   }
 
-  const data: Record<string, string | boolean | null> = {}
-  if (typeof request.body.title === 'string') data.title = request.body.title.trim()
-  if (typeof request.body.cardNumber === 'string') data.cardNumber = request.body.cardNumber.trim()
-  if (typeof request.body.cardholderName === 'string') data.cardholderName = request.body.cardholderName.trim()
-  if (typeof request.body.currency === 'string') data.currency = request.body.currency.trim().toUpperCase()
-  if (typeof request.body.network === 'string') data.network = request.body.network.trim()
-  if (typeof request.body.walletAddress === 'string') data.walletAddress = request.body.walletAddress.trim()
-  if (typeof request.body.isEnabled === 'boolean') data.isEnabled = request.body.isEnabled
-
-  const next = { ...existing, ...data }
-  if (next.type === 'card' && (!next.cardNumber || !next.currency)) {
-    sendError(response, 400, 'invalid_payment_settings', 'card_number and currency are required for card payments')
-    return
-  }
-  if (next.type === 'ton' && (!next.walletAddress || !next.network)) {
-    sendError(response, 400, 'invalid_payment_settings', 'wallet_address and network are required for TON payments')
-    return
-  }
-  if (next.type === 'crypto' && (!next.walletAddress || !next.network || !next.currency)) {
-    sendError(response, 400, 'invalid_payment_settings', 'currency, network and wallet_address are required for crypto payments')
+  let data
+  try {
+    data = parsePaymentMethodInput(request.body as Record<string, unknown> as never, existing)
+  } catch (error) {
+    sendError(response, 400, 'invalid_payment_settings', error instanceof Error ? error.message : 'Invalid payment settings')
     return
   }
 
@@ -505,7 +473,7 @@ router.patch('/payment-settings/:id', authRateLimiter, async (request, response)
     },
   })
 
-  response.json({ method })
+  response.json({ method: sanitizePaymentMethod(method) })
 })
 
 router.delete('/payment-settings/:id', authRateLimiter, async (request, response) => {
@@ -521,6 +489,13 @@ router.delete('/payment-settings/:id', authRateLimiter, async (request, response
   const method = await prisma.paymentMethod.findUnique({ where: { id } })
   if (!method) {
     sendError(response, 404, 'not_found', 'Payment method not found')
+    return
+  }
+
+  const linkedPayments = await prisma.payment.count({ where: { paymentMethodId: id } })
+  const linkedOrders = await prisma.order.count({ where: { paymentMethodId: id } })
+  if (linkedPayments > 0 || linkedOrders > 0) {
+    sendError(response, 400, 'payment_method_in_use', 'Disable a payment method that has payment history instead of deleting it')
     return
   }
 
@@ -569,7 +544,118 @@ router.patch('/payment-settings/:id/toggle', authRateLimiter, async (request, re
     },
   })
 
-  response.json({ method: updated })
+  response.json({ method: sanitizePaymentMethod(updated) })
+})
+
+router.get('/payments', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const payments = await prisma.payment.findMany({
+    include: {
+      paymentMethod: true,
+      order: {
+        include: {
+          user: { select: { id: true, telegramId: true, firstName: true, username: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  })
+
+  response.json({
+    payments: payments.map((payment) => ({
+      ...sanitizePayment(payment),
+      order: {
+        id: payment.order.id,
+        status: payment.order.status,
+        paymentStatus: payment.order.paymentStatus,
+        total: payment.order.total,
+        user: payment.order.user,
+      },
+    })),
+  })
+})
+
+router.patch('/payments/:id/status', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const paymentId = parsePositiveInt(request.params.id)
+  if (!paymentId) {
+    sendError(response, 400, 'invalid_id', 'Invalid payment id')
+    return
+  }
+
+  const status = typeof request.body.status === 'string' ? request.body.status.trim().toLowerCase() : ''
+  const reason = getTrimmedString(request.body.reason)
+  if (!['processing', 'paid', 'failed', 'cancelled', 'refunded'].includes(status)) {
+    sendError(response, 400, 'invalid_status', 'Unsupported payment status')
+    return
+  }
+  if (!reason) {
+    sendError(response, 400, 'reason_required', 'A reason is required for manual payment status changes')
+    return
+  }
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: { order: true, paymentMethod: true },
+  })
+  if (!payment) {
+    sendError(response, 404, 'not_found', 'Payment not found')
+    return
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const nextPayment = await tx.payment.update({
+      where: { id: paymentId },
+      data: {
+        status,
+        paidAt: status === 'paid' ? new Date() : payment.paidAt,
+        failureReason: ['failed', 'cancelled'].includes(status) ? reason : null,
+      },
+      include: { paymentMethod: true },
+    })
+
+    const orderStatus = status === 'paid'
+      ? 'processing'
+      : status === 'processing'
+        ? 'payment_pending'
+        : payment.order.status
+    const orderPaymentStatus = status
+
+    await tx.order.update({
+      where: { id: payment.orderId },
+      data: {
+        status: orderStatus,
+        paymentStatus: orderPaymentStatus,
+      },
+    })
+
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: payment.orderId,
+        status: orderStatus,
+        comment: `Admin payment update: ${reason}`,
+      },
+    })
+
+    await tx.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'payment_status_updated',
+        entity: 'payment',
+        entityId: paymentId,
+        meta: JSON.stringify({ previousStatus: payment.status, nextStatus: status, reason }),
+      },
+    })
+
+    return nextPayment
+  })
+
+  response.json({ payment: sanitizePayment(updated) })
 })
 
 // PATCH /api/admin/orders/:id/refund

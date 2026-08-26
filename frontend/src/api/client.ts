@@ -14,6 +14,7 @@ import type {
   Discount,
   Language,
   Order,
+  Payment,
   PaymentMethod,
   ProductDetail,
   ProductSummary,
@@ -22,6 +23,7 @@ import type {
   TelegramIdentity,
   UserProfile,
   WishlistItem,
+  AdminPaymentRecord,
 } from '../types'
 
 export function resolveApiUrl(env = (import.meta as { env?: Record<string, string> }).env) {
@@ -208,6 +210,15 @@ export const api = {
   getPaymentMethods() {
     return publicRequest<{ methods: PaymentMethod[] }>('/payments/methods')
   },
+  createOrderPayment(orderId: number) {
+    return publicRequest<{ payment: Payment }>(`/payments/orders/${orderId}/session`, { method: 'POST' })
+  },
+  getPayment(paymentId: number) {
+    return publicRequest<{ payment: Payment }>(`/payments/${paymentId}`)
+  },
+  submitCryptoPayment(paymentId: number, payload: { transactionHash?: string; senderAddress?: string; tonConnectBoc?: string }) {
+    return publicRequest<{ payment: Payment }>(`/payments/${paymentId}/crypto/submit`, { method: 'POST', body: JSON.stringify(payload) })
+  },
 
   adminLogin(data: { password: string }) {
     return adminRequest<{ ok: boolean }>('/admin/auth/login', {
@@ -310,6 +321,12 @@ export const api = {
   },
   toggleAdminPaymentSetting(id: number) {
     return adminRequest<{ method: PaymentMethod }>(`/admin/payment-settings/${id}/toggle`, { method: 'PATCH' })
+  },
+  getAdminPayments() {
+    return adminRequest<{ payments: AdminPaymentRecord[] }>('/admin/payments')
+  },
+  updateAdminPaymentStatus(id: number, data: { status: string; reason: string }) {
+    return adminRequest<{ payment: Payment }>(`/admin/payments/${id}/status`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminCategories() {
     return adminRequest<{ categories: AdminCategory[] }>('/admin/categories')

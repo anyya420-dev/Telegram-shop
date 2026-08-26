@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import { createHmac } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -186,7 +187,7 @@ test('cors allows only production frontend origin and handles preflight', async 
   assert.equal(noOrigin.status, 200)
 })
 
-test('payment settings CRUD and checkout manual payment flow', async () => {
+test('payment settings CRUD, payment sessions, crypto review flow, and duplicate protection', async () => {
   const login = await request('/api/admin/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -199,30 +200,31 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
   const unauthorizedCreate = await request('/api/admin/payment-settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'card', title: 'Card', cardNumber: '1111222233334444', currency: 'USD' }),
+    body: JSON.stringify({ type: 'card', title: 'Card', provider: 'stripe', providerMode: 'test', currency: 'USD' }),
   })
   assert.equal(unauthorizedCreate.status, 401)
 
   const createdCard = await requestJson('/api/admin/payment-settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', cookie: adminCookie },
-    body: JSON.stringify({ type: 'card', title: 'Main Card', cardNumber: '1111222233334444', cardholderName: 'SHOP ADMIN', currency: 'USD' }),
+    body: JSON.stringify({ type: 'card', title: 'Main Card', provider: 'stripe', providerMode: 'test', currency: 'USD', sortOrder: 1 }),
   })
   assert.equal(createdCard.response.status, 201)
   assert.equal(createdCard.body.method.type, 'card')
+  assert.equal(createdCard.body.method.provider, 'stripe')
 
   const createdTon = await requestJson('/api/admin/payment-settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', cookie: adminCookie },
-    body: JSON.stringify({ type: 'ton', title: 'TON Mainnet', walletAddress: 'UQTONMAINNETADDR', network: 'TON Mainnet', currency: 'TON' }),
+    body: JSON.stringify({ type: 'crypto', title: 'TON Mainnet', walletAddress: 'UQTONMAINNETADDR', network: 'TON', asset: 'TON', currency: 'TON', isTonConnectEnabled: true, sortOrder: 2 }),
   })
   assert.equal(createdTon.response.status, 201)
-  assert.equal(createdTon.body.method.type, 'ton')
+  assert.equal(createdTon.body.method.type, 'crypto')
 
   const createdCrypto = await requestJson('/api/admin/payment-settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', cookie: adminCookie },
-    body: JSON.stringify({ type: 'crypto', title: 'USDT TRC20', walletAddress: 'TUSDTADDRESS', network: 'TRC20', currency: 'USDT' }),
+    body: JSON.stringify({ type: 'crypto', title: 'USDT TRC20', walletAddress: 'TUSDTADDRESS', network: 'TRC20', asset: 'USDT', currency: 'USDT', instructions: 'Send exact amount', sortOrder: 3 }),
   })
   assert.equal(createdCrypto.response.status, 201)
   assert.equal(createdCrypto.body.method.type, 'crypto')
@@ -230,10 +232,11 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
   const updatedCrypto = await requestJson(`/api/admin/payment-settings/${createdCrypto.body.method.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', cookie: adminCookie },
-    body: JSON.stringify({ title: 'USDT TRC20 Wallet 1' }),
+    body: JSON.stringify({ title: 'USDT TRC20 Wallet 1', displayName: 'USDT — TRC20', walletAddress: 'TUSDTADDRESS2' }),
   })
   assert.equal(updatedCrypto.response.status, 200)
   assert.equal(updatedCrypto.body.method.title, 'USDT TRC20 Wallet 1')
+  assert.equal(updatedCrypto.body.method.walletAddress, 'TUSDTADDRESS2')
 
   const toggledTon = await requestJson(`/api/admin/payment-settings/${createdTon.body.method.id}/toggle`, {
     method: 'PATCH',
@@ -298,9 +301,11 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
   })
   assert.equal(enabledMethods.response.status, 200)
   assert.equal(enabledMethods.body.methods.some((method: any) => method.id === createdTon.body.method.id), false)
-  const cryptoMethod = enabledMethods.body.methods.find((method: any) => method.type === 'crypto')
+  const cryptoMethod = enabledMethods.body.methods.find((method: any) => method.id === createdCrypto.body.method.id)
   assert.ok(cryptoMethod)
-  assert.equal(Boolean(cryptoMethod.network && cryptoMethod.walletAddress), true)
+  assert.equal(cryptoMethod.asset, 'USDT')
+  assert.equal(cryptoMethod.network, 'TRC20')
+  assert.equal(Boolean(cryptoMethod.walletAddress), true)
 
   const checkout = await requestJson('/api/orders', {
     method: 'POST',
@@ -308,31 +313,169 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
     body: JSON.stringify({ paymentMethodId: createdCard.body.method.id }),
   })
   assert.equal(checkout.response.status, 200)
-  assert.equal(checkout.body.order.paymentStatus, 'unpaid')
+  assert.equal(checkout.body.order.paymentStatus, 'pending')
   assert.equal(checkout.body.order.status, 'pending')
+  assert.equal(checkout.body.order.payments.length, 1)
+
+  const cardSession = await requestJson(`/api/payments/orders/${checkout.body.order.id}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(cardSession.response.status, 201)
+  assert.equal(cardSession.body.payment.amount, 50)
+  assert.equal(cardSession.body.payment.paymentMethod.type, 'card')
+  assert.equal(cardSession.body.payment.checkoutUrl ?? null, null)
 
   const markPaid = await requestJson(`/api/orders/${checkout.body.order.id}/mark-paid`, {
     method: 'POST',
     headers: { 'X-Session-Token': sessionToken },
   })
-  assert.equal(markPaid.response.status, 200)
-  assert.equal(markPaid.body.order.paymentStatus, 'pending')
-  assert.equal(markPaid.body.order.status, 'payment_pending')
+  assert.equal(markPaid.response.status, 400)
+  assert.equal(markPaid.body.code, 'invalid_payment_type')
+
+  const cryptoCheckout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: authHeader,
+    body: JSON.stringify({ paymentMethodId: createdCrypto.body.method.id }),
+  })
+  assert.equal(cryptoCheckout.response.status, 200)
+  assert.equal(cryptoCheckout.body.order.payments[0].network, 'TRC20')
+
+  const cryptoSession = await requestJson(`/api/payments/orders/${cryptoCheckout.body.order.id}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(cryptoSession.response.status, 201)
+  assert.equal(cryptoSession.body.payment.recipient, 'TUSDTADDRESS2')
+  assert.equal(cryptoSession.body.payment.status, 'pending')
+
+  const cryptoSubmit = await requestJson(`/api/payments/${cryptoSession.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: authHeader,
+    body: JSON.stringify({ transactionHash: 'TRX_HASH_1234567890ABCDEF', senderAddress: 'TSENDER12345' }),
+  })
+  assert.equal(cryptoSubmit.response.status, 200)
+  assert.equal(cryptoSubmit.body.payment.status, 'processing')
 
   const pendingOrders = await requestJson('/api/admin/orders?status=payment_pending', {
     headers: { cookie: adminCookie },
   })
   assert.equal(pendingOrders.response.status, 200)
-  assert.equal(pendingOrders.body.orders.some((order: any) => order.id === checkout.body.order.id), true)
+  assert.equal(pendingOrders.body.orders.some((order: any) => order.id === cryptoCheckout.body.order.id), true)
 
-  const confirmPayment = await requestJson(`/api/admin/orders/${checkout.body.order.id}/payment`, {
+  const adminPayments = await requestJson('/api/admin/payments', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(adminPayments.response.status, 200)
+  assert.equal(adminPayments.body.payments.some((payment: any) => payment.id === cryptoSession.body.payment.id), true)
+
+  const confirmPayment = await requestJson(`/api/admin/payments/${cryptoSession.body.payment.id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', cookie: adminCookie },
-    body: JSON.stringify({ action: 'confirm' }),
+    body: JSON.stringify({ status: 'paid', reason: 'Confirmed on-chain transfer' }),
   })
   assert.equal(confirmPayment.response.status, 200)
-  assert.equal(confirmPayment.body.order.paymentStatus, 'confirmed')
-  assert.equal(confirmPayment.body.order.status, 'confirmed')
+  assert.equal(confirmPayment.body.payment.status, 'paid')
+
+  const duplicateCheckout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: authHeader,
+    body: JSON.stringify({ paymentMethodId: createdCrypto.body.method.id }),
+  })
+  const duplicateSession = await requestJson(`/api/payments/orders/${duplicateCheckout.body.order.id}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  const duplicateSubmit = await requestJson(`/api/payments/${duplicateSession.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: authHeader,
+    body: JSON.stringify({ transactionHash: 'TRX_HASH_1234567890ABCDEF' }),
+  })
+  assert.equal(duplicateSubmit.response.status, 409)
+  assert.equal(duplicateSubmit.body.code, 'transaction_already_used')
+})
+
+test('stripe webhook verifies signature, marks payment paid, and ignores duplicate callbacks', async () => {
+  process.env.STRIPE_TEST_WEBHOOK_SECRET = 'whsec_test_payment'
+
+  const telegramId = '900000011'
+  const user = await prisma.user.create({
+    data: { telegramId, firstName: 'Stripe', username: 'stripe_user', language: 'ru' },
+  })
+  const city = await prisma.city.create({ data: { name: 'Stripe City', nameEn: 'Stripe City', isActive: true } })
+  const category = await prisma.category.create({ data: { name: 'Stripe Category', nameEn: 'Stripe Category', isActive: true } })
+  const product = await prisma.product.create({
+    data: { name: 'Stripe Product', price: 19, categoryId: category.id, isActive: true },
+  })
+  const productCity = await prisma.productCity.create({
+    data: { productId: product.id, cityId: city.id, stock: 10, minimumQuantity: 1, quantityStep: 1, maximumQuantity: 10, unit: 'шт.', isAvailable: true },
+  })
+  const method = await prisma.paymentMethod.create({
+    data: { type: 'card', title: 'Stripe Card', provider: 'stripe', providerMode: 'test', currency: 'USD', isEnabled: true },
+  })
+  await prisma.user.update({ where: { id: user.id }, data: { selectedCityId: city.id } })
+  const cart = await prisma.cart.create({ data: { userId: user.id } })
+  await prisma.cartItem.create({ data: { cartId: cart.id, productCityId: productCity.id, quantity: 2 } })
+
+  const token = createSessionToken!(telegramId)
+  const checkout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: method.id }),
+  })
+  assert.equal(checkout.response.status, 200)
+
+  const sessionResponse = await requestJson(`/api/payments/orders/${checkout.body.order.id}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(sessionResponse.response.status, 201)
+
+  const paymentId = sessionResponse.body.payment.id
+  const payload = JSON.stringify({
+    type: 'checkout.session.completed',
+    data: {
+      object: {
+        id: 'cs_test_123',
+        payment_intent: 'pi_test_123',
+        metadata: { paymentId: String(paymentId) },
+      },
+    },
+  })
+  const timestamp = Math.floor(Date.now() / 1000)
+  const signature = createHmac('sha256', process.env.STRIPE_TEST_WEBHOOK_SECRET!).update(`${timestamp}.${payload}`).digest('hex')
+
+  const invalidWebhook = await request('/api/payments/webhooks/stripe?mode=test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'stripe-signature': `t=${timestamp},v1=invalid` },
+    body: payload,
+  })
+  assert.equal(invalidWebhook.status, 400)
+
+  const validWebhook = await request('/api/payments/webhooks/stripe?mode=test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'stripe-signature': `t=${timestamp},v1=${signature}` },
+    body: payload,
+  })
+  assert.equal(validWebhook.status, 200)
+
+  const paidPayment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })
+  assert.equal(paidPayment.status, 'paid')
+  assert.equal(paidPayment.providerSessionId, 'cs_test_123')
+  assert.equal(paidPayment.providerPaymentId, 'pi_test_123')
+
+  const paidOrder = await prisma.order.findUniqueOrThrow({ where: { id: checkout.body.order.id } })
+  assert.equal(paidOrder.paymentStatus, 'paid')
+  assert.equal(paidOrder.status, 'processing')
+
+  const duplicateWebhook = await request('/api/payments/webhooks/stripe?mode=test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'stripe-signature': `t=${timestamp},v1=${signature}` },
+    body: payload,
+  })
+  assert.equal(duplicateWebhook.status, 200)
+  const duplicateBody = await duplicateWebhook.json()
+  assert.equal(duplicateBody.duplicated, true)
 })
 
 test('cart and checkout enforce quantity, delivery, stock, and cart clearing rules', async () => {
@@ -372,8 +515,8 @@ test('cart and checkout enforce quantity, delivery, stock, and cart clearing rul
     data: {
       type: 'card',
       title: 'Checkout Card',
-      cardNumber: '5555444433332222',
-      cardholderName: 'SHOP',
+      provider: 'stripe',
+      providerMode: 'test',
       currency: 'USD',
       isEnabled: true,
     },
@@ -521,7 +664,7 @@ test('customer auth rejects invalid sessions and blocks access to other users or
       status: 'pending',
       subtotal: 15,
       total: 15,
-      paymentStatus: 'unpaid',
+      paymentStatus: 'pending',
     },
   })
 

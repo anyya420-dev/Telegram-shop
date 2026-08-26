@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
 type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments';
@@ -67,6 +67,22 @@ type DeliveryEditDraft = Partial<{
   price: string;
   isActive: boolean;
   sortOrder: string;
+}>;
+
+type PaymentEditDraft = Partial<{
+  title: string;
+  currency: string;
+  provider: string;
+  providerMode: string;
+  providerKey: string;
+  providerConfig: string;
+  asset: string;
+  network: string;
+  walletAddress: string;
+  displayName: string;
+  instructions: string;
+  sortOrder: string;
+  isTonConnectEnabled: boolean;
 }>;
 
 const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
@@ -163,6 +179,7 @@ export default function AdminPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [paymentRecords, setPaymentRecords] = useState<AdminPaymentRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [newCode, setNewCode] = useState('');
@@ -187,10 +204,20 @@ export default function AdminPage() {
   const [newPaymentType, setNewPaymentType] = useState<PaymentMethod['type']>('card');
   const [newPaymentTitle, setNewPaymentTitle] = useState('');
   const [newPaymentCurrency, setNewPaymentCurrency] = useState('');
+  const [newPaymentProvider, setNewPaymentProvider] = useState('');
+  const [newPaymentProviderMode, setNewPaymentProviderMode] = useState('test');
+  const [newPaymentProviderKey, setNewPaymentProviderKey] = useState('');
+  const [newPaymentProviderConfig, setNewPaymentProviderConfig] = useState('');
+  const [newPaymentAsset, setNewPaymentAsset] = useState('');
   const [newPaymentNetwork, setNewPaymentNetwork] = useState('');
   const [newPaymentWalletAddress, setNewPaymentWalletAddress] = useState('');
-  const [newPaymentCardNumber, setNewPaymentCardNumber] = useState('');
-  const [newPaymentCardholderName, setNewPaymentCardholderName] = useState('');
+  const [newPaymentDisplayName, setNewPaymentDisplayName] = useState('');
+  const [newPaymentInstructions, setNewPaymentInstructions] = useState('');
+  const [newPaymentSortOrder, setNewPaymentSortOrder] = useState('0');
+  const [newPaymentTonConnectEnabled, setNewPaymentTonConnectEnabled] = useState(false);
+  const [editingPaymentMethod, setEditingPaymentMethod] = useState<number | null>(null);
+  const [paymentMethodEdits, setPaymentMethodEdits] = useState<Record<number, PaymentEditDraft>>({});
+  const [paymentStatusReason, setPaymentStatusReason] = useState<Record<number, string>>({});
 
   const [newCityName, setNewCityName] = useState('');
   const [newCityNameEn, setNewCityNameEn] = useState('');
@@ -331,8 +358,9 @@ export default function AdminPage() {
         const response = await api.getAuditLogs();
         setAuditLogs(response.logs);
       } else if (tabName === 'payments') {
-        const response = await api.getAdminPaymentSettings();
-        setPaymentMethods(response.methods);
+        const [methodsResponse, paymentsResponse] = await Promise.all([api.getAdminPaymentSettings(), api.getAdminPayments()]);
+        setPaymentMethods(methodsResponse.methods);
+        setPaymentRecords(paymentsResponse.payments);
       }
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to load admin data'));
@@ -667,20 +695,61 @@ export default function AdminPage() {
         type: newPaymentType,
         title: newPaymentTitle.trim(),
         currency: newPaymentCurrency.trim() || undefined,
+        provider: newPaymentProvider.trim() || undefined,
+        providerMode: newPaymentProviderMode,
+        providerKey: newPaymentProviderKey.trim() || undefined,
+        providerConfig: newPaymentProviderConfig.trim() || undefined,
+        asset: newPaymentAsset.trim() || undefined,
         network: newPaymentNetwork.trim() || undefined,
         walletAddress: newPaymentWalletAddress.trim() || undefined,
-        cardNumber: newPaymentCardNumber.trim() || undefined,
-        cardholderName: newPaymentCardholderName.trim() || undefined,
+        displayName: newPaymentDisplayName.trim() || undefined,
+        instructions: newPaymentInstructions.trim() || undefined,
+        sortOrder: Number(newPaymentSortOrder) || 0,
+        isTonConnectEnabled: newPaymentTonConnectEnabled,
       });
-      setPaymentMethods((current) => [...current, response.method]);
+      setPaymentMethods((current) => [...current, response.method].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id));
       setNewPaymentTitle('');
       setNewPaymentCurrency('');
+      setNewPaymentProvider('');
+      setNewPaymentProviderMode('test');
+      setNewPaymentProviderKey('');
+      setNewPaymentProviderConfig('');
+      setNewPaymentAsset('');
       setNewPaymentNetwork('');
       setNewPaymentWalletAddress('');
-      setNewPaymentCardNumber('');
-      setNewPaymentCardholderName('');
+      setNewPaymentDisplayName('');
+      setNewPaymentInstructions('');
+      setNewPaymentSortOrder('0');
+      setNewPaymentTonConnectEnabled(false);
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to create payment method'));
+    }
+  }
+
+  async function handleSavePaymentMethod(id: number) {
+    const edits = paymentMethodEdits[id]
+    if (!edits) return
+    setError(null)
+    try {
+      const response = await api.updateAdminPaymentSetting(id, {
+        title: edits.title,
+        currency: edits.currency,
+        provider: edits.provider,
+        providerMode: edits.providerMode,
+        providerKey: edits.providerKey,
+        providerConfig: edits.providerConfig,
+        asset: edits.asset,
+        network: edits.network,
+        walletAddress: edits.walletAddress,
+        displayName: edits.displayName,
+        instructions: edits.instructions,
+        sortOrder: typeof edits.sortOrder === 'string' ? Number(edits.sortOrder) : undefined,
+        isTonConnectEnabled: edits.isTonConnectEnabled,
+      })
+      setPaymentMethods((current) => current.map((method) => (method.id === id ? response.method : method)).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id))
+      setEditingPaymentMethod(null)
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update payment method'))
     }
   }
 
@@ -701,6 +770,23 @@ export default function AdminPage() {
       setPaymentMethods((current) => current.filter((method) => method.id !== id));
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to delete payment method'));
+    }
+
+    async function handlePaymentStatusChange(paymentId: number, status: string) {
+      const reason = paymentStatusReason[paymentId]?.trim()
+      if (!reason) {
+        setError('Reason is required')
+        return
+      }
+      setError(null)
+      try {
+        const response = await api.updateAdminPaymentStatus(paymentId, { status, reason })
+        setPaymentRecords((current) => current.map((payment) => (payment.id === paymentId ? { ...payment, ...response.payment } : payment)))
+        setPaymentStatusReason((current) => ({ ...current, [paymentId]: '' }))
+        await loadTab('orders')
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to update payment status'))
+      }
     }
   }
 
@@ -854,7 +940,7 @@ export default function AdminPage() {
                       <span className={styles.refundTag}>Refund: {order.refundStatus}</span>
                     )}
                   </div>
-                  {order.status === 'payment_pending' && order.paymentStatus === 'pending' && (
+                  {order.status === 'payment_pending' && ['pending', 'processing'].includes(order.paymentStatus ?? '') && (
                     <div className={styles.replyRow}>
                       <button className={styles.replyBtn} onClick={() => void handleConfirmPendingPayment(order.id)}>
                         {t('admin.confirmPayment', { defaultValue: 'Confirm payment' })}
@@ -1443,21 +1529,34 @@ export default function AdminPage() {
             <div className={styles.formRow}>
               <select className={styles.select} value={newPaymentType} onChange={(event) => setNewPaymentType(event.target.value as PaymentMethod['type'])}>
                 <option value="card">Card</option>
-                <option value="ton">TON</option>
                 <option value="crypto">Crypto</option>
               </select>
               <input className={styles.input} placeholder={t('admin.methodTitle', { defaultValue: 'Title' })} value={newPaymentTitle} onChange={(event) => setNewPaymentTitle(event.target.value)} />
             </div>
             <div className={styles.formRow}>
               <input className={styles.input} placeholder={t('checkout.currency', { defaultValue: 'Currency' })} value={newPaymentCurrency} onChange={(event) => setNewPaymentCurrency(event.target.value)} />
+              <input className={styles.input} placeholder={t('checkout.asset', { defaultValue: 'Asset' })} value={newPaymentAsset} onChange={(event) => setNewPaymentAsset(event.target.value)} />
               <input className={styles.input} placeholder={t('checkout.network', { defaultValue: 'Network' })} value={newPaymentNetwork} onChange={(event) => setNewPaymentNetwork(event.target.value)} />
             </div>
             <div className={styles.formRow}>
-              <input className={styles.input} placeholder={t('checkout.walletAddress', { defaultValue: 'Wallet address' })} value={newPaymentWalletAddress} onChange={(event) => setNewPaymentWalletAddress(event.target.value)} />
+              <input className={styles.input} placeholder={t('admin.provider', { defaultValue: 'Provider' })} value={newPaymentProvider} onChange={(event) => setNewPaymentProvider(event.target.value)} />
+              <select className={styles.select} value={newPaymentProviderMode} onChange={(event) => setNewPaymentProviderMode(event.target.value)}>
+                <option value="test">Test</option>
+                <option value="live">Live</option>
+              </select>
+              <input className={styles.input} placeholder={t('admin.providerKey', { defaultValue: 'Provider key / public id' })} value={newPaymentProviderKey} onChange={(event) => setNewPaymentProviderKey(event.target.value)} />
             </div>
             <div className={styles.formRow}>
-              <input className={styles.input} placeholder={t('checkout.cardNumber', { defaultValue: 'Card number' })} value={newPaymentCardNumber} onChange={(event) => setNewPaymentCardNumber(event.target.value)} />
-              <input className={styles.input} placeholder={t('checkout.cardholder', { defaultValue: 'Cardholder (optional)' })} value={newPaymentCardholderName} onChange={(event) => setNewPaymentCardholderName(event.target.value)} />
+              <input className={styles.input} placeholder={t('admin.displayName', { defaultValue: 'Display name' })} value={newPaymentDisplayName} onChange={(event) => setNewPaymentDisplayName(event.target.value)} />
+              <input className={styles.input} placeholder={t('checkout.walletAddress', { defaultValue: 'Wallet address' })} value={newPaymentWalletAddress} onChange={(event) => setNewPaymentWalletAddress(event.target.value)} />
+              <input className={styles.input} type="number" placeholder={t('admin.sortOrder', { defaultValue: 'Sort order' })} value={newPaymentSortOrder} onChange={(event) => setNewPaymentSortOrder(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder={t('admin.providerConfig', { defaultValue: 'Provider config / identifier' })} value={newPaymentProviderConfig} onChange={(event) => setNewPaymentProviderConfig(event.target.value)} />
+              <input className={styles.input} placeholder={t('admin.instructions', { defaultValue: 'Payment instructions' })} value={newPaymentInstructions} onChange={(event) => setNewPaymentInstructions(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <label className={styles.checkLabel}><input type="checkbox" checked={newPaymentTonConnectEnabled} onChange={(event) => setNewPaymentTonConnectEnabled(event.target.checked)} /> TON Connect</label>
             </div>
             <button className={styles.createBtn} onClick={() => void handleCreatePaymentMethod()} disabled={!newPaymentTitle.trim()}>
               {t('common.save', { defaultValue: 'Save' })}
@@ -1467,20 +1566,108 @@ export default function AdminPage() {
           <div className={styles.discountList}>
             {paymentMethods.map((method) => (
               <div key={method.id} className={styles.discountCard}>
-                <div>
-                  <div className={styles.discountCode}>{method.title}</div>
-                  <div>{method.type.toUpperCase()} {method.currency ? `• ${method.currency}` : ''} {method.network ? `• ${method.network}` : ''}</div>
-                </div>
-                <div className={styles.replyRow}>
-                  <button className={styles.replyBtn} onClick={() => void handleTogglePaymentMethod(method.id)}>
-                    {method.isEnabled ? t('admin.disable', { defaultValue: 'Disable' }) : t('admin.enable', { defaultValue: 'Enable' })}
-                  </button>
-                  <button className={styles.replyBtn} onClick={() => void handleDeletePaymentMethod(method.id)}>
-                    {t('common.delete', { defaultValue: 'Delete' })}
-                  </button>
-                </div>
+                {editingPaymentMethod === method.id ? (
+                  <div className={styles.form}>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.title ?? method.title} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], title: event.target.value } }))} />
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.currency ?? (method.currency ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], currency: event.target.value } }))} />
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.asset ?? (method.asset ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], asset: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.provider ?? (method.provider ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], provider: event.target.value } }))} />
+                      <select className={styles.select} value={paymentMethodEdits[method.id]?.providerMode ?? (method.providerMode ?? 'test')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], providerMode: event.target.value } }))}>
+                        <option value="test">Test</option>
+                        <option value="live">Live</option>
+                      </select>
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.providerKey ?? (method.providerKey ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], providerKey: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.network ?? (method.network ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], network: event.target.value } }))} />
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.walletAddress ?? (method.walletAddress ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], walletAddress: event.target.value } }))} />
+                      <input className={styles.input} type="number" value={paymentMethodEdits[method.id]?.sortOrder ?? String(method.sortOrder ?? 0)} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], sortOrder: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.displayName ?? (method.displayName ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], displayName: event.target.value } }))} />
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.providerConfig ?? (method.providerConfig ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], providerConfig: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} value={paymentMethodEdits[method.id]?.instructions ?? (method.instructions ?? '')} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], instructions: event.target.value } }))} />
+                      <label className={styles.checkLabel}><input type="checkbox" checked={paymentMethodEdits[method.id]?.isTonConnectEnabled ?? Boolean(method.isTonConnectEnabled)} onChange={(event) => setPaymentMethodEdits((current) => ({ ...current, [method.id]: { ...current[method.id], isTonConnectEnabled: event.target.checked } }))} /> TON Connect</label>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleSavePaymentMethod(method.id)}>{t('common.save', { defaultValue: 'Save' })}</button>
+                      <button className={styles.replyBtn} onClick={() => setEditingPaymentMethod(null)}>{t('common.cancel', { defaultValue: 'Cancel' })}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <div className={styles.discountCode}>{method.title}</div>
+                      <div>
+                        {method.type.toUpperCase()}
+                        {method.provider ? ` • ${method.provider}` : ''}
+                        {method.asset ? ` • ${method.asset}` : ''}
+                        {method.network ? ` • ${method.network}` : ''}
+                        {method.walletAddress ? ` • ${method.walletAddress}` : ''}
+                      </div>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => setEditingPaymentMethod(method.id)}>
+                        {t('common.edit', { defaultValue: 'Edit' })}
+                      </button>
+                      <button className={styles.replyBtn} onClick={() => void handleTogglePaymentMethod(method.id)}>
+                        {method.isEnabled ? t('admin.disable', { defaultValue: 'Disable' }) : t('admin.enable', { defaultValue: 'Enable' })}
+                      </button>
+                      <button className={styles.replyBtn} onClick={() => void handleDeletePaymentMethod(method.id)}>
+                        {t('common.delete', { defaultValue: 'Delete' })}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
+          </div>
+
+          <div className={styles.form} style={{ marginTop: 16 }}>
+            <h3 className={styles.formTitle}>{t('admin.paymentRecords', { defaultValue: 'Payment records' })}</h3>
+            <div className={styles.orderList}>
+              {paymentRecords.map((payment) => (
+                <div key={payment.id} className={styles.orderCard}>
+                  <div className={styles.orderHeader}>
+                    <span className={styles.orderId}>Payment #{payment.id}</span>
+                    <span className={styles.orderTotal}>{formatCurrency(payment.amount, language)}</span>
+                  </div>
+                  <p className={styles.orderMeta}>
+                    Order #{payment.orderId} • {payment.paymentMethod?.title ?? 'Unknown method'} • {payment.status}
+                  </p>
+                  <p className={styles.orderMeta}>
+                    {payment.asset ?? payment.currency ?? '—'} {payment.network ? `• ${payment.network}` : ''} {payment.providerPaymentId ? `• ${payment.providerPaymentId}` : ''} {payment.transactionHash ? `• ${payment.transactionHash}` : ''}
+                  </p>
+                  {payment.order?.user && (
+                    <p className={styles.orderMeta}>
+                      {payment.order.user.firstName}{payment.order.user.username ? ` @${payment.order.user.username}` : ''} • TG: {payment.order.user.telegramId}
+                    </p>
+                  )}
+                  <p className={styles.orderMeta}>
+                    {new Date(payment.createdAt).toLocaleString()} {payment.paidAt ? `• Paid ${new Date(payment.paidAt).toLocaleString()}` : ''}
+                  </p>
+                  <div className={styles.formRow}>
+                    <input
+                      className={styles.input}
+                      placeholder={t('admin.reason', { defaultValue: 'Reason' })}
+                      value={paymentStatusReason[payment.id] ?? ''}
+                      onChange={(event) => setPaymentStatusReason((current) => ({ ...current, [payment.id]: event.target.value }))}
+                    />
+                  </div>
+                  <div className={styles.replyRow}>
+                    {payment.status !== 'paid' && <button className={styles.replyBtn} onClick={() => void handlePaymentStatusChange(payment.id, 'paid')}>Mark paid</button>}
+                    {payment.status !== 'processing' && <button className={styles.replyBtn} onClick={() => void handlePaymentStatusChange(payment.id, 'processing')}>Processing</button>}
+                    {payment.status !== 'failed' && <button className={styles.replyBtn} onClick={() => void handlePaymentStatusChange(payment.id, 'failed')}>Fail</button>}
+                    {payment.status !== 'cancelled' && <button className={styles.replyBtn} onClick={() => void handlePaymentStatusChange(payment.id, 'cancelled')}>Cancel</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

@@ -118,14 +118,46 @@ export type DeliveryOption = {
 
 export type PaymentMethod = {
   id: number
-  type: 'card' | 'ton' | 'crypto'
+  type: 'card' | 'crypto'
   title: string
-  cardNumber: string | null
-  cardholderName: string | null
   currency: string | null
+  provider?: string | null
+  providerMode?: string | null
+  providerKey?: string | null
+  providerConfig?: string | null
+  asset?: string | null
   network: string | null
   walletAddress: string | null
+  displayName?: string | null
+  instructions?: string | null
+  sortOrder?: number
+  isTonConnectEnabled?: boolean
   isEnabled: boolean
+}
+
+export type Payment = {
+  id: number
+  orderId: number
+  paymentMethodId: number
+  status: string
+  amount: number
+  currency: string | null
+  asset?: string | null
+  network: string | null
+  provider?: string | null
+  providerPaymentId?: string | null
+  providerSessionId?: string | null
+  checkoutUrl?: string | null
+  recipient?: string | null
+  senderAddress?: string | null
+  transactionHash?: string | null
+  referenceCode?: string | null
+  failureReason?: string | null
+  paidAt?: string | null
+  expiresAt?: string | null
+  createdAt: string
+  updatedAt: string
+  paymentMethod?: PaymentMethod
 }
 
 export type Order = {
@@ -149,6 +181,7 @@ export type Order = {
   paymentMethod: PaymentMethod | null
   deliveryOption: DeliveryOption | null
   discount: { id: number; code: string } | null
+  payments?: Payment[]
 }
 
 export type BalanceTransaction = {
@@ -281,4 +314,19 @@ export type AdminDeliveryOption = DeliveryOption & {
   isActive?: boolean
   sortOrder?: number
   nameEn?: string | null
+}
+
+export type AdminPaymentRecord = Payment & {
+  order?: {
+    id: number
+    status: string
+    paymentStatus: string | null
+    total: number
+    user: {
+      id: number
+      telegramId: string
+      firstName: string
+      username: string | null
+    }
+  }
 }

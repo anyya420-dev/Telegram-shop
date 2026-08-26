@@ -139,26 +139,69 @@ model Order {
   deliveryOption DeliveryOption?      @relation(fields: [deliveryOptionId], references: [id])
   discount       Discount?            @relation(fields: [discountId], references: [id])
   statusHistory  OrderStatusHistory[]
+  payments       Payment[]
 
   @@map("orders")
 }
 
 model PaymentMethod {
-  id             Int      @id @default(autoincrement())
-  type           String   // card | ton | crypto
-  title          String
-  cardNumber     String?  @map("card_number")
-  cardholderName String?  @map("cardholder_name")
-  currency       String?
-  network        String?
-  walletAddress  String?  @map("wallet_address")
-  isEnabled      Boolean  @default(true) @map("is_enabled")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id                  Int       @id @default(autoincrement())
+  type                String    // card | crypto
+  title               String
+  cardNumber          String?   @map("card_number")
+  cardholderName      String?   @map("cardholder_name")
+  currency            String?
+  provider            String?
+  providerMode        String?   @map("provider_mode")
+  providerKey         String?   @map("provider_key")
+  providerConfig      String?   @map("provider_config")
+  asset               String?
+  network             String?
+  walletAddress       String?   @map("wallet_address")
+  displayName         String?   @map("display_name")
+  instructions        String?
+  sortOrder           Int       @default(0) @map("sort_order")
+  isTonConnectEnabled Boolean   @default(false) @map("is_ton_connect_enabled")
+  isEnabled           Boolean   @default(true) @map("is_enabled")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  orders Order[]
+  orders   Order[]
+  payments Payment[]
 
   @@map("payment_methods")
+}
+
+model Payment {
+  id                Int       @id @default(autoincrement())
+  orderId           Int       @map("order_id")
+  paymentMethodId   Int       @map("payment_method_id")
+  status            String    @default("pending")
+  amount            Float
+  currency          String?
+  asset             String?
+  network           String?
+  provider          String?
+  providerPaymentId String?   @unique @map("provider_payment_id")
+  providerSessionId String?   @unique @map("provider_session_id")
+  checkoutUrl       String?   @map("checkout_url")
+  recipient         String?
+  senderAddress     String?   @map("sender_address")
+  transactionHash   String?   @unique @map("transaction_hash")
+  referenceCode     String?   @unique @map("reference_code")
+  metadata          String?
+  failureReason     String?   @map("failure_reason")
+  paidAt            DateTime? @map("paid_at")
+  expiresAt         DateTime? @map("expires_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@index([status, expiresAt])
+  @@map("payments")
 }
 
 model OrderItem {
