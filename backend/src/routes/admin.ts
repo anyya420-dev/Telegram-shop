@@ -178,6 +178,32 @@ async function getAdminUser(request: Request, response: Response) {
   return { id: session.id } satisfies AdminContext
 }
 
+function sanitizeTelegramBot(bot: {
+  id: number
+  token: string
+  botId: string
+  username: string
+  firstName: string
+  isActive: boolean
+  webAppUrl: string | null
+  menuText: string | null
+  createdAt: Date
+  updatedAt: Date
+}) {
+  return {
+    id: bot.id,
+    botId: bot.botId,
+    username: bot.username,
+    firstName: bot.firstName,
+    isActive: bot.isActive,
+    webAppUrl: bot.webAppUrl,
+    menuText: bot.menuText,
+    maskedToken: `*****${bot.token.slice(-4)}`,
+    createdAt: bot.createdAt,
+    updatedAt: bot.updatedAt,
+  }
+}
+
 router.post('/auth/login', authRateLimiter, async (request, response) => {
   await ensureAdminPasswordFromEnv()
 
@@ -2059,6 +2085,479 @@ router.post('/casino/credits/adjust', authRateLimiter, async (request, response)
   } catch (error) {
     sendError(response, 400, 'invalid_adjustment', error instanceof Error ? error.message : 'Invalid adjustment')
   }
+})
+
+router.get('/operators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const operators = await prisma.operator.findMany({
+    orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+  })
+
+  response.json({ operators })
+})
+
+router.post('/operators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const telegramId = getTrimmedString(request.body.telegramId)
+  const firstName = getTrimmedString(request.body.firstName)
+  const lastName = getOptionalTrimmedString(request.body.lastName)
+  const username = getOptionalTrimmedString(request.body.username)
+  const notes = getOptionalTrimmedString(request.body.notes)
+
+  if (!telegramId) {
+    sendError(response, 400, 'telegram_id_required', 'Telegram id is required')
+    return
+  }
+  if (!firstName) {
+    sendError(response, 400, 'first_name_required', 'First name is required')
+    return
+  }
+
+  const existing = await prisma.operator.findUnique({ where: { telegramId } })
+  if (existing) {
+    sendError(response, 409, 'operator_exists', 'Operator with this Telegram id already exists')
+    return
+  }
+
+  const operator = await prisma.operator.create({
+    data: {
+      telegramId,
+      firstName,
+      lastName,
+      username,
+      notes,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'operator_created',
+      entity: 'operator',
+      entityId: operator.id,
+      meta: JSON.stringify({ telegramId: operator.telegramId }),
+    },
+  })
+
+  response.status(201).json({ operator })
+})
+
+router.patch('/operators/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const operatorId = parsePositiveInt(request.params.id)
+  if (!operatorId) {
+    sendError(response, 400, 'invalid_id', 'Invalid operator id')
+    return
+  }
+
+  const existing = await prisma.operator.findUnique({ where: { id: operatorId } })
+  if (!existing) {
+    sendError(response, 404, 'not_found', 'Operator not found')
+    return
+  }
+
+  const data: {
+    telegramId?: string
+    firstName?: string
+    lastName?: string | null
+    username?: string | null
+    notes?: string | null
+    isActive?: boolean
+  } = {}
+
+  if (request.body.telegramId !== undefined) {
+    const telegramId = getTrimmedString(request.body.telegramId)
+    if (!telegramId) {
+      sendError(response, 400, 'telegram_id_required', 'Telegram id is required')
+      return
+    }
+    const duplicate = await prisma.operator.findFirst({
+      where: {
+        telegramId,
+        id: { not: operatorId },
+      },
+      select: { id: true },
+    })
+    if (duplicate) {
+      sendError(response, 409, 'operator_exists', 'Operator with this Telegram id already exists')
+      return
+    }
+    data.telegramId = telegramId
+  }
+
+  if (request.body.firstName !== undefined) {
+    const firstName = getTrimmedString(request.body.firstName)
+    if (!firstName) {
+      sendError(response, 400, 'first_name_required', 'First name is required')
+      return
+    }
+    data.firstName = firstName
+  }
+
+  if (request.body.lastName !== undefined) {
+    data.lastName = getOptionalTrimmedString(request.body.lastName)
+  }
+  if (request.body.username !== undefined) {
+    data.username = getOptionalTrimmedString(request.body.username)
+  }
+  if (request.body.notes !== undefined) {
+    data.notes = getOptionalTrimmedString(request.body.notes)
+  }
+  if (typeof request.body.isActive === 'boolean') {
+    data.isActive = request.body.isActive
+  }
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid operator fields provided')
+    return
+  }
+
+  const operator = await prisma.operator.update({
+    where: { id: operatorId },
+    data,
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'operator_updated',
+      entity: 'operator',
+      entityId: operator.id,
+      meta: JSON.stringify(data),
+    },
+  })
+
+  response.json({ operator })
+})
+
+router.delete('/operators/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const operatorId = parsePositiveInt(request.params.id)
+  if (!operatorId) {
+    sendError(response, 400, 'invalid_id', 'Invalid operator id')
+    return
+  }
+
+  const operator = await prisma.operator.findUnique({ where: { id: operatorId } })
+  if (!operator) {
+    sendError(response, 404, 'not_found', 'Operator not found')
+    return
+  }
+
+  await prisma.$transaction([
+    prisma.order.updateMany({
+      where: { operatorId },
+      data: { operatorId: null },
+    }),
+    prisma.operator.delete({ where: { id: operatorId } }),
+    prisma.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'operator_deleted',
+        entity: 'operator',
+        entityId: operatorId,
+        meta: JSON.stringify({ telegramId: operator.telegramId }),
+      },
+    }),
+  ])
+
+  response.json({ ok: true })
+})
+
+router.patch('/operators/:id/toggle', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const operatorId = parsePositiveInt(request.params.id)
+  if (!operatorId) {
+    sendError(response, 400, 'invalid_id', 'Invalid operator id')
+    return
+  }
+
+  const existing = await prisma.operator.findUnique({ where: { id: operatorId } })
+  if (!existing) {
+    sendError(response, 404, 'not_found', 'Operator not found')
+    return
+  }
+
+  const operator = await prisma.operator.update({
+    where: { id: operatorId },
+    data: { isActive: !existing.isActive },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'operator_toggled',
+      entity: 'operator',
+      entityId: operator.id,
+      meta: JSON.stringify({ isActive: operator.isActive }),
+    },
+  })
+
+  response.json({ operator })
+})
+
+router.post('/orders/:id/assign-operator', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const orderId = parsePositiveInt(request.params.id)
+  const operatorId = parsePositiveInt(request.body.operatorId)
+
+  if (!orderId) {
+    sendError(response, 400, 'invalid_id', 'Invalid order id')
+    return
+  }
+  if (!operatorId) {
+    sendError(response, 400, 'invalid_operator_id', 'Valid operator id is required')
+    return
+  }
+
+  const [order, operator] = await Promise.all([
+    prisma.order.findUnique({ where: { id: orderId } }),
+    prisma.operator.findFirst({ where: { id: operatorId, isActive: true } }),
+  ])
+
+  if (!order) {
+    sendError(response, 404, 'not_found', 'Order not found')
+    return
+  }
+  if (!operator) {
+    sendError(response, 404, 'operator_not_found', 'Active operator not found')
+    return
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { operatorId: operator.id },
+    include: {
+      items: true,
+      city: true,
+      user: { select: { id: true, firstName: true, username: true, telegramId: true } },
+      statusHistory: { orderBy: { createdAt: 'asc' } },
+      paymentMethod: true,
+      deliveryOption: true,
+      discount: true,
+      operator: true,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'order_operator_assigned',
+      entity: 'order',
+      entityId: orderId,
+      meta: JSON.stringify({ operatorId: operator.id }),
+    },
+  })
+
+  response.json({ order: updated })
+})
+
+router.get('/bots', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const bots = await prisma.telegramBot.findMany({
+    orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+  })
+
+  response.json({ bots: bots.map(sanitizeTelegramBot) })
+})
+
+router.post('/bots', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const token = getTrimmedString(request.body.token)
+  if (!token) {
+    sendError(response, 400, 'token_required', 'Bot token is required')
+    return
+  }
+
+  let validatedBot: { botId: string; username: string; firstName: string } | null = null
+
+  try {
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/getMe`)
+    const payload = await telegramResponse.json().catch(() => null) as
+      | { ok?: boolean; result?: { id?: number | string; username?: string; first_name?: string } }
+      | null
+
+    if (!telegramResponse.ok || !payload?.ok || !payload.result?.id || !payload.result.username || !payload.result.first_name) {
+      sendError(response, 400, 'invalid_bot_token', 'Telegram bot token is invalid')
+      return
+    }
+
+    validatedBot = {
+      botId: String(payload.result.id),
+      username: payload.result.username,
+      firstName: payload.result.first_name,
+    }
+  } catch {
+    sendError(response, 503, 'telegram_validation_failed', 'Unable to validate Telegram bot token')
+    return
+  }
+
+  if (!validatedBot) {
+    sendError(response, 400, 'invalid_bot_token', 'Telegram bot token is invalid')
+    return
+  }
+
+  const existing = await prisma.telegramBot.findFirst({
+    where: {
+      OR: [{ token }, { botId: validatedBot.botId }],
+    },
+  })
+  if (existing) {
+    sendError(response, 409, 'bot_exists', 'Telegram bot is already registered')
+    return
+  }
+
+  const bot = await prisma.telegramBot.create({
+    data: {
+      token,
+      botId: validatedBot.botId,
+      username: validatedBot.username,
+      firstName: validatedBot.firstName,
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'telegram_bot_created',
+      entity: 'telegram_bot',
+      entityId: bot.id,
+      meta: JSON.stringify({ botId: bot.botId, username: bot.username }),
+    },
+  })
+
+  response.status(201).json({ bot: sanitizeTelegramBot(bot) })
+})
+
+router.patch('/bots/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const botId = parsePositiveInt(request.params.id)
+  if (!botId) {
+    sendError(response, 400, 'invalid_id', 'Invalid bot id')
+    return
+  }
+
+  const existing = await prisma.telegramBot.findUnique({ where: { id: botId } })
+  if (!existing) {
+    sendError(response, 404, 'not_found', 'Bot not found')
+    return
+  }
+
+  const data: {
+    webAppUrl?: string | null
+    menuText?: string | null
+  } = {}
+
+  if (request.body.webAppUrl !== undefined) {
+    data.webAppUrl = getOptionalTrimmedString(request.body.webAppUrl)
+  }
+  if (request.body.menuText !== undefined) {
+    data.menuText = getOptionalTrimmedString(request.body.menuText)
+  }
+
+  if (Object.keys(data).length === 0) {
+    sendError(response, 400, 'no_changes', 'No valid bot fields provided')
+    return
+  }
+
+  const bot = await prisma.telegramBot.update({
+    where: { id: botId },
+    data,
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'telegram_bot_updated',
+      entity: 'telegram_bot',
+      entityId: bot.id,
+      meta: JSON.stringify(data),
+    },
+  })
+
+  response.json({ bot: sanitizeTelegramBot(bot) })
+})
+
+router.patch('/bots/:id/toggle', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const botId = parsePositiveInt(request.params.id)
+  if (!botId) {
+    sendError(response, 400, 'invalid_id', 'Invalid bot id')
+    return
+  }
+
+  const existing = await prisma.telegramBot.findUnique({ where: { id: botId } })
+  if (!existing) {
+    sendError(response, 404, 'not_found', 'Bot not found')
+    return
+  }
+
+  const bot = await prisma.telegramBot.update({
+    where: { id: botId },
+    data: { isActive: !existing.isActive },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'telegram_bot_toggled',
+      entity: 'telegram_bot',
+      entityId: bot.id,
+      meta: JSON.stringify({ isActive: bot.isActive }),
+    },
+  })
+
+  response.json({ bot: sanitizeTelegramBot(bot) })
+})
+
+router.delete('/bots/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const botId = parsePositiveInt(request.params.id)
+  if (!botId) {
+    sendError(response, 400, 'invalid_id', 'Invalid bot id')
+    return
+  }
+
+  const bot = await prisma.telegramBot.findUnique({ where: { id: botId } })
+  if (!bot) {
+    sendError(response, 404, 'not_found', 'Bot not found')
+    return
+  }
+
+  await prisma.telegramBot.delete({ where: { id: botId } })
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'telegram_bot_deleted',
+      entity: 'telegram_bot',
+      entityId: bot.id,
+      meta: JSON.stringify({ botId: bot.botId, username: bot.username }),
+    },
+  })
+
+  response.json({ ok: true })
 })
 
 export default router

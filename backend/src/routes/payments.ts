@@ -55,6 +55,7 @@ router.post('/orders/:orderId/session', authRateLimiter, async (request, respons
 
   const order = await prisma.order.findFirst({
     where: { id: orderId, userId: user.id },
+    include: { deliveryOption: true },
   })
   if (!order) {
     sendError(response, 404, 'not_found', 'Order not found')
@@ -66,6 +67,10 @@ router.post('/orders/:orderId/session', authRateLimiter, async (request, respons
   }
   if (order.paymentStatus === 'paid') {
     sendError(response, 400, 'payment_already_paid', 'Order is already paid')
+    return
+  }
+  if (!order.deliveryPriceConfirmed && order.deliveryOption?.type === 'delivery') {
+    sendError(response, 400, 'delivery_price_required', 'Delivery price must be confirmed before payment')
     return
   }
 

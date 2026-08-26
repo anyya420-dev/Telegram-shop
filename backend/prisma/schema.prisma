@@ -131,6 +131,9 @@ model Order {
   paymentMethodId  Int?        @map("payment_method_id")
   deliveryOptionId Int?        @map("delivery_option_id")
   discountId       Int?        @map("discount_id")
+  operatorId              Int?     @map("operator_id")
+  operatorDeliveryPrice   Float?   @map("operator_delivery_price")
+  deliveryPriceConfirmed  Boolean  @default(false) @map("delivery_price_confirmed")
   casinoCreditsUsed Float      @default(0) @map("casino_credits_used")
   cancelledAt      DateTime?   @map("cancelled_at")
   refundStatus     String?     @map("refund_status") // none | requested | approved | rejected
@@ -144,6 +147,7 @@ model Order {
   paymentMethod  PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
   deliveryOption DeliveryOption?      @relation(fields: [deliveryOptionId], references: [id])
   discount       Discount?            @relation(fields: [discountId], references: [id])
+  operator       Operator?            @relation(fields: [operatorId], references: [id])
   reward         CasinoReward?        @relation("OrderReward")
   statusHistory  OrderStatusHistory[]
   payments       Payment[]
@@ -487,6 +491,37 @@ model AdminSession {
 
   @@index([expiresAt, revokedAt])
   @@map("admin_sessions")
+}
+
+model Operator {
+  id         Int      @id @default(autoincrement())
+  telegramId String   @unique @map("telegram_id")
+  firstName  String   @map("first_name")
+  lastName   String?  @map("last_name")
+  username   String?
+  isActive   Boolean  @default(true) @map("is_active")
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  assignedOrders Order[]
+
+  @@map("operators")
+}
+
+model TelegramBot {
+  id         Int      @id @default(autoincrement())
+  token      String   @unique
+  botId      String   @unique @map("bot_id")
+  username   String
+  firstName  String   @map("first_name")
+  isActive   Boolean  @default(true) @map("is_active")
+  webAppUrl  String?  @map("web_app_url")
+  menuText   String?  @map("menu_text")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("telegram_bots")
 }
 
 model AuditLog {
