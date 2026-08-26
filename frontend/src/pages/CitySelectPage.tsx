@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ChevronRight, MapPin } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useApp } from '../context/AppContext'
 import { getLocalizedCityName } from '../lib/localized'
@@ -10,25 +10,23 @@ import type { Language } from '../types'
 
 export default function CitySelectPage() {
   const { t, i18n } = useTranslation()
-  const { cities, citiesLoading, reloadCities, selectCity, user } = useApp()
+  const { loading, cities, citiesLoading, reloadCities, selectCity, user } = useApp()
   const navigate = useNavigate()
   const [selecting, setSelecting] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const language = i18n.language as Language
 
-  useEffect(() => {
-    if (user?.selectedCityId) {
-      navigate('/shop', { replace: true })
-    }
-  }, [navigate, user])
+  if (loading) {
+    return (
+      <div className={styles.loadingState}>
+        <div className={styles.spinner} aria-hidden="true" />
+      </div>
+    )
+  }
 
-  useEffect(() => {
-    if (cities.length > 0 || citiesLoading) {
-      return
-    }
-
-    void handleReloadCities()
-  }, [cities.length, citiesLoading])
+  if (user?.selectedCityId) {
+    return <Navigate to="/shop" replace />
+  }
 
   async function handleReloadCities() {
     try {
