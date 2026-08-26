@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
 type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
@@ -172,6 +172,7 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
     : t('admin.login', { defaultValue: 'Admin login' });
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [adminRole, setAdminRole] = useState<string>('admin');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [tab, setTab] = useState<Tab>('stats');
@@ -276,6 +277,12 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
 
   const [replyText, setReplyText] = useState<Record<number, string>>({});
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
+  const [administrators, setAdministrators] = useState<Administrator[]>([]);
+  const [newAdminUsername, setNewAdminUsername] = useState('');
+  const [generatedAdminPassword, setGeneratedAdminPassword] = useState<string | null>(null);
+  const [shopName, setShopName] = useState('NARCOS');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   const tabs = useMemo(
     () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
@@ -310,13 +317,15 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
     let mounted = true;
     void (async () => {
       try {
-        await api.adminStatus();
+        const status = await api.adminStatus();
         if (mounted) {
           setAuthenticated(true);
+          setAdminRole(status.role);
         }
       } catch {
         if (mounted) {
           setAuthenticated(false);
+          setAdminRole('admin');
         }
       } finally {
         if (mounted) {
@@ -385,6 +394,17 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
         setPaymentRecords(paymentsResponse.payments);
       } else if (tabName === 'casino') {
         setCasinoConfig(await api.getAdminCasinoConfig());
+      }
+
+      const status = await api.adminStatus();
+      setAdminRole(status.role);
+      if (status.role === 'owner') {
+        const [adminsResponse, settingsResponse] = await Promise.all([
+          api.getAdminAdministrators(),
+          api.getAdminSettings(),
+        ]);
+        setAdministrators(adminsResponse.administrators);
+        setShopName(settingsResponse.shopName);
       }
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to load admin data'));
@@ -900,8 +920,9 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
     setAuthLoading(true);
 
     try {
-      await api.adminLogin({ password });
+      const response = await api.adminLogin({ password, mode: panelMode });
       setAuthenticated(true);
+      setAdminRole(response.role ?? 'admin');
       setPassword('');
       await loadTab(tab);
     } catch (e: unknown) {
@@ -917,6 +938,82 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
       await api.adminLogout();
     } finally {
       setAuthenticated(false);
+      setAdminRole('admin');
+    }
+
+    async function handleCreateAdministrator() {
+      if (adminRole !== 'owner') return;
+      setError(null);
+      try {
+        const response = await api.createAdministrator({ username: newAdminUsername.trim() || undefined });
+        setGeneratedAdminPassword(response.generatedPassword);
+        setNewAdminUsername('');
+        const refreshed = await api.getAdminAdministrators();
+        setAdministrators(refreshed.administrators);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to create administrator'));
+      }
+    }
+
+    async function handleToggleAdministrator(adminId: number, isActive: boolean) {
+      if (adminRole !== 'owner') return;
+      setError(null);
+      try {
+        const response = await api.updateAdministrator(adminId, { isActive });
+        setAdministrators((current) => current.map((item) => (item.id === adminId ? response.administrator : item)));
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to update administrator'));
+      }
+    }
+
+    async function handleDeleteAdministrator(adminId: number) {
+      if (adminRole !== 'owner') return;
+      setError(null);
+      try {
+        await api.deleteAdministrator(adminId);
+        setAdministrators((current) => current.filter((item) => item.id !== adminId));
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to delete administrator'));
+      }
+    }
+
+    async function handleResetAdministratorPassword(adminId: number) {
+      if (adminRole !== 'owner') return;
+      setError(null);
+      try {
+        const response = await api.resetAdministratorPassword(adminId);
+        setGeneratedAdminPassword(response.generatedPassword);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to reset administrator password'));
+      }
+    }
+
+    async function handleSaveShopName() {
+      if (adminRole !== 'owner') return;
+      setError(null);
+      try {
+        const response = await api.updateAdminSettings({ shopName: shopName.trim() });
+        setShopName(response.shopName);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to update shop name'));
+      }
+    }
+
+    async function handleChangePassword(target: 'self' | 'owner') {
+      if (!currentPassword.trim() || !newPassword.trim()) return;
+      setError(null);
+      try {
+        await api.adminChangePassword({
+          currentPassword: currentPassword.trim(),
+          newPassword: newPassword.trim(),
+          target,
+        });
+        setCurrentPassword('');
+        setNewPassword('');
+        setAuthenticated(false);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to change password'));
+      }
     }
   }
 
@@ -1326,6 +1423,73 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
             ))}
             {users.length === 0 && <p className={styles.loading}>{t('admin.noUsers', { defaultValue: 'No users found.' })}</p>}
           </div>
+
+          {adminRole === 'owner' && (
+            <>
+              <div className={styles.form}>
+                <h3 className={styles.formTitle}>Owner Settings</h3>
+                <div className={styles.formRow}>
+                  <input
+                    className={styles.input}
+                    placeholder="Shop name"
+                    value={shopName}
+                    onChange={(event) => setShopName(event.target.value)}
+                  />
+                  <button className={styles.createBtn} onClick={() => void handleSaveShopName()} disabled={!shopName.trim()}>
+                    Save shop name
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.form}>
+                <h3 className={styles.formTitle}>Change password</h3>
+                <div className={styles.formRow}>
+                  <input className={styles.input} type="password" placeholder="Current password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+                  <input className={styles.input} type="password" placeholder="New password (min 10 chars)" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+                </div>
+                <div className={styles.replyRow}>
+                  <button className={styles.replyBtn} onClick={() => void handleChangePassword('self')}>Change my password</button>
+                  <button className={styles.replyBtn} onClick={() => void handleChangePassword('owner')}>Change OWNER password</button>
+                </div>
+              </div>
+
+              <div className={styles.form}>
+                <h3 className={styles.formTitle}>Administrators</h3>
+                <div className={styles.formRow}>
+                  <input className={styles.input} placeholder="Username (optional)" value={newAdminUsername} onChange={(event) => setNewAdminUsername(event.target.value)} />
+                  <button className={styles.createBtn} onClick={() => void handleCreateAdministrator()}>Create administrator</button>
+                </div>
+                {generatedAdminPassword ? <p className={styles.orderMeta}>Generated password: <strong>{generatedAdminPassword}</strong></p> : null}
+              </div>
+
+              <div className={styles.discountList}>
+                {administrators.map((administrator) => (
+                  <div key={administrator.id} className={styles.discountCard}>
+                    <div>
+                      <span className={styles.discountCode}>{administrator.username}</span>
+                      <span className={styles.orderMeta}> • {administrator.role}</span>
+                      <span className={`${styles.refundTag} ${administrator.isActive ? styles.tagActive : styles.tagInactive}`}>
+                        {administrator.isActive ? 'active' : 'inactive'}
+                      </span>
+                    </div>
+                    {administrator.role !== 'owner' ? (
+                      <div className={styles.replyRow}>
+                        <button className={styles.replyBtn} onClick={() => void handleToggleAdministrator(administrator.id, !administrator.isActive)}>
+                          {administrator.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button className={styles.replyBtn} onClick={() => void handleResetAdministratorPassword(administrator.id)}>
+                          Reset password
+                        </button>
+                        <button className={styles.replyBtn} onClick={() => void handleDeleteAdministrator(administrator.id)}>
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

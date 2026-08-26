@@ -20,6 +20,7 @@ type AppState = {
   orders: Order[]
   ordersLoading: boolean
   cityPickerOpen: boolean
+  shopName: string
   openCityPicker: () => void
   closeCityPicker: () => void
   reloadCities: () => Promise<City[]>
@@ -71,6 +72,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  const [shopName, setShopName] = useState('NARCOS')
 
   function t(key: string): string {
     return i18n.t(key)
@@ -149,6 +151,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCities(response.cities)
         setCitiesLoading(false)
         setCategories(response.categories)
+        setShopName(response.shopName || 'NARCOS')
+        document.title = response.shopName || 'NARCOS'
 
         setCartLoading(true)
         const [catalogResponse, cartResponse] = await Promise.all([
@@ -313,6 +317,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     orders,
     ordersLoading,
     cityPickerOpen,
+    shopName,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
     reloadCities,

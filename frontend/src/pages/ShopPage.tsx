@@ -11,7 +11,7 @@ import i18n from '../lib/i18n'
 import type { Language } from '../types'
 
 export default function ShopPage() {
-  const { user, categories, products, cart, refreshCatalog, openCityPicker } = useApp()
+  const { user, categories, products, cart, refreshCatalog, openCityPicker, shopName } = useApp()
   const navigate = useNavigate()
   const { t } = useTranslation()
   const language = i18n.language as Language
@@ -42,7 +42,7 @@ export default function ShopPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.title}>{t('shop.title')}</h1>
+          <h1 className={styles.title}>{shopName || t('shop.title')}</h1>
           <button className={styles.city} onClick={openCityPicker} type="button">
             <MapPin size={14} strokeWidth={1.5} /> {user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('checkout.selectCity')}
           </button>

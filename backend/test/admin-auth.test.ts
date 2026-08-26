@@ -1518,3 +1518,76 @@ test('checkout applies casino credits and owned rewards server-side', async () =
   assert.equal(casinoState.response.status, 200)
   assert.equal(casinoState.body.balance.credits, 700)
 })
+
+test('owner manages administrators, revokes sessions, and updates shop name', async () => {
+  const ownerLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret', mode: 'owner' }),
+  })
+  assert.equal(ownerLogin.status, 200)
+  const ownerCookie = ownerLogin.headers.get('set-cookie') ?? ''
+  assert.ok(ownerCookie)
+
+  const createAdmin = await requestJson('/api/admin/administrators', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: ownerCookie },
+    body: JSON.stringify({ username: 'qa_admin' }),
+  })
+  assert.equal(createAdmin.response.status, 201)
+  assert.equal(createAdmin.body.administrator.username, 'qa_admin')
+  const adminId = Number(createAdmin.body.administrator.id)
+  assert.ok(adminId > 0)
+  const generatedPassword = String(createAdmin.body.generatedPassword ?? '')
+  assert.ok(generatedPassword.length >= 16)
+
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: generatedPassword }),
+  })
+  assert.equal(adminLogin.status, 200)
+  const adminCookie = adminLogin.headers.get('set-cookie') ?? ''
+  assert.ok(adminCookie)
+
+  const adminStats = await request('/api/admin/stats', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(adminStats.status, 200)
+
+  const adminOwnerOnly = await request('/api/admin/administrators', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(adminOwnerOnly.status, 403)
+
+  const deactivated = await request(`/api/admin/administrators/${adminId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: ownerCookie },
+    body: JSON.stringify({ isActive: false }),
+  })
+  assert.equal(deactivated.status, 200)
+
+  const adminStatsAfterDeactivate = await request('/api/admin/stats', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(adminStatsAfterDeactivate.status, 401)
+
+  const updateSetting = await requestJson('/api/admin/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: ownerCookie },
+    body: JSON.stringify({ shopName: 'NARCOS VERIFIED' }),
+  })
+  assert.equal(updateSetting.response.status, 200)
+  assert.equal(updateSetting.body.shopName, 'NARCOS VERIFIED')
+
+  const bootstrap = await requestJson('/api/session/bootstrap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      initData: '',
+      isTelegramEnvironment: false,
+    }),
+  })
+  assert.equal(bootstrap.response.status, 200)
+  assert.equal(bootstrap.body.shopName, 'NARCOS VERIFIED')
+})

@@ -89,6 +89,7 @@ export type BootstrapResponse = {
   user: UserProfile
   cities: City[]
   categories: Category[]
+  shopName?: string
 }
 
 export type OrderItem = {
@@ -319,6 +320,16 @@ export type AdminStats = {
   pendingOrders: number
   totalUsers: number
   totalRevenue: number
+}
+
+export type Administrator = {
+  id: number
+  username: string
+  role: string
+  isActive: boolean
+  deletedAt: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type AdminCity = City & {

@@ -26,6 +26,7 @@ import type {
   UserProfile,
   WishlistItem,
   AdminPaymentRecord,
+  Administrator,
 } from '../types'
 
 function normalizeApiBase(value: string) {
@@ -234,8 +235,8 @@ export const api = {
     return publicRequest<{ payment: Payment }>(`/payments/${paymentId}/crypto/submit`, { method: 'POST', body: JSON.stringify(payload) })
   },
 
-  adminLogin(data: { password: string }) {
-    return adminRequest<{ ok: boolean }>('/admin/auth/login', {
+  adminLogin(data: { password: string; mode?: 'admin' | 'owner' }) {
+    return adminRequest<{ ok: boolean; role?: string; username?: string | null }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     })
@@ -244,7 +245,31 @@ export const api = {
     return adminRequest<{ ok: boolean }>('/admin/auth/logout', { method: 'POST' })
   },
   adminStatus() {
-    return adminRequest<{ authenticated: boolean }>('/admin/auth/status')
+    return adminRequest<{ authenticated: boolean; role: string; username: string | null }>('/admin/auth/status')
+  },
+  adminChangePassword(data: { currentPassword: string; newPassword: string; target?: 'owner' | 'self' }) {
+    return adminRequest<{ ok: boolean }>('/admin/auth/change-password', { method: 'POST', body: JSON.stringify(data) })
+  },
+  getAdminAdministrators() {
+    return adminRequest<{ administrators: Administrator[] }>('/admin/administrators')
+  },
+  createAdministrator(data: { username?: string }) {
+    return adminRequest<{ administrator: Administrator; generatedPassword: string }>('/admin/administrators', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdministrator(id: number, data: { username?: string; isActive?: boolean }) {
+    return adminRequest<{ administrator: Administrator }>(`/admin/administrators/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  resetAdministratorPassword(id: number) {
+    return adminRequest<{ ok: boolean; generatedPassword: string }>(`/admin/administrators/${id}/reset-password`, { method: 'POST' })
+  },
+  deleteAdministrator(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/administrators/${id}`, { method: 'DELETE' })
+  },
+  getAdminSettings() {
+    return adminRequest<{ shopName: string }>('/admin/settings')
+  },
+  updateAdminSettings(data: { shopName: string }) {
+    return adminRequest<{ shopName: string }>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminStats() {
     return adminRequest<AdminStats>('/admin/stats')

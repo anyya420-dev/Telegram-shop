@@ -5,8 +5,13 @@ import { notifyOrderStatusChange } from '../services/notifier.js'
 import {
   createAdminSession,
   ensureAdminPasswordFromEnv,
+  generateAdminPassword,
   getActiveAdminSession,
+  revokeAdminSessionsByAccountId,
   revokeAdminSession,
+  rotateAdminAccountPassword,
+  rotateOwnerPassword,
+  verifyAdminAccountPassword,
   verifyAdminPassword,
 } from '../services/adminSession.js'
 import {
@@ -80,7 +85,12 @@ function clearAdminCookie(response: Response) {
   })
 }
 
-type AdminContext = { id: number | null }
+type AdminContext = {
+  sessionId: number
+  accountId: number
+  role: string
+  username: string
+}
 
 function getTrimmedString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -166,7 +176,11 @@ async function ensureProductExists(productId: number) {
   return prisma.product.findUnique({ where: { id: productId }, select: { id: true } })
 }
 
-async function getAdminUser(request: Request, response: Response) {
+function isOwner(admin: AdminContext) {
+  return admin.role === 'owner'
+}
+
+async function getAdminUser(request: Request, response: Response, options?: { requireOwner?: boolean }) {
   const token = parseCookie(request, ADMIN_SESSION_COOKIE_NAME)
   const session = await getActiveAdminSession(token)
   if (!session) {
@@ -175,7 +189,26 @@ async function getAdminUser(request: Request, response: Response) {
     return null
   }
 
-  return { id: session.id } satisfies AdminContext
+  const adminAccount = session.adminAccount
+  if (!adminAccount) {
+    clearAdminCookie(response)
+    sendError(response, 401, 'admin_auth_required', 'Admin authentication required')
+    return null
+  }
+
+  const admin = {
+    sessionId: session.id,
+    accountId: adminAccount.id,
+    role: adminAccount.role,
+    username: adminAccount.username,
+  } satisfies AdminContext
+
+  if (options?.requireOwner && !isOwner(admin)) {
+    sendError(response, 403, 'owner_access_required', 'Owner access required')
+    return null
+  }
+
+  return admin
 }
 
 function sanitizeTelegramBot(bot: {
@@ -208,12 +241,13 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   await ensureAdminPasswordFromEnv()
 
   const password = typeof request.body.password === 'string' ? request.body.password : ''
+  const mode = request.body?.mode === 'owner' ? 'owner' : 'admin'
   if (!password) {
     sendError(response, 400, 'invalid_credentials', 'Administrator password is required')
     return
   }
 
-  const result = await verifyAdminPassword(password)
+  const result = await verifyAdminPassword(password, mode)
   if (!result.valid) {
     if (result.reason === 'configuration_error') {
       sendError(response, 503, 'configuration_error', 'Admin password is not configured on the server')
@@ -223,9 +257,9 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
     return
   }
 
-  const session = await createAdminSession()
+  const session = await createAdminSession(result.account.id)
   writeAdminCookie(response, session.token, session.expiresAt)
-  response.json({ ok: true })
+  response.json({ ok: true, role: result.account.role, username: result.account.username })
 })
 
 router.post('/auth/logout', authRateLimiter, async (request, response) => {
@@ -244,7 +278,224 @@ router.get('/auth/status', authRateLimiter, async (request, response) => {
     return
   }
 
-  response.json({ authenticated: true })
+  response.json({
+    authenticated: true,
+    role: session.adminAccount?.role ?? 'admin',
+    username: session.adminAccount?.username ?? null,
+  })
+})
+
+router.post('/auth/change-password', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const currentPassword = getTrimmedString(request.body.currentPassword)
+  const nextPassword = getTrimmedString(request.body.newPassword)
+  const target = request.body.target === 'owner' ? 'owner' : 'self'
+
+  if (!currentPassword || !nextPassword || nextPassword.length < 10) {
+    sendError(response, 400, 'invalid_password', 'Current password and a strong new password are required')
+    return
+  }
+
+  const currentValid = await verifyAdminAccountPassword(admin.accountId, currentPassword)
+  if (!currentValid) {
+    sendError(response, 401, 'invalid_credentials', 'Current password is invalid')
+    return
+  }
+
+  if (target === 'owner') {
+    if (!isOwner(admin)) {
+      sendError(response, 403, 'owner_access_required', 'Owner access required')
+      return
+    }
+    await rotateOwnerPassword(nextPassword)
+    await revokeAdminSessionsByAccountId(admin.accountId)
+  } else {
+    await rotateAdminAccountPassword(admin.accountId, nextPassword)
+    await revokeAdminSessionsByAccountId(admin.accountId)
+  }
+
+  clearAdminCookie(response)
+  response.json({ ok: true })
+})
+
+function sanitizeAdminAccount(account: {
+  id: number
+  username: string
+  role: string
+  isActive: boolean
+  deletedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}) {
+  return {
+    id: account.id,
+    username: account.username,
+    role: account.role,
+    isActive: account.isActive,
+    deletedAt: account.deletedAt,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
+  }
+}
+
+router.get('/administrators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const administrators = await prisma.adminAccount.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ role: 'desc' }, { id: 'asc' }],
+  })
+
+  response.json({ administrators: administrators.map(sanitizeAdminAccount) })
+})
+
+router.post('/administrators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const usernameInput = getTrimmedString(request.body.username).toLowerCase()
+  const username = usernameInput || `admin_${Date.now()}`
+  if (!/^[a-z0-9_]{3,40}$/.test(username)) {
+    sendError(response, 400, 'invalid_username', 'Username must contain only letters, numbers, and underscores')
+    return
+  }
+
+  const existing = await prisma.adminAccount.findUnique({ where: { username } })
+  if (existing && !existing.deletedAt) {
+    sendError(response, 409, 'admin_exists', 'Administrator username already exists')
+    return
+  }
+
+  const password = generateAdminPassword()
+  let refreshed
+  if (existing && existing.deletedAt) {
+    refreshed = await prisma.adminAccount.update({
+      where: { id: existing.id },
+      data: {
+        deletedAt: null,
+        isActive: true,
+        role: 'admin',
+      },
+    })
+    await rotateAdminAccountPassword(refreshed.id, password)
+    refreshed = await prisma.adminAccount.findUniqueOrThrow({ where: { id: refreshed.id } })
+  } else {
+    const created = await prisma.adminAccount.create({
+      data: {
+        username,
+        role: 'admin',
+        passwordHash: '',
+        passwordSalt: '',
+        passwordAlgo: 'scrypt',
+        isActive: true,
+      },
+    })
+    await rotateAdminAccountPassword(created.id, password)
+    refreshed = await prisma.adminAccount.findUniqueOrThrow({ where: { id: created.id } })
+  }
+
+  response.status(201).json({
+    administrator: sanitizeAdminAccount(refreshed),
+    generatedPassword: password,
+  })
+})
+
+router.patch('/administrators/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const accountId = parsePositiveInt(request.params.id)
+  if (!accountId) {
+    sendError(response, 400, 'invalid_id', 'Invalid administrator id')
+    return
+  }
+
+  const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
+  if (!account || account.deletedAt) {
+    sendError(response, 404, 'not_found', 'Administrator not found')
+    return
+  }
+  if (account.role === 'owner') {
+    sendError(response, 400, 'owner_locked', 'Owner account cannot be changed here')
+    return
+  }
+
+  const usernameInput = getOptionalTrimmedString(request.body.username)
+  const isActive = typeof request.body.isActive === 'boolean' ? request.body.isActive : undefined
+  const data: { username?: string; isActive?: boolean } = {}
+  if (usernameInput !== undefined && usernameInput !== null) {
+    const normalized = usernameInput.toLowerCase()
+    if (!/^[a-z0-9_]{3,40}$/.test(normalized)) {
+      sendError(response, 400, 'invalid_username', 'Username must contain only letters, numbers, and underscores')
+      return
+    }
+    data.username = normalized
+  }
+  if (isActive !== undefined) data.isActive = isActive
+
+  const updated = await prisma.adminAccount.update({
+    where: { id: accountId },
+    data,
+  })
+
+  if (updated.isActive === false) {
+    await revokeAdminSessionsByAccountId(updated.id)
+  }
+
+  response.json({ administrator: sanitizeAdminAccount(updated) })
+})
+
+router.post('/administrators/:id/reset-password', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const accountId = parsePositiveInt(request.params.id)
+  if (!accountId) {
+    sendError(response, 400, 'invalid_id', 'Invalid administrator id')
+    return
+  }
+
+  const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
+  if (!account || account.deletedAt || account.role === 'owner') {
+    sendError(response, 404, 'not_found', 'Administrator not found')
+    return
+  }
+
+  const generatedPassword = generateAdminPassword()
+  await rotateAdminAccountPassword(account.id, generatedPassword)
+  await revokeAdminSessionsByAccountId(account.id)
+
+  response.json({ ok: true, generatedPassword })
+})
+
+router.delete('/administrators/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const accountId = parsePositiveInt(request.params.id)
+  if (!accountId) {
+    sendError(response, 400, 'invalid_id', 'Invalid administrator id')
+    return
+  }
+  const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
+  if (!account || account.deletedAt || account.role === 'owner') {
+    sendError(response, 404, 'not_found', 'Administrator not found')
+    return
+  }
+
+  await prisma.adminAccount.update({
+    where: { id: account.id },
+    data: {
+      isActive: false,
+      deletedAt: new Date(),
+    },
+  })
+  await revokeAdminSessionsByAccountId(account.id)
+
+  response.json({ ok: true })
 })
 
 // ──── Orders ────────────────────────────────────────────────────────────────
@@ -1362,6 +1613,37 @@ router.get('/stats', authRateLimiter, async (request, response) => {
     totalUsers,
     totalRevenue: totalRevenue._sum.total ?? 0,
   })
+})
+
+router.get('/settings', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const shopNameSetting = await prisma.appSetting.findUnique({ where: { key: 'shop_name' } })
+  response.json({ shopName: shopNameSetting?.value || 'NARCOS' })
+})
+
+router.patch('/settings', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const shopName = getTrimmedString(request.body.shopName)
+  if (!shopName) {
+    sendError(response, 400, 'shop_name_required', 'Shop name is required')
+    return
+  }
+  if (shopName.length > 80) {
+    sendError(response, 400, 'shop_name_too_long', 'Shop name must be 80 characters or fewer')
+    return
+  }
+
+  const setting = await prisma.appSetting.upsert({
+    where: { key: 'shop_name' },
+    create: { key: 'shop_name', value: shopName },
+    update: { value: shopName },
+  })
+
+  response.json({ shopName: setting.value })
 })
 
 // POST /api/admin/products - create a new product
