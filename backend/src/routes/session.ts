@@ -3,13 +3,14 @@ import {
   authRateLimiter,
   createSessionToken,
   DEMO_TELEGRAM_USER,
+  getTelegramInitDataBotTokens,
   getOrCreateCart,
   mapCategory,
   mapCity,
   mapUser,
   prisma,
   sendError,
-  verifyTelegramInitData,
+  verifyTelegramInitDataWithAnyBotToken,
 } from '../lib.js'
 
 const router = Router()
@@ -20,14 +21,14 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
   const allowDemoMode = process.env.ALLOW_DEMO_MODE === 'true' || process.env.NODE_ENV !== 'production'
 
   if (initData) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN
+    const botTokens = await getTelegramInitDataBotTokens()
 
-    if (!botToken) {
+    if (botTokens.length === 0) {
       sendError(response, 503, 'telegram_bot_token_required', 'Telegram bot token is required for Web App verification')
       return
     }
 
-    telegramUser = verifyTelegramInitData(initData, botToken)
+    telegramUser = verifyTelegramInitDataWithAnyBotToken(initData, botTokens)
 
     if (!telegramUser) {
       sendError(response, 401, 'telegram_verification_failed', 'Telegram init data verification failed')

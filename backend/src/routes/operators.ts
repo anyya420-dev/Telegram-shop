@@ -2,11 +2,12 @@ import { Router } from 'express'
 import type { Request, Response } from 'express'
 import {
   authRateLimiter,
+  getTelegramInitDataBotTokens,
   normalizeQuantity,
   parsePositiveInt,
   prisma,
   sendError,
-  verifyTelegramInitData,
+  verifyTelegramInitDataWithAnyBotToken,
 } from '../lib.js'
 
 const router = Router()
@@ -38,14 +39,14 @@ async function getAuthorizedOperator(request: Request, response: Response) {
   let telegramId = directTelegramId || ''
 
   if (initData) {
-    const botToken = process.env.BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN
+    const botTokens = await getTelegramInitDataBotTokens()
 
-    if (!botToken) {
+    if (botTokens.length === 0) {
       sendError(response, 503, 'telegram_bot_token_required', 'Telegram bot token is required for Web App verification')
       return null
     }
 
-    const telegramUser = verifyTelegramInitData(initData, botToken)
+    const telegramUser = verifyTelegramInitDataWithAnyBotToken(initData, botTokens)
     if (!telegramUser) {
       sendError(response, 401, 'telegram_verification_failed', 'Telegram init data verification failed')
       return null

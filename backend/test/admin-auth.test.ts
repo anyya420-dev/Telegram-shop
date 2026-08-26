@@ -96,6 +96,27 @@ async function requestJson(path: string, init: RequestInit = {}) {
   return { response, body }
 }
 
+function createTelegramInitData(
+  user: { id: number; first_name: string; username?: string; last_name?: string },
+  botToken: string,
+  authDate = Math.floor(Date.now() / 1000),
+) {
+  const params = new URLSearchParams()
+  params.set('auth_date', String(authDate))
+  params.set('query_id', 'bootstrap-query')
+  params.set('user', JSON.stringify(user))
+
+  const dataCheckString = [...params.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')
+  const secret = createHmac('sha256', 'WebAppData').update(botToken).digest()
+  const hash = createHmac('sha256', secret).update(dataCheckString).digest('hex')
+  params.set('hash', hash)
+
+  return params.toString()
+}
+
 test('admin session flow keeps public endpoints independent', async () => {
   const publicBefore = await request('/api/health')
   assert.equal(publicBefore.status, 200)
@@ -801,6 +822,55 @@ test('session bootstrap requires real Telegram init data when demo mode is disab
     delete process.env.ALLOW_DEMO_MODE
   } else {
     process.env.ALLOW_DEMO_MODE = previousAllowDemoMode
+  }
+})
+
+test('session bootstrap accepts initData signed by active managed bot token', async () => {
+  const previousAllowDemoMode = process.env.ALLOW_DEMO_MODE
+  const previousTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
+  process.env.ALLOW_DEMO_MODE = 'false'
+  process.env.TELEGRAM_BOT_TOKEN = '111111111:env-bootstrap-token'
+
+  try {
+    const managedBotToken = '222222222:managed-bootstrap-token'
+    await prisma.telegramBot.create({
+      data: {
+        token: managedBotToken,
+        botId: 'managed-bootstrap-bot',
+        username: 'managed_bootstrap_bot',
+        firstName: 'Managed Bootstrap Bot',
+        isActive: true,
+      },
+    })
+
+    const initData = createTelegramInitData(
+      { id: 700000021, first_name: 'Managed', username: 'managed_user' },
+      managedBotToken,
+    )
+
+    const bootstrap = await requestJson('/api/session/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        initData,
+        isTelegramEnvironment: true,
+      }),
+    })
+
+    assert.equal(bootstrap.response.status, 200)
+    assert.equal(bootstrap.body.user.telegramId, '700000021')
+  } finally {
+    if (previousAllowDemoMode === undefined) {
+      delete process.env.ALLOW_DEMO_MODE
+    } else {
+      process.env.ALLOW_DEMO_MODE = previousAllowDemoMode
+    }
+
+    if (previousTelegramBotToken === undefined) {
+      delete process.env.TELEGRAM_BOT_TOKEN
+    } else {
+      process.env.TELEGRAM_BOT_TOKEN = previousTelegramBotToken
+    }
   }
 })
 
