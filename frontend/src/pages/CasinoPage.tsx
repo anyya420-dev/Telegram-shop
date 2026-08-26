@@ -17,19 +17,20 @@ export default function CasinoPage() {
   const [rolling, setRolling] = useState(false)
   const [result, setResult] = useState<{ dice: number; win: boolean; payout: number } | null>(null)
   const [animDice, setAnimDice] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [spinError, setSpinError] = useState<string | null>(null)
   const [history, setHistory] = useState<{ id: number; type: string; amount: number; comment: string | null; createdAt: string }[]>([])
   const [loading, setLoading] = useState(true)
 
   async function loadCasino() {
     try {
       setLoading(true)
-      setError(null)
+      setLoadError(null)
       const [balanceResponse, historyResponse] = await Promise.all([api.getBalance(), api.getCasinoHistory()])
       setBalance(balanceResponse.balance.amount)
       setHistory(historyResponse.history)
     } catch (loadError) {
-      setError(getErrorMessage(loadError, t, 'request_failed'))
+      setLoadError(getErrorMessage(loadError, t, 'request_failed'))
     } finally {
       setLoading(false)
     }
@@ -43,7 +44,7 @@ export default function CasinoPage() {
     const betNum = Number(bet)
     if (!betNum || betNum <= 0 || rolling) return
     setRolling(true)
-    setError(null)
+    setSpinError(null)
     setResult(null)
 
     let count = 0
@@ -66,7 +67,7 @@ export default function CasinoPage() {
     } catch (spinError) {
       window.clearInterval(interval)
       setAnimDice(null)
-      setError(getErrorMessage(spinError, t, 'request_failed'))
+      setSpinError(getErrorMessage(spinError, t, 'request_failed'))
     } finally {
       setRolling(false)
     }
@@ -139,12 +140,13 @@ export default function CasinoPage() {
 
         <p className={styles.hint}>{t('casino.hint')}</p>
 
-        {error ? <p className={styles.error}>{error}</p> : null}
+        {loadError ? <p className={styles.error}>{loadError}</p> : null}
+        {spinError ? <p className={styles.error}>{spinError}</p> : null}
 
         <button className={styles.spinBtn} onClick={() => void handleSpin()} disabled={rolling || !bet} type="button">
           {rolling ? t('casino.rolling') : t('casino.spin')}
         </button>
-        {error ? (
+        {loadError ? (
           <button className={styles.spinBtn} onClick={() => void loadCasino()} disabled={rolling} type="button">
             <RefreshCw size={16} strokeWidth={1.5} />
             {t('common.retry')}
