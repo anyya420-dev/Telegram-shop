@@ -11,13 +11,13 @@ test('resolveEntryRouteRedirect keeps routes unchanged while bootstrap is loadin
   }), null)
 })
 
-test('resolveEntryRouteRedirect sends users without selected city to city select', () => {
+test('resolveEntryRouteRedirect allows shop browsing without selected city', () => {
   assert.equal(resolveEntryRouteRedirect({
     loading: false,
     hasUser: true,
     selectedCityId: null,
     route: 'shop',
-  }), '/select-city')
+  }), null)
 })
 
 test('resolveEntryRouteRedirect keeps users with selected city out of city select route', () => {

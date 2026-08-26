@@ -40,16 +40,9 @@ function LoadingGate() {
 }
 
 function ShopLayoutGate() {
-  const { loading, user } = useApp();
-  const redirect = resolveEntryRouteRedirect({
-    loading,
-    hasUser: Boolean(user),
-    selectedCityId: user?.selectedCityId,
-    route: 'shop',
-  });
+  const { loading } = useApp();
 
   if (loading) return <LoadingGate />;
-  if (redirect) return <Navigate to={redirect} replace />;
   return <Layout />;
 }
 
@@ -91,6 +84,7 @@ export default function App() {
             <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="admin" element={<AdminPage />} />
+            <Route path="owner" element={<AdminPage panelMode="owner" />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>

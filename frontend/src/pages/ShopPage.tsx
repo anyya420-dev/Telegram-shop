@@ -21,10 +21,6 @@ export default function ShopPage() {
   const [pageError, setPageError] = useState<string | null>(null)
 
   const loadProducts = useCallback(async (nextSearch = search, nextCategoryId = activeCategoryId) => {
-    if (!user?.selectedCityId) {
-      return
-    }
-
     try {
       setLoading(true)
       setPageError(null)
@@ -34,15 +30,11 @@ export default function ShopPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeCategoryId, refreshCatalog, search, t, user?.selectedCityId])
+  }, [activeCategoryId, refreshCatalog, search, t])
 
   useEffect(() => {
-    if (!user?.selectedCityId) {
-      return
-    }
-
     void loadProducts()
-  }, [loadProducts, user?.selectedCityId])
+  }, [loadProducts])
 
   const cartCount = cart?.items.length ?? 0
 
@@ -51,11 +43,9 @@ export default function ShopPage() {
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <h1 className={styles.title}>{t('shop.title')}</h1>
-          {user?.selectedCity ? (
-            <button className={styles.city} onClick={openCityPicker} type="button">
-              <MapPin size={14} strokeWidth={1.5} /> {getLocalizedCityName(user.selectedCity, language)}
-            </button>
-          ) : null}
+          <button className={styles.city} onClick={openCityPicker} type="button">
+            <MapPin size={14} strokeWidth={1.5} /> {user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('checkout.selectCity')}
+          </button>
         </div>
         <button
           className={styles.cartBtn}
@@ -79,18 +69,15 @@ export default function ShopPage() {
         />
       </div>
 
-      {!user?.selectedCityId ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyIcon}>
-            <MapPin size={28} strokeWidth={1.5} />
+      <>
+        {!user?.selectedCityId ? (
+          <div className={styles.empty}>
+            <div className={styles.emptyIcon}>
+              <MapPin size={28} strokeWidth={1.5} />
+            </div>
+            <p>{t('city.subtitle')}</p>
           </div>
-          <p>{t('city.subtitle')}</p>
-          <button className={styles.catBtn} onClick={openCityPicker} type="button">
-            {t('cityPicker.changeCity')}
-          </button>
-        </div>
-      ) : (
-        <>
+        ) : null}
           <div className={styles.categories}>
             <button
               className={`${styles.catBtn} ${activeCategoryId === 'all' ? styles.catActive : ''}`}
@@ -152,8 +139,7 @@ export default function ShopPage() {
               ))}
             </div>
           )}
-        </>
-      )}
+      </>
     </div>
   )
 }

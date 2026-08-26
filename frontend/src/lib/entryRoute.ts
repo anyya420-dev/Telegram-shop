@@ -9,10 +9,6 @@ export function resolveEntryRouteRedirect(params: {
     return null
   }
 
-  if (route === 'shop' && selectedCityId == null) {
-    return '/select-city'
-  }
-
   if (route === 'city_select' && selectedCityId != null) {
     return '/shop'
   }

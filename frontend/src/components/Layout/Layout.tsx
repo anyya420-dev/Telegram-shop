@@ -1,5 +1,5 @@
 import { House, LayoutGrid, ShoppingBag, UserRound, X } from 'lucide-react';
-import { Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { CityPicker } from '../CityPicker';
 import styles from './Layout.module.css';
@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
-  const { error, loading, setError, user, cart } = useApp();
+  const { error, loading, setError, cart } = useApp();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,10 +40,6 @@ export default function Layout() {
         <div className={styles.spinner} aria-hidden="true" />
       </div>
     );
-  }
-
-  if (user && !user.selectedCityId) {
-    return <Navigate to="/select-city" replace />;
   }
 
   const cartCount = cart?.items.length ?? 0;

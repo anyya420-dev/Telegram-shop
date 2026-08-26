@@ -53,10 +53,6 @@ export default function CatalogPage() {
   }, [activeCategoryId, search, sort, setSearchParams])
 
   useEffect(() => {
-    if (!user?.selectedCityId) {
-      return
-    }
-
     const handle = window.setTimeout(() => {
       void runRefresh()
     }, 250)
@@ -74,32 +70,15 @@ export default function CatalogPage() {
     [t],
   )
 
-  if (!user?.selectedCityId) {
-    return (
-      <div className={styles.empty}>
-        <div className={styles.emptyIcon}>
-          <MapPin size={28} strokeWidth={1.5} />
-        </div>
-        <p>{t('city.subtitle')}</p>
-        <button className={styles.retryBtn} onClick={openCityPicker} type="button">
-          <MapPin size={16} strokeWidth={1.5} />
-          {t('cityPicker.changeCity')}
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>{t('catalog.title')}</h1>
-          {user.selectedCity ? (
-            <button className={styles.cityButton} onClick={openCityPicker} type="button">
-              <MapPin size={14} strokeWidth={1.5} />
-              {getLocalizedCityName(user.selectedCity, language)}
-            </button>
-          ) : null}
+          <button className={styles.cityButton} onClick={openCityPicker} type="button">
+            <MapPin size={14} strokeWidth={1.5} />
+            {user?.selectedCity ? getLocalizedCityName(user.selectedCity, language) : t('checkout.selectCity')}
+          </button>
         </div>
         <button className={styles.sortBtn} onClick={() => setShowSort(true)} type="button">
           <ArrowUpDown size={14} strokeWidth={1.5} />
@@ -163,6 +142,15 @@ export default function CatalogPage() {
           {t('catalog.resetFilters')}
         </button>
       </div>
+
+      {!user?.selectedCityId ? (
+        <div className={styles.empty}>
+          <div className={styles.emptyIcon}>
+            <MapPin size={28} strokeWidth={1.5} />
+          </div>
+          <p>{t('city.subtitle')}</p>
+        </div>
+      ) : null}
 
       {catalogError ? (
         <div className={styles.errorState}>

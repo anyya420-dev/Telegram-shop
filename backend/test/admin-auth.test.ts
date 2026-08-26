@@ -1124,6 +1124,19 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
     'X-Session-Token': sessionToken,
   }
 
+  const browseCatalog = await requestJson('/api/catalog?search=aurora', {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(browseCatalog.response.status, 200)
+  assert.equal(browseCatalog.body.products.length, 1)
+  assert.equal(browseCatalog.body.products[0].productCityId, activeCityProduct.id)
+
+  const browseProductDetail = await requestJson(`/api/products/${activeProduct.id}`, {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(browseProductDetail.response.status, 200)
+  assert.equal(browseProductDetail.body.product.productCityId, activeCityProduct.id)
+
   const cityUpdate = await requestJson('/api/users/city', {
     method: 'PATCH',
     headers: authHeaders,

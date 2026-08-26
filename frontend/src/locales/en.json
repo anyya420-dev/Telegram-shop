@@ -158,7 +158,8 @@
     "title": "Select city",
     "subtitle": "The product catalog depends on the selected city",
     "loading": "Loading...",
-    "empty": "No cities available yet"
+    "empty": "No cities available yet",
+    "reload": "Reload list"
   },
   "balance": {
     "title": "Balance",

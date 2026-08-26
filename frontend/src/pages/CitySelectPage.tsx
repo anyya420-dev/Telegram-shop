@@ -45,6 +45,10 @@ export default function CitySelectPage() {
     } finally {
       setSelecting(null)
     }
+
+    function handleLater() {
+      navigate('/shop', { replace: true })
+    }
   }
 
   return (
@@ -55,6 +59,9 @@ export default function CitySelectPage() {
         </div>
         <h1 className={styles.title}>{t('city.title')}</h1>
         <p className={styles.subtitle}>{t('city.subtitle')}</p>
+        <button className={styles.retryBtn} onClick={handleLater} type="button">
+          {t('common.later')}
+        </button>
       </div>
 
       {citiesLoading ? (
@@ -64,15 +71,21 @@ export default function CitySelectPage() {
       ) : error ? (
         <div className={styles.stateCard}>
           <p>{error}</p>
+          <button className={styles.retryBtn} onClick={handleLater} type="button">
+            {t('common.later')}
+          </button>
           <button className={styles.retryBtn} onClick={() => void handleReloadCities()} type="button">
-            {t('common.retry')}
+            {t('city.reload', { defaultValue: 'Обновить список' })}
           </button>
         </div>
       ) : cities.length === 0 ? (
         <div className={styles.stateCard}>
           <p>{t('city.empty')}</p>
+          <button className={styles.retryBtn} onClick={handleLater} type="button">
+            {t('common.later')}
+          </button>
           <button className={styles.retryBtn} onClick={() => void handleReloadCities()} type="button">
-            {t('common.retry')}
+            {t('city.reload', { defaultValue: 'Обновить список' })}
           </button>
         </div>
       ) : (

@@ -261,6 +261,27 @@ export default function ProfilePage() {
           </div>
         </button>
       </div>
+
+      <div className={styles.section}>
+        <button className={styles.linkCard} onClick={() => navigate('/admin')} type="button">
+          <div className={styles.cardLeft}>
+            <ShieldCheck size={16} strokeWidth={1.7} />
+            <span>Админ</span>
+          </div>
+          <div className={styles.cardRight}>
+            <ChevronRight size={16} strokeWidth={1.8} />
+          </div>
+        </button>
+        <button className={styles.linkCard} onClick={() => navigate('/owner')} type="button">
+          <div className={styles.cardLeft}>
+            <ShieldCheck size={16} strokeWidth={1.7} />
+            <span>Owner Panel</span>
+          </div>
+          <div className={styles.cardRight}>
+            <ChevronRight size={16} strokeWidth={1.8} />
+          </div>
+        </button>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, MapPin, Settings, Star, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
@@ -161,9 +162,14 @@ function buildProductCityPayload(draft: ProductCityDraft) {
   };
 }
 
-export default function AdminPage() {
+export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin' | 'owner' }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const language = i18n.language as Language;
+  const panelTitle = panelMode === 'owner' ? 'Owner Panel' : 'Admin Panel';
+  const loginTitle = panelMode === 'owner'
+    ? t('admin.ownerLogin', { defaultValue: 'Owner login' })
+    : t('admin.login', { defaultValue: 'Admin login' });
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
@@ -917,7 +923,7 @@ export default function AdminPage() {
   if (!authChecked) {
     return (
       <div className={styles.page}>
-        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />Admin Panel</h1>
+        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
         <p className={styles.loading}>{t('common.loading', { defaultValue: 'Loading...' })}</p>
       </div>
     );
@@ -926,10 +932,10 @@ export default function AdminPage() {
   if (!authenticated) {
     return (
       <div className={styles.page}>
-        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />Admin Panel</h1>
+        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
         {error && <p className={styles.error}>{error}</p>}
         <div className={styles.form}>
-          <h3 className={styles.formTitle}>{t('admin.login', { defaultValue: 'Admin login' })}</h3>
+          <h3 className={styles.formTitle}>{loginTitle}</h3>
           <input
             className={styles.input}
             type="password"
@@ -948,8 +954,11 @@ export default function AdminPage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />Admin Panel</h1>
+      <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
       <div className={styles.filterRow}>
+        <button className={styles.filterBtn} onClick={() => navigate('/shop')} type="button">
+          Вернуться в магазин
+        </button>
         <button className={styles.filterBtn} onClick={() => void handleLogout()}>
           {t('common.logout', { defaultValue: 'Logout' })}
         </button>

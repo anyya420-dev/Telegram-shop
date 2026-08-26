@@ -114,8 +114,9 @@ export const api = {
       body: JSON.stringify(payload),
     }, { includeSessionToken: false })
   },
-  getCatalog(params: { cityId: number; search?: string; categoryId?: number | 'all'; sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular' }) {
-    const searchParams = new URLSearchParams({ cityId: String(params.cityId) })
+  getCatalog(params: { cityId?: number; search?: string; categoryId?: number | 'all'; sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular' }) {
+    const searchParams = new URLSearchParams()
+    if (params.cityId) searchParams.set('cityId', String(params.cityId))
     if (params.search) searchParams.set('search', params.search)
     if (params.categoryId && params.categoryId !== 'all') searchParams.set('categoryId', String(params.categoryId))
     if (params.sort) searchParams.set('sort', params.sort)
@@ -124,8 +125,9 @@ export const api = {
   getCities() {
     return publicRequest<City[]>('/cities', undefined, { includeSessionToken: false })
   },
-  getProduct(productId: number, cityId: number) {
-    return publicRequest<{ product: ProductDetail }>(`/products/${productId}?cityId=${cityId}`, undefined, { includeSessionToken: false })
+  getProduct(productId: number, cityId?: number) {
+    const query = cityId ? `?cityId=${cityId}` : ''
+    return publicRequest<{ product: ProductDetail }>(`/products/${productId}${query}`, undefined, { includeSessionToken: false })
   },
   getCart() {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>('/cart')
