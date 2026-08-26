@@ -343,16 +343,24 @@ test('payment settings CRUD, payment sessions, crypto review flow, and duplicate
     body: JSON.stringify({ paymentMethodId: createdCard.body.method.id }),
   })
   assert.equal(checkout.response.status, 200)
-  assert.equal(checkout.body.order.paymentStatus, 'pending')
-  assert.equal(checkout.body.order.status, 'pending')
-  assert.equal(checkout.body.order.payments.length, 1)
+  assert.equal(checkout.body.order.paymentStatus, 'blocked_delivery_price')
+  assert.equal(checkout.body.order.status, 'waiting_for_delivery_price')
+  assert.equal(checkout.body.order.payments.length, 0)
+
+  const deliveryForCard = await requestJson(`/api/admin/orders/${checkout.body.order.id}/delivery-price`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ deliveryPrice: 5, reason: 'Courier rate' }),
+  })
+  assert.equal(deliveryForCard.response.status, 200)
+  assert.equal(deliveryForCard.body.order.status, 'ready_for_payment')
 
   const cardSession = await requestJson(`/api/payments/orders/${checkout.body.order.id}/session`, {
     method: 'POST',
     headers: { 'X-Session-Token': sessionToken },
   })
   assert.equal(cardSession.response.status, 201)
-  assert.equal(cardSession.body.payment.amount, 50)
+  assert.equal(cardSession.body.payment.amount, 55)
   assert.equal(cardSession.body.payment.paymentMethod.type, 'card')
   assert.equal(cardSession.body.payment.checkoutUrl ?? null, null)
 
@@ -370,7 +378,14 @@ test('payment settings CRUD, payment sessions, crypto review flow, and duplicate
     body: JSON.stringify({ paymentMethodId: createdCrypto.body.method.id }),
   })
   assert.equal(cryptoCheckout.response.status, 200)
-  assert.equal(cryptoCheckout.body.order.payments[0].network, 'TRC20')
+  assert.equal(cryptoCheckout.body.order.payments.length, 0)
+
+  const deliveryForCrypto = await requestJson(`/api/admin/orders/${cryptoCheckout.body.order.id}/delivery-price`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ deliveryPrice: 3, reason: 'Courier rate' }),
+  })
+  assert.equal(deliveryForCrypto.response.status, 200)
 
   const cryptoSession = await requestJson(`/api/payments/orders/${cryptoCheckout.body.order.id}/session`, {
     method: 'POST',
@@ -414,10 +429,17 @@ test('payment settings CRUD, payment sessions, crypto review flow, and duplicate
     headers: authHeader,
     body: JSON.stringify({ paymentMethodId: createdCrypto.body.method.id }),
   })
+  const duplicateDelivery = await requestJson(`/api/admin/orders/${duplicateCheckout.body.order.id}/delivery-price`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ deliveryPrice: 2, reason: 'Courier rate' }),
+  })
+  assert.equal(duplicateDelivery.response.status, 200)
   const duplicateSession = await requestJson(`/api/payments/orders/${duplicateCheckout.body.order.id}/session`, {
     method: 'POST',
     headers: { 'X-Session-Token': sessionToken },
   })
+  assert.equal(duplicateSession.response.status, 201)
   const duplicateSubmit = await requestJson(`/api/payments/${duplicateSession.body.payment.id}/crypto/submit`, {
     method: 'POST',
     headers: authHeader,
@@ -450,12 +472,28 @@ test('stripe webhook verifies signature, marks payment paid, and ignores duplica
   await prisma.cartItem.create({ data: { cartId: cart.id, productCityId: productCity.id, quantity: 2 } })
 
   const token = createSessionToken!(telegramId)
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(adminLogin.status, 200)
+  const adminCookie = adminLogin.headers.get('set-cookie') ?? ''
+  assert.ok(adminCookie)
+
   const checkout = await requestJson('/api/orders', {
     method: 'POST',
     headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ paymentMethodId: method.id }),
   })
   assert.equal(checkout.response.status, 200)
+
+  const deliveryConfirmed = await requestJson(`/api/admin/orders/${checkout.body.order.id}/delivery-price`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ deliveryPrice: 4, reason: 'Courier rate' }),
+  })
+  assert.equal(deliveryConfirmed.response.status, 200)
 
   const sessionResponse = await requestJson(`/api/payments/orders/${checkout.body.order.id}/session`, {
     method: 'POST',
@@ -702,8 +740,8 @@ test('cart and checkout enforce quantity, delivery, stock, and cart clearing rul
   assert.equal(checkout.response.status, 200)
   assert.equal(checkout.body.order.subtotal, 48)
   assert.equal(checkout.body.order.discountAmount, 4.8)
-  assert.equal(checkout.body.order.deliveryFee, 5)
-  assert.equal(checkout.body.order.total, 48.2)
+  assert.equal(checkout.body.order.deliveryFee, 0)
+  assert.equal(checkout.body.order.total, 43.2)
   assert.equal(checkout.body.order.items.length, 1)
   assert.equal(checkout.body.order.items[0].quantity, 4)
   assert.equal(checkout.body.order.comment, 'Leave at the door')

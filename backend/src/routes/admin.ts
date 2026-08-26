@@ -584,7 +584,8 @@ router.patch('/orders/:id/delivery-price', authRateLimiter, async (request, resp
     await tx.deliveryPriceAudit.create({
       data: {
         orderId,
-        actorUserId: order.assignedOperatorId ?? order.userId,
+        actorUserId: null,
+        actorAdminSessionId: admin.id,
         previousPrice,
         newPrice: deliveryPrice,
         reason,
@@ -642,7 +643,7 @@ router.post('/operators', authRateLimiter, async (request, response) => {
   const username = getOptionalTrimmedString(request.body.username)
   const role = normalizeRole(request.body.role ?? 'OPERATOR')
   const operatorStatus = typeof request.body.status === 'string' ? request.body.status.trim().toLowerCase() : 'active'
-  if (!telegramId || !/^\\d{5,20}$/.test(telegramId)) {
+  if (!telegramId || !/^\d{5,20}$/.test(telegramId)) {
     sendError(response, 400, 'invalid_telegram_id', 'Telegram ID must be numeric')
     return
   }

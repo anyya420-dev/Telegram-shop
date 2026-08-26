@@ -391,36 +391,36 @@ export type AdminOrder = Order & {
     username: string | null
     telegramId: string
   }
+}
 
-  export type AdminOperator = {
-    id: number
-    telegramId: string
-    firstName: string
-    username: string | null
-    role: 'OWNER' | 'ADMIN' | 'OPERATOR' | 'CUSTOMER'
-    operatorStatus: 'active' | 'disabled' | null
-    createdAt: string
-    updatedAt: string
-  }
+export type AdminOperator = {
+  id: number
+  telegramId: string
+  firstName: string
+  username: string | null
+  role: 'OWNER' | 'ADMIN' | 'OPERATOR' | 'CUSTOMER'
+  operatorStatus: 'active' | 'disabled' | null
+  createdAt: string
+  updatedAt: string
+}
 
-  export type AdminTelegramBot = {
-    id: number
-    telegramBotId: string
-    username: string
-    displayName: string
-    maskedToken: string
-    status: string
-    webAppUrl: string | null
-    menuButtonText: string | null
-    menuButtonUrl: string | null
-    webhookUrl: string | null
-    webhookEnabled: boolean
-    webhookLastStatus: string | null
-    isPrimary: boolean
-    hasWebhookSecret: boolean
-    createdAt: string
-    updatedAt: string
-  }
+export type AdminTelegramBot = {
+  id: number
+  telegramBotId: string
+  username: string
+  displayName: string
+  maskedToken: string
+  status: string
+  webAppUrl: string | null
+  menuButtonText: string | null
+  menuButtonUrl: string | null
+  webhookUrl: string | null
+  webhookEnabled: boolean
+  webhookLastStatus: string | null
+  isPrimary: boolean
+  hasWebhookSecret: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export type AdminCasinoConfig = {

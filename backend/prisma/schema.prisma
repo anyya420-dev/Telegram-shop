@@ -25,6 +25,7 @@ model User {
   orders           Order[]
   assignedOrders   Order[] @relation("OrderAssignedOperator")
   deliveryPricedOrders Order[] @relation("OrderDeliveryPricedBy")
+  deliveryPriceAuditEntries DeliveryPriceAudit[]
   balance          Balance?
   casinoBalance    CasinoBalance?
   casinoRewards    CasinoReward[]
@@ -168,14 +169,15 @@ model Order {
 model DeliveryPriceAudit {
   id              Int      @id @default(autoincrement())
   orderId          Int      @map("order_id")
-  actorUserId      Int      @map("actor_user_id")
+  actorUserId      Int?     @map("actor_user_id")
+  actorAdminSessionId Int?  @map("actor_admin_session_id")
   previousPrice    Float?   @map("previous_price")
   newPrice         Float    @map("new_price")
   reason           String?
   createdAt        DateTime @default(now()) @map("created_at")
 
   order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  actorUser        User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  actorUser        User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([orderId, createdAt])
   @@map("delivery_price_audit")

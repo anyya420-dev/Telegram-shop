@@ -137,12 +137,12 @@ export function notifyOperatorOrderPaid(
   order: { id: number; subtotal: number; delivery: number; discount: number; total: number },
 ): void {
   const webAppUrl = process.env.WEB_APP_URL ?? process.env.FRONTEND_URL
-  const text = `ORDER #${order.id} PAID\\nProducts: ${order.subtotal.toFixed(2)} USDT\\nDelivery: ${order.delivery.toFixed(2)} USDT\\nDiscount: ${order.discount.toFixed(2)} USDT\\nTotal: ${order.total.toFixed(2)} USDT`
+  const text = `ORDER #${order.id} PAID\nProducts: ${order.subtotal.toFixed(2)} USDT\nDelivery: ${order.delivery.toFixed(2)} USDT\nDiscount: ${order.discount.toFixed(2)} USDT\nTotal: ${order.total.toFixed(2)} USDT`
   void sendTelegramMessage(
     telegramId,
     text,
     webAppUrl
-      ? { text: 'OPEN ORDER', url: `${webAppUrl.replace(/\\/+$/, '')}/#/orders/${order.id}` }
+      ? { text: 'OPEN ORDER', url: `${webAppUrl.replace(/\/+$/, '')}/#/orders/${order.id}` }
       : undefined,
   ).catch(() => {
     // ignore notifier failures

@@ -439,132 +439,132 @@ export default function AdminPage() {
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to reject payment'));
     }
+  }
 
-    async function handleAssignOperator(orderId: number) {
-      setError(null);
-      const raw = window.prompt('Operator ID (empty to unassign):', '');
-      if (raw === null) {
-        return;
-      }
-      const operatorId = raw.trim() === '' ? null : Number(raw.trim());
-      if (raw.trim() !== '' && (!Number.isInteger(operatorId) || Number(operatorId) <= 0)) {
-        setError('Invalid operator id');
-        return;
-      }
-      try {
-        const response = await api.assignAdminOrderOperator(orderId, operatorId as number | null);
-        setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to assign operator'));
-      }
+  async function handleAssignOperator(orderId: number) {
+    setError(null);
+    const raw = window.prompt('Operator ID (empty to unassign):', '');
+    if (raw === null) {
+      return;
     }
-
-    async function handleSetDeliveryPrice(orderId: number) {
-      setError(null);
-      const rawPrice = window.prompt('Delivery price (USDT):', '');
-      if (rawPrice === null) return;
-      const deliveryPrice = Number(rawPrice.trim());
-      if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) {
-        setError('Invalid delivery price');
-        return;
-      }
-      const reason = window.prompt('Reason:', 'Manual delivery calculation');
-      if (!reason?.trim()) {
-        setError('Reason is required');
-        return;
-      }
-      try {
-        const response = await api.updateAdminOrderDeliveryPrice(orderId, { deliveryPrice, reason: reason.trim() });
-        setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to set delivery price'));
-      }
+    const operatorId = raw.trim() === '' ? null : Number(raw.trim());
+    if (raw.trim() !== '' && (!Number.isInteger(operatorId) || Number(operatorId) <= 0)) {
+      setError('Invalid operator id');
+      return;
     }
-
-    async function handleCreateOperator() {
-      setError(null);
-      try {
-        await api.createAdminOperator({
-          telegramId: newOperatorTelegramId.trim(),
-          name: newOperatorName.trim(),
-          username: newOperatorUsername.trim() || undefined,
-          role: newOperatorRole,
-          status: newOperatorStatus,
-        });
-        setNewOperatorTelegramId('');
-        setNewOperatorName('');
-        setNewOperatorUsername('');
-        setOperators((await api.getAdminOperators()).operators);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to create operator'));
-      }
+    try {
+      const response = await api.assignAdminOrderOperator(orderId, operatorId as number | null);
+      setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to assign operator'));
     }
+  }
 
-    async function handleToggleOperator(operatorId: number, status: 'active' | 'disabled') {
-      setError(null);
-      try {
-        const response = await api.updateAdminOperator(operatorId, { status: status === 'active' ? 'disabled' : 'active' });
-        setOperators((current) => current.map((operator) => (operator.id === operatorId ? response.operator : operator)));
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to update operator'));
-      }
+  async function handleSetDeliveryPrice(orderId: number) {
+    setError(null);
+    const rawPrice = window.prompt('Delivery price (USDT):', '');
+    if (rawPrice === null) return;
+    const deliveryPrice = Number(rawPrice.trim());
+    if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) {
+      setError('Invalid delivery price');
+      return;
     }
-
-    async function handleCreateBot() {
-      setError(null);
-      try {
-        await api.createAdminTelegramBot({
-          token: newBotToken.trim(),
-          displayName: newBotDisplayName.trim() || undefined,
-          webAppUrl: newBotWebAppUrl.trim() || undefined,
-          status: 'enabled',
-          isPrimary: newBotIsPrimary,
-        });
-        setNewBotToken('');
-        setNewBotDisplayName('');
-        setNewBotWebAppUrl('');
-        setNewBotIsPrimary(false);
-        setTelegramBots((await api.getAdminTelegramBots()).bots);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to connect bot'));
-      }
+    const reason = window.prompt('Reason:', 'Manual delivery calculation');
+    if (!reason?.trim()) {
+      setError('Reason is required');
+      return;
     }
-
-    async function handleTestBot(botId: number) {
-      setError(null);
-      try {
-        await api.testAdminTelegramBot(botId);
-        setTelegramBots((await api.getAdminTelegramBots()).bots);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to test bot'));
-      }
+    try {
+      const response = await api.updateAdminOrderDeliveryPrice(orderId, { deliveryPrice, reason: reason.trim() });
+      setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to set delivery price'));
     }
+  }
 
-    async function handleConfigureBot(botId: number) {
-      setError(null);
-      try {
-        const draft = botConfigDraft[botId] ?? {};
-        await api.configureAdminTelegramBot(botId, {
-          menuButtonText: draft.menuButtonText,
-          menuButtonUrl: draft.menuButtonUrl,
-          webhookUrl: draft.webhookUrl,
-          webhookSecret: draft.webhookSecret,
-          webhookEnabled: draft.webhookEnabled,
-        });
-        setTelegramBots((await api.getAdminTelegramBots()).bots);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to configure bot'));
-      }
+  async function handleCreateOperator() {
+    setError(null);
+    try {
+      await api.createAdminOperator({
+        telegramId: newOperatorTelegramId.trim(),
+        name: newOperatorName.trim(),
+        username: newOperatorUsername.trim() || undefined,
+        role: newOperatorRole,
+        status: newOperatorStatus,
+      });
+      setNewOperatorTelegramId('');
+      setNewOperatorName('');
+      setNewOperatorUsername('');
+      setOperators((await api.getAdminOperators()).operators);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to create operator'));
     }
+  }
 
-    async function handleToggleBot(botId: number, status: string) {
-      setError(null);
-      try {
-        await api.updateAdminTelegramBot(botId, { status: status === 'enabled' ? 'disabled' : 'enabled' });
-        setTelegramBots((await api.getAdminTelegramBots()).bots);
-      } catch (e: unknown) {
-        setError(getAdminErrorMessage(e, 'Failed to update bot status'));
-      }
+  async function handleToggleOperator(operatorId: number, status: 'active' | 'disabled') {
+    setError(null);
+    try {
+      const response = await api.updateAdminOperator(operatorId, { status: status === 'active' ? 'disabled' : 'active' });
+      setOperators((current) => current.map((operator) => (operator.id === operatorId ? response.operator : operator)));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update operator'));
+    }
+  }
+
+  async function handleCreateBot() {
+    setError(null);
+    try {
+      await api.createAdminTelegramBot({
+        token: newBotToken.trim(),
+        displayName: newBotDisplayName.trim() || undefined,
+        webAppUrl: newBotWebAppUrl.trim() || undefined,
+        status: 'enabled',
+        isPrimary: newBotIsPrimary,
+      });
+      setNewBotToken('');
+      setNewBotDisplayName('');
+      setNewBotWebAppUrl('');
+      setNewBotIsPrimary(false);
+      setTelegramBots((await api.getAdminTelegramBots()).bots);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to connect bot'));
+    }
+  }
+
+  async function handleTestBot(botId: number) {
+    setError(null);
+    try {
+      await api.testAdminTelegramBot(botId);
+      setTelegramBots((await api.getAdminTelegramBots()).bots);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to test bot'));
+    }
+  }
+
+  async function handleConfigureBot(botId: number) {
+    setError(null);
+    try {
+      const draft = botConfigDraft[botId] ?? {};
+      await api.configureAdminTelegramBot(botId, {
+        menuButtonText: draft.menuButtonText,
+        menuButtonUrl: draft.menuButtonUrl,
+        webhookUrl: draft.webhookUrl,
+        webhookSecret: draft.webhookSecret,
+        webhookEnabled: draft.webhookEnabled,
+      });
+      setTelegramBots((await api.getAdminTelegramBots()).bots);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to configure bot'));
+    }
+  }
+
+  async function handleToggleBot(botId: number, status: string) {
+    setError(null);
+    try {
+      await api.updateAdminTelegramBot(botId, { status: status === 'enabled' ? 'disabled' : 'enabled' });
+      setTelegramBots((await api.getAdminTelegramBots()).bots);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update bot status'));
     }
   }
 
