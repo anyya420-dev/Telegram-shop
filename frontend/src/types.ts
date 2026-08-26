@@ -276,3 +276,9 @@ export type AdminOrder = Order & {
     telegramId: string
   }
 }
+
+export type AdminDeliveryOption = DeliveryOption & {
+  isActive?: boolean
+  sortOrder?: number
+  nameEn?: string | null
+}

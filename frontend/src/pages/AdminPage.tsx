@@ -4,16 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCategory, AdminCity, AdminOrder, AdminProduct, AdminStats, DeliveryOption, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
 type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments';
-
-type AdminDeliveryOption = DeliveryOption & {
-  isActive?: boolean;
-  sortOrder?: number;
-  nameEn?: string | null;
-};
 
 type ProductCityDraft = {
   cityId: string;
@@ -186,6 +180,7 @@ export default function AdminPage() {
   const [newDeliveryPrice, setNewDeliveryPrice] = useState('0');
   const [newDeliverySortOrder, setNewDeliverySortOrder] = useState('0');
   const [newDeliveryIsActive, setNewDeliveryIsActive] = useState(true);
+  const [creatingDelivery, setCreatingDelivery] = useState(false);
   const [editingDelivery, setEditingDelivery] = useState<number | null>(null);
   const [deliveryEdits, setDeliveryEdits] = useState<Record<number, DeliveryEditDraft>>({});
 
@@ -615,8 +610,9 @@ export default function AdminPage() {
   }
 
   async function handleCreateDeliveryOption() {
-    if (!newDeliveryName.trim()) return;
+    if (creatingDelivery || !newDeliveryName.trim()) return;
     setError(null);
+    setCreatingDelivery(true);
 
     try {
       const response = await api.createAdminDeliveryOption({
@@ -636,6 +632,8 @@ export default function AdminPage() {
       setNewDeliveryIsActive(true);
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to create delivery option'));
+    } finally {
+      setCreatingDelivery(false);
     }
   }
 
@@ -1345,8 +1343,8 @@ export default function AdminPage() {
             <div className={styles.formRow}>
               <label className={styles.checkLabel}><input type="checkbox" checked={newDeliveryIsActive} onChange={(event) => setNewDeliveryIsActive(event.target.checked)} /> {t('admin.active', { defaultValue: 'Active' })}</label>
             </div>
-            <button className={styles.createBtn} onClick={() => void handleCreateDeliveryOption()} disabled={!newDeliveryName.trim()}>
-              {t('common.save', { defaultValue: 'Save' })}
+            <button className={styles.createBtn} onClick={() => void handleCreateDeliveryOption()} disabled={creatingDelivery || !newDeliveryName.trim()}>
+              {creatingDelivery ? t('common.loading', { defaultValue: 'Loading...' }) : t('common.save', { defaultValue: 'Save' })}
             </button>
           </div>
 

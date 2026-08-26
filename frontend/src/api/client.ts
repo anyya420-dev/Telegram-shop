@@ -1,6 +1,7 @@
 import type {
   AdminCategory,
   AdminCity,
+  AdminDeliveryOption,
   AdminOrder,
   AdminProduct,
   AdminStats,
@@ -277,13 +278,13 @@ export const api = {
     return adminRequest<{ discount: Discount }>(`/admin/discounts/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminDeliveryOptions() {
-    return adminRequest<{ options: (DeliveryOption & { isActive?: boolean; sortOrder?: number; nameEn?: string | null })[] }>('/admin/delivery-options')
+    return adminRequest<{ options: AdminDeliveryOption[] }>('/admin/delivery-options')
   },
   createAdminDeliveryOption(data: { name: string; nameEn?: string; type?: string; price?: number; isActive?: boolean; sortOrder?: number }) {
-    return adminRequest<{ option: DeliveryOption & { isActive?: boolean; sortOrder?: number; nameEn?: string | null } }>('/admin/delivery-options', { method: 'POST', body: JSON.stringify(data) })
+    return adminRequest<{ option: AdminDeliveryOption }>('/admin/delivery-options', { method: 'POST', body: JSON.stringify(data) })
   },
   updateAdminDeliveryOption(id: number, data: { name?: string; nameEn?: string | null; type?: string; price?: number; isActive?: boolean; sortOrder?: number }) {
-    return adminRequest<{ option: DeliveryOption & { isActive?: boolean; sortOrder?: number; nameEn?: string | null } }>(`/admin/delivery-options/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+    return adminRequest<{ option: AdminDeliveryOption }>(`/admin/delivery-options/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminSupportTickets(status?: string) {
     const params = status ? `?status=${status}` : ''

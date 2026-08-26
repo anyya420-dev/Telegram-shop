@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
@@ -91,11 +91,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function refreshCatalog(
+  const refreshCatalog = useCallback(async (
     search = '',
     categoryId: number | 'all' = 'all',
     sort: 'newest' | 'price_asc' | 'price_desc' | 'popular' = 'newest',
-  ) {
+  ) => {
     if (!user?.selectedCityId) {
       setProducts([])
       return
@@ -109,7 +109,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError(translateError(catalogError, t, 'catalog_refresh_failed'))
       throw catalogError
     }
-  }
+  }, [t, user?.selectedCityId])
 
   async function refreshCart() {
     if (!user) {
