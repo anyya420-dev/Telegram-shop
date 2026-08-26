@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, CreditCard, MapPin, User } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { api } from '../api/client'
+import { ApiError, api } from '../api/client'
 import styles from './CheckoutPage.module.css'
 import { useTranslation } from 'react-i18next'
 import { formatCurrency } from '../lib/format'
-import { getLocalizedCityName } from '../lib/localized'
+import { getLocalizedCityName, getLocalizedUnit } from '../lib/localized'
 import i18n from '../lib/i18n'
 import type { DeliveryOption, Language, Order, PaymentMethod } from '../types'
 
 export default function CheckoutPage() {
-  const { cart, user, checkout } = useApp()
+  const { cart, user, checkout, openCityPicker } = useApp()
   const navigate = useNavigate()
   const { t } = useTranslation()
   const language = i18n.language as Language
@@ -33,14 +34,23 @@ export default function CheckoutPage() {
   const [markingPaid, setMarkingPaid] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  function getErrorMessage(error: unknown, fallbackKey: string) {
+    if (error instanceof ApiError && error.code) {
+      return t(`errors.${error.code}`)
+    }
+
+    return t(`errors.${fallbackKey}`)
+  }
+
   const loadDelivery = useCallback(async () => {
     try {
       setDeliveryLoading(true)
       setDeliveryError(null)
       const response = await api.getDeliveryOptions()
       setDeliveryOptions(response.options)
+      setSelectedDeliveryId((prev) => prev ?? response.options[0]?.id ?? null)
     } catch (err) {
-      setDeliveryError(err instanceof Error ? err.message : t('errors.request_failed'))
+      setDeliveryError(getErrorMessage(err, 'request_failed'))
     } finally {
       setDeliveryLoading(false)
     }
@@ -54,7 +64,7 @@ export default function CheckoutPage() {
       setPaymentMethods(response.methods)
       setSelectedPaymentMethodId((prev) => prev ?? response.methods[0]?.id ?? null)
     } catch (err) {
-      setPaymentError(err instanceof Error ? err.message : t('errors.request_failed'))
+      setPaymentError(getErrorMessage(err, 'request_failed'))
     } finally {
       setPaymentLoading(false)
     }
@@ -82,7 +92,7 @@ export default function CheckoutPage() {
       setDiscountAmount(response.discountAmount)
     } catch (err) {
       setDiscountAmount(0)
-      setDiscountError(err instanceof Error ? err.message : t('cart.invalidDiscount'))
+      setDiscountError(getErrorMessage(err, 'request_failed'))
     } finally {
       setValidatingDiscount(false)
     }
@@ -109,7 +119,7 @@ export default function CheckoutPage() {
       })
       setOrder(createdOrder)
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : t('cart.checkoutFailed'))
+      setSubmitError(getErrorMessage(err, 'checkout_failed'))
     } finally {
       setSubmitting(false)
     }
@@ -133,7 +143,7 @@ export default function CheckoutPage() {
       const response = await api.markOrderPaid(order.id)
       setOrder(response.order)
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : t('errors.request_failed'))
+      setSubmitError(getErrorMessage(err, 'request_failed'))
     } finally {
       setMarkingPaid(false)
     }
@@ -150,10 +160,44 @@ export default function CheckoutPage() {
         </div>
 
         <div className={styles.card}>
+          <p className={styles.sectionTitle}>{t('checkout.successTitle')}</p>
+          <p className={styles.value}>{t('checkout.successText')}</p>
+          <div className={styles.sectionDivider} />
           <p className={styles.sectionTitle}>{t('orders.orderTitle', { id: order.id })}</p>
+          <div className={styles.infoRow}>
+            <MapPin size={14} strokeWidth={1.6} />
+            <span>{language === 'en' && order.city.nameEn ? order.city.nameEn : order.city.name}</span>
+          </div>
+          <div className={styles.infoRow}>
+            <User size={14} strokeWidth={1.6} />
+            <span>{user?.firstName ?? t('profile.defaultName')}</span>
+          </div>
           <div className={styles.line}>
             <span>{t('cart.orderTotal')}</span>
             <span>{formatCurrency(order.total, language)}</span>
+          </div>
+          <div className={styles.sectionDivider} />
+          <p className={styles.sectionTitle}>{t('checkout.items')}</p>
+          {order.items.map((item) => (
+            <div key={item.id} className={styles.line}>
+              <span>{item.productName} × {item.quantity} {item.unit}</span>
+              <span>{formatCurrency(item.lineTotal, language)}</span>
+            </div>
+          ))}
+          <div className={styles.sectionDivider} />
+          <div className={styles.line}>
+            <span>{t('cart.items', { count: order.items.length })}</span>
+            <span>{formatCurrency(order.subtotal, language)}</span>
+          </div>
+          {order.discountAmount > 0 ? (
+            <div className={styles.line}>
+              <span>{t('cart.discount')}{order.discount ? ` (${order.discount.code})` : ''}</span>
+              <span>−{formatCurrency(order.discountAmount, language)}</span>
+            </div>
+          ) : null}
+          <div className={styles.line}>
+            <span>{t('cart.delivery')}</span>
+            <span>{formatCurrency(order.deliveryFee, language)}</span>
           </div>
           {method && (
             <div className={styles.line}>
@@ -192,9 +236,17 @@ export default function CheckoutPage() {
               {markingPaid ? t('common.loading') : t('checkout.iPaid')}
             </button>
           )}
-          <button className={styles.secondaryBtn} onClick={() => navigate(`/orders/${order.id}`)} type="button">
-            {t('checkout.viewOrder')}
-          </button>
+          <div className={styles.actionGroup}>
+            <button className={styles.secondaryBtn} onClick={() => navigate(`/orders/${order.id}`)} type="button">
+              {t('checkout.viewOrder')}
+            </button>
+            <button className={styles.secondaryBtn} onClick={() => navigate('/orders')} type="button">
+              {t('checkout.viewOrders')}
+            </button>
+            <button className={styles.secondaryBtn} onClick={() => navigate('/profile')} type="button">
+              {t('checkout.goToProfile')}
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -216,6 +268,7 @@ export default function CheckoutPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <button className={styles.back} onClick={() => navigate('/shop/cart')} type="button">
+          <ArrowLeft size={16} strokeWidth={1.8} />
           {t('common.back')}
         </button>
         <h1 className={styles.title}>{t('checkout.title')}</h1>
@@ -223,14 +276,31 @@ export default function CheckoutPage() {
 
       <div className={styles.card}>
         <p className={styles.label}>{t('profile.city')}</p>
-        <p className={styles.value}>{cityLabel}</p>
+        <div className={styles.infoRow}>
+          <MapPin size={14} strokeWidth={1.6} />
+          <span>{cityLabel}</span>
+        </div>
+        {!user?.selectedCityId ? (
+          <button className={styles.secondaryBtn} onClick={openCityPicker} type="button">
+            {t('checkout.selectCity')}
+          </button>
+        ) : null}
+      </div>
+
+      <div className={styles.card}>
+        <p className={styles.label}>{t('checkout.customerInfo')}</p>
+        <div className={styles.infoRow}>
+          <User size={14} strokeWidth={1.6} />
+          <span>{user?.firstName ?? t('profile.defaultName')}</span>
+        </div>
+        {user?.username ? <p className={styles.value}>@{user.username}</p> : null}
       </div>
 
       <div className={styles.card}>
         <p className={styles.sectionTitle}>{t('checkout.items')}</p>
         {cart.items.map((item) => (
           <div key={item.id} className={styles.line}>
-            <span>{item.productCity.name} × {item.quantity}</span>
+            <span>{item.productCity.name} × {item.quantity} {getLocalizedUnit(item.productCity.unit, language, item.productCity.unitTranslations)}</span>
             <span>{formatCurrency(item.lineTotal, language)}</span>
           </div>
         ))}
@@ -286,6 +356,10 @@ export default function CheckoutPage() {
 
       <div className={styles.card}>
         <p className={styles.sectionTitle}>{t('checkout.paymentMethod')}</p>
+        <div className={styles.infoRow}>
+          <CreditCard size={14} strokeWidth={1.6} />
+          <span>{t('checkout.paymentMethod')}</span>
+        </div>
         {paymentLoading && <p className={styles.value}>{t('common.loading')}</p>}
         {paymentError && (
           <div className={styles.errorRow}>
@@ -326,7 +400,7 @@ export default function CheckoutPage() {
       <div className={styles.card}>
         <div className={styles.line}><span>{t('cart.items', { count: cart.items.length })}</span><span>{formatCurrency(safeSubtotal, language)}</span></div>
         {discountAmount > 0 && <div className={styles.line}><span>{t('cart.discount')}</span><span>−{formatCurrency(discountAmount, language)}</span></div>}
-        <div className={styles.line}><span>{t('cart.delivery')}</span><span>{formatCurrency(selectedDelivery?.price ?? 0, language)}</span></div>
+        <div className={styles.line}><span>{t('cart.delivery')}</span><span>{selectedDelivery ? formatCurrency(selectedDelivery.price, language) : t('checkout.notSelected')}</span></div>
         <div className={styles.total}><span>{t('cart.orderTotal')}</span><span>{formatCurrency(total, language)}</span></div>
         {submitError && <p className={styles.error}>{submitError}</p>}
         <button className={styles.primaryBtn} onClick={() => void submitCheckout()} disabled={submitting || paymentMethods.length === 0} type="button">

@@ -92,7 +92,8 @@
     "invalidDiscount": "Неверный или просроченный код",
     "deliveryOption": "Способ доставки",
     "free": "Бесплатно",
-    "continueShopping": "Продолжить покупки"
+    "continueShopping": "Продолжить покупки",
+    "itemUnavailable": "Этот товар больше недоступен."
   },
   "checkout": {
     "title": "Оформление заказа",
@@ -119,7 +120,12 @@
     "noDeliveryOptions": "Варианты доставки пока недоступны",
     "successTitle": "Заказ создан",
     "successText": "Ваш заказ успешно оформлен.",
-    "viewOrder": "Открыть заказ"
+    "viewOrder": "Открыть заказ",
+    "viewOrders": "Все заказы",
+    "goToProfile": "Перейти в профиль",
+    "selectCity": "Выбрать город",
+    "customerInfo": "Данные покупателя",
+    "notSelected": "Не выбран"
   },
   "profile": {
     "title": "Профиль",
@@ -303,6 +309,12 @@
     "language_update_failed": "Не удалось сохранить язык.",
     "checkout_failed": "Не удалось оформить заказ.",
     "orders_fetch_failed": "Не удалось загрузить заказы.",
-    "cart_empty": "Корзина пуста."
+    "cart_empty": "Корзина пуста.",
+    "delivery_option_unavailable": "Выбранный способ доставки недоступен.",
+    "discount_not_found": "Промокод не найден.",
+    "discount_expired": "Срок действия промокода истёк.",
+    "discount_exhausted": "Лимит использования промокода исчерпан.",
+    "order_too_small": "Сумма заказа слишком мала для этого промокода.",
+    "order_submission_in_progress": "Заказ уже обрабатывается. Пожалуйста, подождите."
   }
 }

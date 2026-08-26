@@ -186,6 +186,7 @@ export function mapProduct(productCity: {
     price: number
     image: string | null
     categoryId: number
+    isActive: boolean
     isRecommended: boolean
     category: {
       name: string
@@ -208,7 +209,7 @@ export function mapProduct(productCity: {
     categoryNameTranslations: createTranslations(productCity.product.category.name, productCity.product.category.nameEn),
     isRecommended: productCity.product.isRecommended,
     stock: productCity.stock,
-    isAvailable: productCity.isAvailable && productCity.stock > 0,
+    isAvailable: productCity.product.isActive && productCity.isAvailable && productCity.stock > 0,
     minimumQuantity: productCity.minimumQuantity,
     quantityStep: productCity.quantityStep,
     maximumQuantity: productCity.maximumQuantity,

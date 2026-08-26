@@ -335,6 +335,168 @@ test('payment settings CRUD and checkout manual payment flow', async () => {
   assert.equal(confirmPayment.body.order.status, 'confirmed')
 })
 
+test('cart and checkout enforce quantity, delivery, stock, and cart clearing rules', async () => {
+  const telegramId = '900000002'
+  const user = await prisma.user.create({
+    data: { telegramId, firstName: 'Buyer', username: 'buyer', language: 'ru' },
+  })
+  const sessionToken = createSessionToken!(telegramId)
+  const authHeaders = { 'X-Session-Token': sessionToken, 'Content-Type': 'application/json' }
+
+  const city = await prisma.city.create({ data: { name: 'Checkout City', nameEn: 'Checkout City', isActive: true } })
+  const category = await prisma.category.create({ data: { name: 'Checkout Category', nameEn: 'Checkout Category', isActive: true } })
+  const product = await prisma.product.create({
+    data: {
+      name: 'Flow Product',
+      nameEn: 'Flow Product',
+      description: 'Flow test product',
+      descriptionEn: 'Flow test product',
+      price: 12,
+      categoryId: category.id,
+      isActive: true,
+    },
+  })
+  const productCity = await prisma.productCity.create({
+    data: {
+      productId: product.id,
+      cityId: city.id,
+      stock: 6,
+      minimumQuantity: 2,
+      quantityStep: 2,
+      maximumQuantity: 6,
+      unit: 'шт.',
+      isAvailable: true,
+    },
+  })
+  const paymentMethod = await prisma.paymentMethod.create({
+    data: {
+      type: 'card',
+      title: 'Checkout Card',
+      cardNumber: '5555444433332222',
+      cardholderName: 'SHOP',
+      currency: 'USD',
+      isEnabled: true,
+    },
+  })
+  const deliveryOption = await prisma.deliveryOption.create({
+    data: {
+      name: 'Courier',
+      nameEn: 'Courier',
+      type: 'delivery',
+      price: 5,
+      isActive: true,
+      sortOrder: 1,
+    },
+  })
+  const discount = await prisma.discount.create({
+    data: {
+      code: 'SAVE10',
+      type: 'percent',
+      value: 10,
+      minOrderAmount: 20,
+      usageLimit: 5,
+      isActive: true,
+    },
+  })
+
+  await prisma.user.update({ where: { id: user.id }, data: { selectedCityId: city.id } })
+
+  const firstAdd = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ productCityId: productCity.id, quantity: 2 }),
+  })
+  assert.equal(firstAdd.response.status, 200)
+  assert.equal(firstAdd.body.cart.items[0].quantity, 2)
+
+  const secondAdd = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ productCityId: productCity.id, quantity: 2 }),
+  })
+  assert.equal(secondAdd.response.status, 200)
+  assert.equal(secondAdd.body.cart.items[0].quantity, 4)
+  assert.equal(secondAdd.body.cart.subtotal, 48)
+
+  const deliveryOptionsResponse = await requestJson('/api/delivery', {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(deliveryOptionsResponse.response.status, 200)
+  assert.deepEqual(Object.keys(deliveryOptionsResponse.body.options[0]).sort(), ['id', 'name', 'nameEn', 'price', 'type'])
+
+  const invalidDelivery = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: 999999 }),
+  })
+  assert.equal(invalidDelivery.response.status, 400)
+  assert.equal(invalidDelivery.body.code, 'delivery_option_unavailable')
+
+  const cartId = secondAdd.body.cart.id as number
+  const cartItemId = secondAdd.body.cart.items[0].id as number
+  assert.ok(cartId)
+  assert.ok(cartItemId)
+
+  await prisma.cartItem.update({
+    where: { id: cartItemId },
+    data: { quantity: 3 },
+  })
+
+  const invalidQuantity = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: deliveryOption.id }),
+  })
+  assert.equal(invalidQuantity.response.status, 400)
+  assert.equal(invalidQuantity.body.code, 'quantity_invalid')
+
+  await prisma.cartItem.update({
+    where: { id: cartItemId },
+    data: { quantity: 4 },
+  })
+
+  const checkout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      paymentMethodId: paymentMethod.id,
+      deliveryOptionId: deliveryOption.id,
+      discountCode: discount.code,
+      comment: 'Leave at the door',
+    }),
+  })
+  assert.equal(checkout.response.status, 200)
+  assert.equal(checkout.body.order.subtotal, 48)
+  assert.equal(checkout.body.order.discountAmount, 4.8)
+  assert.equal(checkout.body.order.deliveryFee, 5)
+  assert.equal(checkout.body.order.total, 48.2)
+  assert.equal(checkout.body.order.items.length, 1)
+  assert.equal(checkout.body.order.items[0].quantity, 4)
+  assert.equal(checkout.body.order.comment, 'Leave at the door')
+  assert.equal(checkout.body.cart.items.length, 0)
+
+  const updatedProductCity = await prisma.productCity.findUniqueOrThrow({ where: { id: productCity.id } })
+  assert.equal(updatedProductCity.stock, 2)
+
+  const updatedDiscount = await prisma.discount.findUniqueOrThrow({ where: { id: discount.id } })
+  assert.equal(updatedDiscount.usedCount, 1)
+
+  const cartAfterCheckout = await requestJson('/api/cart', {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(cartAfterCheckout.response.status, 200)
+  assert.equal(cartAfterCheckout.body.cart.id, cartId)
+  assert.equal(cartAfterCheckout.body.cart.items.length, 0)
+
+  const secondCheckout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id }),
+  })
+  assert.equal(secondCheckout.response.status, 400)
+  assert.equal(secondCheckout.body.code, 'cart_empty')
+})
+
 test('session bootstrap, city selection, and catalog stay city-aware', async () => {
   process.env.TELEGRAM_BOT_TOKEN = 'bootstrap-secret'
   process.env.ALLOW_DEMO_MODE = 'true'

@@ -7,6 +7,13 @@ const router = Router()
 router.get('/', authRateLimiter, async (_request, response) => {
   const options = await prisma.deliveryOption.findMany({
     where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      nameEn: true,
+      type: true,
+      price: true,
+    },
     orderBy: { sortOrder: 'asc' },
   })
   response.json({ options })

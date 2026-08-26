@@ -90,7 +90,8 @@
     "invalidDiscount": "Invalid or expired code",
     "deliveryOption": "Delivery method",
     "free": "Free",
-    "continueShopping": "Continue shopping"
+    "continueShopping": "Continue shopping",
+    "itemUnavailable": "This item is no longer available."
   },
   "checkout": {
     "title": "Checkout",
@@ -117,7 +118,12 @@
     "noDeliveryOptions": "No delivery methods available",
     "successTitle": "Order created",
     "successText": "Your order was placed successfully.",
-    "viewOrder": "View order"
+    "viewOrder": "View order",
+    "viewOrders": "View orders",
+    "goToProfile": "Go to profile",
+    "selectCity": "Select city",
+    "customerInfo": "Customer information",
+    "notSelected": "Not selected"
   },
   "profile": {
     "title": "Profile",
@@ -297,6 +303,12 @@
     "language_update_failed": "Failed to save the language.",
     "checkout_failed": "Failed to place the order.",
     "orders_fetch_failed": "Failed to load orders.",
-    "cart_empty": "Cart is empty."
+    "cart_empty": "Cart is empty.",
+    "delivery_option_unavailable": "The selected delivery method is unavailable.",
+    "discount_not_found": "The promo code was not found.",
+    "discount_expired": "The promo code has expired.",
+    "discount_exhausted": "The promo code limit has been reached.",
+    "order_too_small": "The order amount is too small for this promo code.",
+    "order_submission_in_progress": "Your order is already being processed. Please wait."
   }
 }

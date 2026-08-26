@@ -9,6 +9,7 @@ type AppState = {
   loading: boolean
   error: string | null
   citiesLoading: boolean
+  cartLoading: boolean
   telegramEnvironment: boolean
   user: UserProfile | null
   cities: City[]
@@ -22,6 +23,7 @@ type AppState = {
   openCityPicker: () => void
   closeCityPicker: () => void
   reloadCities: () => Promise<City[]>
+  refreshCart: () => Promise<Cart>
   refreshCatalog: (search?: string, categoryId?: number | 'all', sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular') => Promise<void>
   selectCity: (cityId: number) => Promise<void>
   updateLanguagePreference: (language: Language) => Promise<void>
@@ -58,6 +60,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [citiesLoading, setCitiesLoading] = useState(false)
+  const [cartLoading, setCartLoading] = useState(false)
   const [telegramEnvironment, setTelegramEnvironment] = useState(false)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [cities, setCities] = useState<City[]>([])
@@ -108,6 +111,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshCart() {
+    if (!user) {
+      const nextCart = emptyCart()
+      setCart(nextCart)
+      setRecommended([])
+      return nextCart
+    }
+
+    try {
+      setCartLoading(true)
+      setError(null)
+      const cartResponse = await api.getCart()
+      setCart(cartResponse.cart)
+      setRecommended(cartResponse.recommended)
+      return cartResponse.cart
+    } catch (cartError) {
+      setError(translateError(cartError, t, 'cart_update_failed'))
+      throw cartError
+    } finally {
+      setCartLoading(false)
+    }
+  }
+
   useEffect(() => {
     async function bootstrap() {
       try {
@@ -134,6 +160,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setCart(emptyCart())
           setRecommended([])
         } else {
+          setCartLoading(true)
           const [catalogResponse, cartResponse] = await Promise.all([
             api.getCatalog({ cityId: response.user.selectedCityId }),
             api.getCart(),
@@ -141,10 +168,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setProducts(catalogResponse.products)
           setCart(cartResponse.cart)
           setRecommended(cartResponse.recommended)
+          setCartLoading(false)
         }
       } catch (bootstrapError) {
         setError(translateError(bootstrapError, t, 'shop_load_failed'))
       } finally {
+        setCartLoading(false)
         setLoading(false)
       }
     }
@@ -163,14 +192,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUser(response.user)
       setCityPickerOpen(false)
 
-      const productsResponse = await api.getCatalog({ cityId })
-      const cartResponse = await api.getCart()
+      setCartLoading(true)
+      const [productsResponse, cartResponse] = await Promise.all([
+        api.getCatalog({ cityId }),
+        api.getCart(),
+      ])
       setProducts(productsResponse.products)
       setCart(cartResponse.cart)
       setRecommended(cartResponse.recommended)
     } catch (cityError) {
       setError(translateError(cityError, t, 'city_not_found'))
       throw cityError
+    } finally {
+      setCartLoading(false)
     }
   }
 
@@ -277,6 +311,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     citiesLoading,
+    cartLoading,
     telegramEnvironment,
     user,
     cities,
@@ -290,6 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
     reloadCities,
+    refreshCart,
     refreshCatalog,
     selectCity,
     updateLanguagePreference,
