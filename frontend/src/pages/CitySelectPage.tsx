@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, MapPin } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -14,6 +14,10 @@ export default function CitySelectPage() {
   const navigate = useNavigate()
   const [selecting, setSelecting] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loadState, setLoadState] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>(() => (
+    cities.length > 0 ? 'success' : 'idle'
+  ))
+  const hasInitialLoadAttempt = useRef(false)
   const language = i18n.language as Language
 
   useEffect(() => {
@@ -23,18 +27,35 @@ export default function CitySelectPage() {
   }, [navigate, user])
 
   useEffect(() => {
-    if (cities.length > 0 || citiesLoading) {
+    if (cities.length > 0) {
+      setLoadState('success')
       return
     }
+    if (loadState === 'loading' && !citiesLoading) {
+      setLoadState('empty')
+    }
+  }, [cities.length, citiesLoading, loadState])
 
+  useEffect(() => {
+    if (hasInitialLoadAttempt.current || cities.length > 0 || citiesLoading) {
+      return
+    }
+    hasInitialLoadAttempt.current = true
     void handleReloadCities()
   }, [cities.length, citiesLoading])
 
   async function handleReloadCities() {
+    if (citiesLoading) {
+      return
+    }
+
     try {
+      setLoadState('loading')
       setError(null)
-      await reloadCities()
+      const response = await reloadCities()
+      setLoadState(response.length > 0 ? 'success' : 'empty')
     } catch (loadError) {
+      setLoadState('error')
       setError(loadError instanceof ApiError && loadError.code ? t(`errors.${loadError.code}`) : t('errors.request_failed'))
     }
   }
@@ -42,8 +63,11 @@ export default function CitySelectPage() {
   async function handleSelect(cityId: number) {
     setSelecting(cityId)
     try {
+      setError(null)
       await selectCity(cityId)
       navigate('/shop', { replace: true })
+    } catch (selectError) {
+      setError(selectError instanceof ApiError && selectError.code ? t(`errors.${selectError.code}`) : t('errors.request_failed'))
     } finally {
       setSelecting(null)
     }
@@ -59,18 +83,18 @@ export default function CitySelectPage() {
         <p className={styles.subtitle}>{t('city.subtitle')}</p>
       </div>
 
-      {citiesLoading ? (
+      {citiesLoading || loadState === 'loading' ? (
         <div className={styles.loadingState}>
           <div className={styles.spinner} aria-hidden="true" />
         </div>
-      ) : error ? (
+      ) : loadState === 'error' && error ? (
         <div className={styles.stateCard}>
           <p>{error}</p>
           <button className={styles.retryBtn} onClick={() => void handleReloadCities()} type="button">
             {t('common.retry')}
           </button>
         </div>
-      ) : cities.length === 0 ? (
+      ) : loadState === 'empty' || cities.length === 0 ? (
         <div className={styles.stateCard}>
           <p>{t('city.empty')}</p>
           <button className={styles.retryBtn} onClick={() => void handleReloadCities()} type="button">

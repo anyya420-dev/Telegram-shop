@@ -192,7 +192,7 @@ function getExpirationDate() {
 }
 
 function getBaseAppUrl() {
-  return (process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'https://telegram-shop.onrender.com').replace(/\/+$/, '')
+  return (process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'https://telegram-shop-378j.onrender.com').replace(/\/+$/, '')
 }
 
 async function createStripeCheckoutSession(method: PaymentMethod, order: Order, payment: Payment) {

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
@@ -36,6 +36,19 @@ type AppState = {
 }
 
 const AppContext = createContext<AppState | null>(null)
+type BootstrapPayload = Parameters<typeof api.bootstrap>[0]
+type BootstrapResponse = Awaited<ReturnType<typeof api.bootstrap>>
+let bootstrapRequestInFlight: Promise<BootstrapResponse> | null = null
+
+function runBootstrapRequest(payload: BootstrapPayload) {
+  if (!bootstrapRequestInFlight) {
+    bootstrapRequestInFlight = api.bootstrap(payload).finally(() => {
+      bootstrapRequestInFlight = null
+    })
+  }
+
+  return bootstrapRequestInFlight
+}
 
 function emptyCart(): Cart {
   return {
@@ -71,6 +84,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  const citiesReloadInFlightRef = useRef<Promise<City[]> | null>(null)
 
   function t(key: string): string {
     return i18n.t(key)
@@ -81,13 +95,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function reloadCities() {
+    if (citiesReloadInFlightRef.current) {
+      return citiesReloadInFlightRef.current
+    }
+
+    const request = (async () => {
+      try {
+        setCitiesLoading(true)
+        const response = await api.getCities()
+        setCities(response)
+        return response
+      } finally {
+        setCitiesLoading(false)
+      }
+    })()
+
+    citiesReloadInFlightRef.current = request
     try {
-      setCitiesLoading(true)
-      const response = await api.getCities()
-      setCities(response)
-      return response
+      return await request
     } finally {
-      setCitiesLoading(false)
+      if (citiesReloadInFlightRef.current === request) {
+        citiesReloadInFlightRef.current = null
+      }
     }
   }
 
@@ -141,7 +170,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setError(null)
         const telegram = getTelegramContext()
         api.setSessionToken(null)
-        const response = await api.bootstrap({
+        const response = await runBootstrapRequest({
           initData: telegram.initData,
           telegramUser: telegram.user,
           isTelegramEnvironment: telegram.isTelegramEnvironment,

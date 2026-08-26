@@ -3,14 +3,6 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
-  await prisma.cartItem.deleteMany()
-  await prisma.cart.deleteMany()
-  await prisma.productCity.deleteMany()
-  await prisma.product.deleteMany()
-  await prisma.category.deleteMany()
-  await prisma.city.deleteMany()
-  await prisma.user.deleteMany()
-
   const warsaw = await prisma.city.upsert({
     where: { name: 'Варшава' },
     update: { nameEn: 'Warsaw', isActive: true, sortOrder: 1 },

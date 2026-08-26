@@ -12,16 +12,17 @@ if (!token) {
 const bot = new Telegraf(token)
 
 bot.start(async (context) => {
-  await context.reply(
-    'Добро пожаловать в Telegram Shop. Откройте Web App, чтобы выбрать город и начать покупки.',
-    Markup.keyboard([[Markup.button.webApp('Открыть магазин', webAppUrl)]]).resize(),
-  )
+  await context.reply('Добро пожаловать в NARCOS SHOP. Откройте Web App, чтобы выбрать город и начать покупки.', {
+    reply_markup: Markup.inlineKeyboard([
+      [Markup.button.webApp('🛍 Открыть NARCOS', webAppUrl)],
+    ]).reply_markup,
+  })
 })
 
 bot.command('shop', async (context) => {
   await context.reply('Откройте магазин через кнопку ниже.', {
     reply_markup: Markup.inlineKeyboard([
-      Markup.button.webApp('🛍 Магазин', webAppUrl),
+      [Markup.button.webApp('🛍 Открыть NARCOS', webAppUrl)],
     ]).reply_markup,
   })
 })

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const PRODUCTION = {
-  frontendUrl: process.env.SMOKE_FRONTEND_URL?.trim() || 'https://telegram-shop.onrender.com',
+  frontendUrl: process.env.SMOKE_FRONTEND_URL?.trim() || 'https://telegram-shop-378j.onrender.com',
   backendUrl: process.env.SMOKE_BACKEND_URL?.trim() || 'https://narcos-shop.onrender.com',
 }
 PRODUCTION.apiBaseUrl = `${PRODUCTION.backendUrl}/api`
