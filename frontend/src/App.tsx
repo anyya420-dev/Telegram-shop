@@ -17,6 +17,7 @@ import OrdersPage from './pages/OrdersPage';
 import OrderDetailPage from './pages/OrderDetailPage';
 import AdminPage from './pages/AdminPage';
 import WishlistPage from './pages/WishlistPage';
+import OperatorPage from './pages/OperatorPage';
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="admin" element={<AdminPage />} />
+            <Route path="operator" element={<OperatorPage />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>

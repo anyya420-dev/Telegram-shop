@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import { authRateLimiter, mapCity, mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
+import { authRateLimiter, mapCity, mapProduct, normalizeRole, parsePositiveInt, prisma, sendError } from '../lib.js'
 import type { CookieOptions, Request, Response } from 'express'
-import { notifyOrderStatusChange } from '../services/notifier.js'
+import { notifyOperatorAccessGranted, notifyOperatorOrderAssigned, notifyOperatorOrderPaid, notifyOrderReadyForPayment, notifyOrderStatusChange } from '../services/notifier.js'
 import {
   createAdminSession,
   ensureAdminPasswordFromEnv,
@@ -14,14 +14,25 @@ import {
   sanitizePayment,
   sanitizePaymentMethod,
 } from '../services/payments.js'
+import {
+  clearTelegramMenuButton,
+  decryptBotToken,
+  encryptBotToken,
+  fetchTelegramGetMe,
+  getTelegramWebhookInfo,
+  maskBotToken,
+  setTelegramMenuButton,
+  setTelegramWebhook,
+} from '../services/telegramBots.js'
 import { ensureCasinoDefaults, getOrCreateCasinoBalance, serializeReward } from '../services/casino.js'
 
 const router = Router()
 const ADMIN_SESSION_COOKIE_NAME = 'tg_shop_admin_session'
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const PAYMENT_TYPES = ['card', 'crypto'] as const
-const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'] as const
+const ORDER_STATUSES = ['waiting_for_delivery_price', 'ready_for_payment', 'pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'shipped', 'delivered', 'cancelled'] as const
 const DELIVERY_TYPES = ['delivery', 'pickup'] as const
+const OPERATOR_STATUSES = ['active', 'disabled'] as const
 
 type ProductCityInput = {
   cityId: number
@@ -43,6 +54,10 @@ function isOrderStatus(value: string): value is (typeof ORDER_STATUSES)[number] 
 
 function isDeliveryType(value: string): value is (typeof DELIVERY_TYPES)[number] {
   return DELIVERY_TYPES.includes(value as (typeof DELIVERY_TYPES)[number])
+}
+
+function isOperatorStatus(value: string): value is (typeof OPERATOR_STATUSES)[number] {
+  return OPERATOR_STATUSES.includes(value as (typeof OPERATOR_STATUSES)[number])
 }
 
 function getAdminCookieOptions() {
@@ -110,6 +125,45 @@ function getPositiveNumber(value: unknown) {
 function getPositiveInteger(value: unknown) {
   const parsed = getFiniteNumber(value)
   return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function serializeTelegramBot(bot: {
+  id: number
+  telegramBotId: string
+  username: string
+  displayName: string
+  encryptedToken: string
+  status: string
+  webAppUrl: string | null
+  menuButtonText: string | null
+  menuButtonUrl: string | null
+  webhookUrl: string | null
+  webhookSecret: string | null
+  webhookEnabled: boolean
+  webhookLastStatus: string | null
+  isPrimary: boolean
+  createdAt: Date
+  updatedAt: Date
+}) {
+  const token = decryptBotToken(bot.encryptedToken)
+  return {
+    id: bot.id,
+    telegramBotId: bot.telegramBotId,
+    username: bot.username,
+    displayName: bot.displayName,
+    maskedToken: maskBotToken(token),
+    status: bot.status,
+    webAppUrl: bot.webAppUrl,
+    menuButtonText: bot.menuButtonText,
+    menuButtonUrl: bot.menuButtonUrl,
+    webhookUrl: bot.webhookUrl,
+    webhookEnabled: bot.webhookEnabled,
+    webhookLastStatus: bot.webhookLastStatus,
+    isPrimary: bot.isPrimary,
+    hasWebhookSecret: Boolean(bot.webhookSecret),
+    createdAt: bot.createdAt,
+    updatedAt: bot.updatedAt,
+  }
 }
 
 function validateProductCityPayload(input: unknown): ProductCityValidationResult {
@@ -241,6 +295,7 @@ router.get('/orders', authRateLimiter, async (request, response) => {
         items: true,
         city: true,
         user: { select: { id: true, firstName: true, username: true, telegramId: true } },
+        assignedOperator: { select: { id: true, firstName: true, username: true, telegramId: true, role: true, operatorStatus: true } },
         statusHistory: { orderBy: { createdAt: 'desc' } },
         paymentMethod: true,
         deliveryOption: true,
@@ -292,6 +347,7 @@ router.patch('/orders/:id/status', authRateLimiter, async (request, response) =>
         items: true,
         city: true,
         user: { select: { id: true, firstName: true, username: true, telegramId: true } },
+        assignedOperator: { select: { id: true, firstName: true, username: true, telegramId: true, role: true, operatorStatus: true } },
         statusHistory: { orderBy: { createdAt: 'asc' } },
         paymentMethod: true,
         deliveryOption: true,
@@ -347,7 +403,7 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
     return
   }
 
-  if (!['payment_pending', 'pending', 'processing'].includes(order.status) || !['pending', 'processing'].includes(order.paymentStatus ?? '')) {
+  if (!['payment_pending', 'ready_for_payment', 'pending', 'processing'].includes(order.status) || !['pending', 'processing'].includes(order.paymentStatus ?? '')) {
     sendError(response, 400, 'invalid_payment_state', 'Order payment is not pending')
     return
   }
@@ -368,6 +424,7 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
           items: true,
           city: true,
           user: { select: { id: true, firstName: true, username: true, telegramId: true } },
+          assignedOperator: { select: { id: true, firstName: true, username: true, telegramId: true, role: true, operatorStatus: true } },
           statusHistory: { orderBy: { createdAt: 'asc' } },
           paymentMethod: true,
           deliveryOption: true,
@@ -390,6 +447,7 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
         items: true,
         city: true,
         user: { select: { id: true, firstName: true, username: true, telegramId: true } },
+        assignedOperator: { select: { id: true, firstName: true, username: true, telegramId: true, role: true, operatorStatus: true } },
         statusHistory: { orderBy: { createdAt: 'asc' } },
         paymentMethod: true,
         deliveryOption: true,
@@ -398,7 +456,502 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
     })
   })
 
+  if (action === 'confirm' && updated.assignedOperator?.telegramId) {
+    notifyOperatorOrderPaid(updated.assignedOperator.telegramId, {
+      id: updated.id,
+      subtotal: updated.subtotal,
+      delivery: updated.deliveryFee,
+      discount: updated.discountAmount,
+      total: updated.total,
+    })
+  }
+
   response.json({ order: updated })
+})
+
+router.patch('/orders/:id/operator', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const orderId = parsePositiveInt(request.params.id)
+  if (!orderId) {
+    sendError(response, 400, 'invalid_id', 'Invalid order id')
+    return
+  }
+
+  const requestedOperatorId = request.body.operatorId === null
+    ? null
+    : parsePositiveInt(request.body.operatorId)
+
+  if (request.body.operatorId !== null && !requestedOperatorId) {
+    sendError(response, 400, 'invalid_operator_id', 'Invalid operator id')
+    return
+  }
+
+  const [order, operator] = await Promise.all([
+    prisma.order.findUnique({
+      where: { id: orderId },
+      include: { city: true, user: { select: { telegramId: true, username: true } }, items: true },
+    }),
+    requestedOperatorId
+      ? prisma.user.findUnique({ where: { id: requestedOperatorId } })
+      : Promise.resolve(null),
+  ])
+
+  if (!order) {
+    sendError(response, 404, 'not_found', 'Order not found')
+    return
+  }
+  if (requestedOperatorId && (!operator || normalizeRole(operator.role) !== 'OPERATOR' || operator.operatorStatus === 'disabled')) {
+    sendError(response, 400, 'operator_unavailable', 'Selected operator is unavailable')
+    return
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId,
+        status: order.status,
+        comment: requestedOperatorId
+          ? `Operator assigned: #${requestedOperatorId}`
+          : 'Operator unassigned by admin',
+      },
+    })
+    return tx.order.update({
+      where: { id: orderId },
+      data: { assignedOperatorId: requestedOperatorId },
+      include: {
+        items: true,
+        city: true,
+        user: { select: { id: true, firstName: true, username: true, telegramId: true } },
+        assignedOperator: { select: { id: true, firstName: true, username: true, telegramId: true, role: true, operatorStatus: true } },
+        statusHistory: { orderBy: { createdAt: 'asc' } },
+        paymentMethod: true,
+        deliveryOption: true,
+        discount: true,
+      },
+    })
+  })
+
+  if (operator?.telegramId) {
+    notifyOperatorOrderAssigned(operator.telegramId, {
+      id: order.id,
+      cityName: order.city.name,
+      productsCount: order.items.length,
+      subtotal: order.subtotal,
+    })
+  }
+
+  response.json({ order: updated })
+})
+
+router.patch('/orders/:id/delivery-price', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const orderId = parsePositiveInt(request.params.id)
+  if (!orderId) {
+    sendError(response, 400, 'invalid_id', 'Invalid order id')
+    return
+  }
+
+  const deliveryPrice = getNonNegativeNumber(request.body.deliveryPrice)
+  if (deliveryPrice == null) {
+    sendError(response, 400, 'invalid_delivery_price', 'Delivery price must be zero or positive')
+    return
+  }
+  const reason = getTrimmedString(request.body.reason)
+  if (!reason) {
+    sendError(response, 400, 'delivery_price_reason_required', 'Reason is required')
+    return
+  }
+
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { user: true } })
+  if (!order) {
+    sendError(response, 404, 'not_found', 'Order not found')
+    return
+  }
+  if (order.status === 'cancelled' || order.paymentStatus === 'paid') {
+    sendError(response, 400, 'invalid_order_status', 'Order cannot be updated')
+    return
+  }
+
+  const previousPrice = order.deliveryPrice
+  const baseOrderTotal = Math.max(0, order.total - (order.deliveryPrice ?? order.deliveryFee ?? 0))
+  const recalculatedTotal = Number((baseOrderTotal + deliveryPrice).toFixed(2))
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.deliveryPriceAudit.create({
+      data: {
+        orderId,
+        actorUserId: order.assignedOperatorId ?? order.userId,
+        previousPrice,
+        newPrice: deliveryPrice,
+        reason,
+      },
+    })
+    await tx.orderStatusHistory.create({
+      data: { orderId, status: 'ready_for_payment', comment: `Delivery price confirmed by admin: ${deliveryPrice} USDT` },
+    })
+
+    return tx.order.update({
+      where: { id: orderId },
+      data: {
+        deliveryFee: deliveryPrice,
+        deliveryPrice,
+        deliveryPriceReason: reason,
+        deliveryPriceConfirmedAt: new Date(),
+        total: recalculatedTotal,
+        status: 'ready_for_payment',
+        paymentStatus: 'pending',
+      },
+    })
+  })
+
+  notifyOrderReadyForPayment(order.user.telegramId, order.id, deliveryPrice, updated.total)
+  response.json({ order: updated })
+})
+
+router.get('/operators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const operators = await prisma.user.findMany({
+    where: { role: { in: ['OWNER', 'ADMIN', 'OPERATOR'] } },
+    orderBy: [{ role: 'asc' }, { firstName: 'asc' }],
+    select: {
+      id: true,
+      telegramId: true,
+      firstName: true,
+      username: true,
+      role: true,
+      operatorStatus: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  })
+  response.json({ operators })
+})
+
+router.post('/operators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const telegramId = getTrimmedString(request.body.telegramId)
+  const firstName = getTrimmedString(request.body.name)
+  const username = getOptionalTrimmedString(request.body.username)
+  const role = normalizeRole(request.body.role ?? 'OPERATOR')
+  const operatorStatus = typeof request.body.status === 'string' ? request.body.status.trim().toLowerCase() : 'active'
+  if (!telegramId || !/^\\d{5,20}$/.test(telegramId)) {
+    sendError(response, 400, 'invalid_telegram_id', 'Telegram ID must be numeric')
+    return
+  }
+  if (!firstName) {
+    sendError(response, 400, 'name_required', 'Name is required')
+    return
+  }
+  if (!['OPERATOR', 'ADMIN', 'OWNER'].includes(role)) {
+    sendError(response, 400, 'invalid_role', 'Role must be OPERATOR, ADMIN, or OWNER')
+    return
+  }
+  if (!isOperatorStatus(operatorStatus)) {
+    sendError(response, 400, 'invalid_status', 'Status must be active or disabled')
+    return
+  }
+
+  const operator = await prisma.user.upsert({
+    where: { telegramId },
+    create: {
+      telegramId,
+      firstName,
+      username: username ?? null,
+      language: 'ru',
+      role,
+      operatorStatus,
+    },
+    update: {
+      firstName,
+      username: username ?? undefined,
+      role,
+      operatorStatus,
+    },
+  })
+
+  notifyOperatorAccessGranted(operator.telegramId)
+  response.status(201).json({ operator })
+})
+
+router.patch('/operators/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const operatorId = parsePositiveInt(request.params.id)
+  if (!operatorId) {
+    sendError(response, 400, 'invalid_id', 'Invalid operator id')
+    return
+  }
+
+  const roleInput = request.body.role
+  const statusInput = typeof request.body.status === 'string' ? request.body.status.trim().toLowerCase() : undefined
+  const role = roleInput ? normalizeRole(roleInput) : undefined
+  if (role && !['OPERATOR', 'ADMIN', 'OWNER', 'CUSTOMER'].includes(role)) {
+    sendError(response, 400, 'invalid_role', 'Unsupported role')
+    return
+  }
+  if (statusInput && !isOperatorStatus(statusInput)) {
+    sendError(response, 400, 'invalid_status', 'Status must be active or disabled')
+    return
+  }
+
+  const data: { role?: string; operatorStatus?: string | null; firstName?: string; username?: string | null } = {}
+  if (role) data.role = role
+  if (statusInput) data.operatorStatus = statusInput
+  const name = getTrimmedString(request.body.name)
+  if (name) data.firstName = name
+  const username = getOptionalTrimmedString(request.body.username)
+  if (username !== undefined) data.username = username
+
+  const operator = await prisma.user.update({
+    where: { id: operatorId },
+    data,
+  })
+  response.json({ operator })
+})
+
+router.get('/telegram-bots', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const bots = await prisma.telegramBot.findMany({
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+  })
+  response.json({ bots: bots.map(serializeTelegramBot) })
+})
+
+router.post('/telegram-bots', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const token = getTrimmedString(request.body.token)
+  if (!token) {
+    sendError(response, 400, 'token_required', 'Bot token is required')
+    return
+  }
+
+  try {
+    const me = await fetchTelegramGetMe(token)
+    const webAppUrl = getOptionalTrimmedString(request.body.webAppUrl) ?? process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? null
+    const status = typeof request.body.status === 'string' ? request.body.status.trim().toLowerCase() : 'enabled'
+    const isPrimary = Boolean(request.body.isPrimary)
+    const displayName = getTrimmedString(request.body.displayName) || me.first_name || me.username || `bot_${me.id}`
+
+    if (isPrimary) {
+      await prisma.telegramBot.updateMany({
+        where: { isPrimary: true },
+        data: { isPrimary: false },
+      })
+    }
+
+    const bot = await prisma.telegramBot.upsert({
+      where: { telegramBotId: String(me.id) },
+      create: {
+        telegramBotId: String(me.id),
+        username: me.username || `bot_${me.id}`,
+        displayName,
+        encryptedToken: encryptBotToken(token),
+        status,
+        webAppUrl,
+        isPrimary,
+      },
+      update: {
+        username: me.username || `bot_${me.id}`,
+        displayName,
+        encryptedToken: encryptBotToken(token),
+        status,
+        webAppUrl,
+        isPrimary,
+      },
+    })
+
+    response.status(201).json({
+      bot: serializeTelegramBot(bot),
+      connection: {
+        connected: true,
+        botId: String(me.id),
+        username: me.username || null,
+        displayName: me.first_name || null,
+      },
+    })
+  } catch (error) {
+    sendError(response, 400, 'telegram_connection_failed', error instanceof Error ? error.message : 'Telegram connection failed')
+  }
+})
+
+router.patch('/telegram-bots/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid bot id')
+    return
+  }
+
+  const bot = await prisma.telegramBot.findUnique({ where: { id } })
+  if (!bot) {
+    sendError(response, 404, 'not_found', 'Bot not found')
+    return
+  }
+
+  let encryptedToken = bot.encryptedToken
+  const tokenInput = getTrimmedString(request.body.token)
+  if (tokenInput) {
+    try {
+      await fetchTelegramGetMe(tokenInput)
+      encryptedToken = encryptBotToken(tokenInput)
+    } catch (error) {
+      sendError(response, 400, 'telegram_connection_failed', error instanceof Error ? error.message : 'Telegram connection failed')
+      return
+    }
+  }
+
+  const status = typeof request.body.status === 'string' ? request.body.status.trim().toLowerCase() : bot.status
+  const isPrimary = typeof request.body.isPrimary === 'boolean' ? request.body.isPrimary : bot.isPrimary
+  if (isPrimary) {
+    await prisma.telegramBot.updateMany({
+      where: { isPrimary: true, id: { not: id } },
+      data: { isPrimary: false },
+    })
+  }
+
+  const updated = await prisma.telegramBot.update({
+    where: { id },
+    data: {
+      encryptedToken,
+      status,
+      isPrimary,
+      displayName: getTrimmedString(request.body.displayName) || bot.displayName,
+      webAppUrl: getOptionalTrimmedString(request.body.webAppUrl) ?? bot.webAppUrl,
+      menuButtonText: getOptionalTrimmedString(request.body.menuButtonText) ?? bot.menuButtonText,
+      menuButtonUrl: getOptionalTrimmedString(request.body.menuButtonUrl) ?? bot.menuButtonUrl,
+      webhookUrl: getOptionalTrimmedString(request.body.webhookUrl) ?? bot.webhookUrl,
+      webhookSecret: getOptionalTrimmedString(request.body.webhookSecret) ?? bot.webhookSecret,
+      webhookEnabled: typeof request.body.webhookEnabled === 'boolean' ? request.body.webhookEnabled : bot.webhookEnabled,
+    },
+  })
+
+  response.json({ bot: serializeTelegramBot(updated) })
+})
+
+router.delete('/telegram-bots/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid bot id')
+    return
+  }
+
+  const bot = await prisma.telegramBot.findUnique({ where: { id } })
+  if (!bot) {
+    sendError(response, 404, 'not_found', 'Bot not found')
+    return
+  }
+
+  await prisma.telegramBot.delete({ where: { id } })
+  response.json({ ok: true })
+})
+
+router.post('/telegram-bots/:id/test', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid bot id')
+    return
+  }
+
+  const bot = await prisma.telegramBot.findUnique({ where: { id } })
+  if (!bot) {
+    sendError(response, 404, 'not_found', 'Bot not found')
+    return
+  }
+
+  try {
+    const me = await fetchTelegramGetMe(decryptBotToken(bot.encryptedToken))
+    response.json({
+      connected: true,
+      botId: String(me.id),
+      username: me.username || null,
+      displayName: me.first_name || null,
+    })
+  } catch (error) {
+    sendError(response, 400, 'telegram_connection_failed', error instanceof Error ? error.message : 'Telegram connection failed')
+  }
+})
+
+router.post('/telegram-bots/:id/configure', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid bot id')
+    return
+  }
+
+  const bot = await prisma.telegramBot.findUnique({ where: { id } })
+  if (!bot) {
+    sendError(response, 404, 'not_found', 'Bot not found')
+    return
+  }
+
+  const token = decryptBotToken(bot.encryptedToken)
+  const menuButtonText = getTrimmedString(request.body.menuButtonText) || bot.menuButtonText || '🛍️ Открыть NARCOS'
+  const menuButtonUrl = getTrimmedString(request.body.menuButtonUrl) || bot.menuButtonUrl || bot.webAppUrl || process.env.WEB_APP_URL || process.env.FRONTEND_URL || ''
+  const webhookUrl = getTrimmedString(request.body.webhookUrl) || bot.webhookUrl || ''
+  const webhookSecret = getOptionalTrimmedString(request.body.webhookSecret) ?? bot.webhookSecret
+  const enableWebhook = typeof request.body.webhookEnabled === 'boolean' ? request.body.webhookEnabled : bot.webhookEnabled
+
+  try {
+    if (menuButtonUrl) {
+      await setTelegramMenuButton(token, menuButtonText, menuButtonUrl)
+    } else {
+      await clearTelegramMenuButton(token)
+    }
+
+    let webhookStatus = bot.webhookLastStatus
+    if (enableWebhook && webhookUrl) {
+      await setTelegramWebhook(token, webhookUrl, webhookSecret ?? undefined)
+      const info = await getTelegramWebhookInfo(token)
+      webhookStatus = info.url ? `configured:${info.url}` : 'configured'
+    }
+
+    const updated = await prisma.telegramBot.update({
+      where: { id },
+      data: {
+        menuButtonText: menuButtonText || null,
+        menuButtonUrl: menuButtonUrl || null,
+        webhookUrl: webhookUrl || null,
+        webhookSecret,
+        webhookEnabled: enableWebhook,
+        webhookLastStatus: webhookStatus,
+        webAppUrl: menuButtonUrl || bot.webAppUrl,
+      },
+    })
+
+    response.json({ bot: serializeTelegramBot(updated) })
+  } catch (error) {
+    await prisma.telegramBot.update({
+      where: { id },
+      data: {
+        webhookLastStatus: error instanceof Error ? error.message : 'configuration_failed',
+      },
+    })
+    sendError(response, 400, 'telegram_configuration_failed', error instanceof Error ? error.message : 'Telegram configuration failed')
+  }
 })
 
 router.get('/payment-settings', authRateLimiter, async (request, response) => {

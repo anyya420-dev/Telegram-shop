@@ -13,6 +13,8 @@ model User {
   username       String?
   firstName      String   @map("first_name")
   lastName       String?  @map("last_name")
+  role           String   @default("CUSTOMER")
+  operatorStatus String?  @map("operator_status")
   selectedCityId Int?     @map("selected_city_id")
   language       String   @default("ru")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -21,6 +23,8 @@ model User {
   selectedCity     City? @relation("SelectedCity", fields: [selectedCityId], references: [id])
   cart             Cart?
   orders           Order[]
+  assignedOrders   Order[] @relation("OrderAssignedOperator")
+  deliveryPricedOrders Order[] @relation("OrderDeliveryPricedBy")
   balance          Balance?
   casinoBalance    CasinoBalance?
   casinoRewards    CasinoReward[]
@@ -28,6 +32,7 @@ model User {
   wishlists        Wishlist[]
   supportTickets   SupportTicket[]
   activityLogs     UserActivityLog[]
+  managedBots      TelegramBot[] @relation("BotManagedBy")
 
   @@map("users")
 }
@@ -122,10 +127,15 @@ model Order {
   userId           Int         @map("user_id")
   cityId           Int         @map("city_id")
   status           String      @default("pending")
+  assignedOperatorId Int?      @map("assigned_operator_id")
   paymentStatus    String?     @map("payment_status") // unpaid | pending | confirmed | rejected
   subtotal         Float
   discountAmount   Float       @default(0) @map("discount_amount")
   deliveryFee      Float       @default(0) @map("delivery_fee")
+  deliveryPrice    Float?      @map("delivery_price")
+  deliveryPriceReason String?  @map("delivery_price_reason")
+  deliveryPriceConfirmedAt DateTime? @map("delivery_price_confirmed_at")
+  deliveryPriceConfirmedById Int? @map("delivery_price_confirmed_by_id")
   total            Float
   comment          String?
   paymentMethodId  Int?        @map("payment_method_id")
@@ -140,6 +150,8 @@ model Order {
 
   user           User                 @relation(fields: [userId], references: [id])
   city           City                 @relation(fields: [cityId], references: [id])
+  assignedOperator User?              @relation("OrderAssignedOperator", fields: [assignedOperatorId], references: [id])
+  deliveryPriceConfirmedBy User?      @relation("OrderDeliveryPricedBy", fields: [deliveryPriceConfirmedById], references: [id])
   items          OrderItem[]
   paymentMethod  PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
   deliveryOption DeliveryOption?      @relation(fields: [deliveryOptionId], references: [id])
@@ -147,8 +159,51 @@ model Order {
   reward         CasinoReward?        @relation("OrderReward")
   statusHistory  OrderStatusHistory[]
   payments       Payment[]
+  deliveryPriceAudit DeliveryPriceAudit[]
 
+  @@index([assignedOperatorId])
   @@map("orders")
+}
+
+model DeliveryPriceAudit {
+  id              Int      @id @default(autoincrement())
+  orderId          Int      @map("order_id")
+  actorUserId      Int      @map("actor_user_id")
+  previousPrice    Float?   @map("previous_price")
+  newPrice         Float    @map("new_price")
+  reason           String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actorUser        User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("delivery_price_audit")
+}
+
+model TelegramBot {
+  id                  Int      @id @default(autoincrement())
+  telegramBotId       String   @unique @map("telegram_bot_id")
+  username            String
+  displayName         String   @map("display_name")
+  encryptedToken      String   @map("encrypted_token")
+  status              String   @default("disabled")
+  webAppUrl           String?  @map("web_app_url")
+  menuButtonText      String?  @map("menu_button_text")
+  menuButtonUrl       String?  @map("menu_button_url")
+  webhookUrl          String?  @map("webhook_url")
+  webhookSecret       String?  @map("webhook_secret")
+  webhookEnabled      Boolean  @default(false) @map("webhook_enabled")
+  webhookLastStatus   String?  @map("webhook_last_status")
+  isPrimary           Boolean  @default(false) @map("is_primary")
+  managedByUserId     Int?     @map("managed_by_user_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  managedByUser       User?    @relation("BotManagedBy", fields: [managedByUserId], references: [id])
+
+  @@index([status, isPrimary])
+  @@map("telegram_bots")
 }
 
 model PaymentMethod {

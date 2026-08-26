@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, AdminOperator, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, AdminTelegramBot, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
+type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'operators' | 'bots' | 'casino';
 
 type ProductCityDraft = {
   cityId: string;
@@ -88,7 +88,7 @@ type PaymentEditDraft = Partial<{
   isTonConnectEnabled: boolean;
 }>;
 
-const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
+const ORDER_STATUSES = ['waiting_for_delivery_price', 'ready_for_payment', 'pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'shipped', 'delivered', 'cancelled'];
 
 function createDefaultProductCityDraft(cityId = ''): ProductCityDraft {
   return {
@@ -183,6 +183,8 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<{ id: number; action: string; entity: string | null; entityId: number | null; meta: string | null; createdAt: string }[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentRecords, setPaymentRecords] = useState<AdminPaymentRecord[]>([]);
+  const [operators, setOperators] = useState<AdminOperator[]>([]);
+  const [telegramBots, setTelegramBots] = useState<AdminTelegramBot[]>([]);
   const [casinoConfig, setCasinoConfig] = useState<AdminCasinoConfig>({ games: [], rewardConfigs: [] });
   const [casinoAdjustmentUserId, setCasinoAdjustmentUserId] = useState('');
   const [casinoAdjustmentAmount, setCasinoAdjustmentAmount] = useState('');
@@ -231,6 +233,17 @@ export default function AdminPage() {
   const [editingPaymentMethod, setEditingPaymentMethod] = useState<number | null>(null);
   const [paymentMethodEdits, setPaymentMethodEdits] = useState<Record<number, PaymentEditDraft>>({});
   const [paymentStatusReason, setPaymentStatusReason] = useState<Record<number, string>>({});
+  const [newOperatorTelegramId, setNewOperatorTelegramId] = useState('');
+  const [newOperatorName, setNewOperatorName] = useState('');
+  const [newOperatorUsername, setNewOperatorUsername] = useState('');
+  const [newOperatorRole, setNewOperatorRole] = useState<'OPERATOR' | 'ADMIN' | 'OWNER'>('OPERATOR');
+  const [newOperatorStatus, setNewOperatorStatus] = useState<'active' | 'disabled'>('active');
+
+  const [newBotToken, setNewBotToken] = useState('');
+  const [newBotDisplayName, setNewBotDisplayName] = useState('');
+  const [newBotWebAppUrl, setNewBotWebAppUrl] = useState('');
+  const [newBotIsPrimary, setNewBotIsPrimary] = useState(false);
+  const [botConfigDraft, setBotConfigDraft] = useState<Record<number, Partial<{ menuButtonText: string; menuButtonUrl: string; webhookUrl: string; webhookSecret: string; webhookEnabled: boolean }>>>({});
 
   const [newCityName, setNewCityName] = useState('');
   const [newCityNameEn, setNewCityNameEn] = useState('');
@@ -272,7 +285,7 @@ export default function AdminPage() {
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
 
   const tabs = useMemo(
-    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
+    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'operators', 'bots', 'casino'] as Tab[],
     [],
   );
 
@@ -377,6 +390,12 @@ export default function AdminPage() {
         const [methodsResponse, paymentsResponse] = await Promise.all([api.getAdminPaymentSettings(), api.getAdminPayments()]);
         setPaymentMethods(methodsResponse.methods);
         setPaymentRecords(paymentsResponse.payments);
+      } else if (tabName === 'operators') {
+        const response = await api.getAdminOperators();
+        setOperators(response.operators);
+      } else if (tabName === 'bots') {
+        const response = await api.getAdminTelegramBots();
+        setTelegramBots(response.bots);
       } else if (tabName === 'casino') {
         setCasinoConfig(await api.getAdminCasinoConfig());
       }
@@ -419,6 +438,133 @@ export default function AdminPage() {
       setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to reject payment'));
+    }
+
+    async function handleAssignOperator(orderId: number) {
+      setError(null);
+      const raw = window.prompt('Operator ID (empty to unassign):', '');
+      if (raw === null) {
+        return;
+      }
+      const operatorId = raw.trim() === '' ? null : Number(raw.trim());
+      if (raw.trim() !== '' && (!Number.isInteger(operatorId) || Number(operatorId) <= 0)) {
+        setError('Invalid operator id');
+        return;
+      }
+      try {
+        const response = await api.assignAdminOrderOperator(orderId, operatorId as number | null);
+        setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to assign operator'));
+      }
+    }
+
+    async function handleSetDeliveryPrice(orderId: number) {
+      setError(null);
+      const rawPrice = window.prompt('Delivery price (USDT):', '');
+      if (rawPrice === null) return;
+      const deliveryPrice = Number(rawPrice.trim());
+      if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) {
+        setError('Invalid delivery price');
+        return;
+      }
+      const reason = window.prompt('Reason:', 'Manual delivery calculation');
+      if (!reason?.trim()) {
+        setError('Reason is required');
+        return;
+      }
+      try {
+        const response = await api.updateAdminOrderDeliveryPrice(orderId, { deliveryPrice, reason: reason.trim() });
+        setOrders((current) => current.map((order) => (order.id === orderId ? response.order : order)));
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to set delivery price'));
+      }
+    }
+
+    async function handleCreateOperator() {
+      setError(null);
+      try {
+        await api.createAdminOperator({
+          telegramId: newOperatorTelegramId.trim(),
+          name: newOperatorName.trim(),
+          username: newOperatorUsername.trim() || undefined,
+          role: newOperatorRole,
+          status: newOperatorStatus,
+        });
+        setNewOperatorTelegramId('');
+        setNewOperatorName('');
+        setNewOperatorUsername('');
+        setOperators((await api.getAdminOperators()).operators);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to create operator'));
+      }
+    }
+
+    async function handleToggleOperator(operatorId: number, status: 'active' | 'disabled') {
+      setError(null);
+      try {
+        const response = await api.updateAdminOperator(operatorId, { status: status === 'active' ? 'disabled' : 'active' });
+        setOperators((current) => current.map((operator) => (operator.id === operatorId ? response.operator : operator)));
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to update operator'));
+      }
+    }
+
+    async function handleCreateBot() {
+      setError(null);
+      try {
+        await api.createAdminTelegramBot({
+          token: newBotToken.trim(),
+          displayName: newBotDisplayName.trim() || undefined,
+          webAppUrl: newBotWebAppUrl.trim() || undefined,
+          status: 'enabled',
+          isPrimary: newBotIsPrimary,
+        });
+        setNewBotToken('');
+        setNewBotDisplayName('');
+        setNewBotWebAppUrl('');
+        setNewBotIsPrimary(false);
+        setTelegramBots((await api.getAdminTelegramBots()).bots);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to connect bot'));
+      }
+    }
+
+    async function handleTestBot(botId: number) {
+      setError(null);
+      try {
+        await api.testAdminTelegramBot(botId);
+        setTelegramBots((await api.getAdminTelegramBots()).bots);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to test bot'));
+      }
+    }
+
+    async function handleConfigureBot(botId: number) {
+      setError(null);
+      try {
+        const draft = botConfigDraft[botId] ?? {};
+        await api.configureAdminTelegramBot(botId, {
+          menuButtonText: draft.menuButtonText,
+          menuButtonUrl: draft.menuButtonUrl,
+          webhookUrl: draft.webhookUrl,
+          webhookSecret: draft.webhookSecret,
+          webhookEnabled: draft.webhookEnabled,
+        });
+        setTelegramBots((await api.getAdminTelegramBots()).bots);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to configure bot'));
+      }
+    }
+
+    async function handleToggleBot(botId: number, status: string) {
+      setError(null);
+      try {
+        await api.updateAdminTelegramBot(botId, { status: status === 'enabled' ? 'disabled' : 'enabled' });
+        setTelegramBots((await api.getAdminTelegramBots()).bots);
+      } catch (e: unknown) {
+        setError(getAdminErrorMessage(e, 'Failed to update bot status'));
+      }
     }
   }
 
@@ -1011,6 +1157,9 @@ export default function AdminPage() {
                       {order.paymentStatus ? ` • ${order.paymentStatus}` : ''}
                     </p>
                   )}
+                  <p className={styles.orderMeta}>
+                    Operator: {order.assignedOperator ? `${order.assignedOperator.firstName}${order.assignedOperator.username ? ` @${order.assignedOperator.username}` : ''}` : 'Unassigned'}
+                  </p>
                   <div className={styles.statusRow}>
                     <select
                       className={styles.statusSelect}
@@ -1034,6 +1183,16 @@ export default function AdminPage() {
                       </button>
                     </div>
                   )}
+                  <div className={styles.replyRow}>
+                    <button className={styles.replyBtn} onClick={() => void handleAssignOperator(order.id)}>
+                      Assign operator
+                    </button>
+                    {order.status === 'waiting_for_delivery_price' && (
+                      <button className={styles.replyBtn} onClick={() => void handleSetDeliveryPrice(order.id)}>
+                        Confirm delivery price
+                      </button>
+                    )}
+                  </div>
                   {order.items.length > 0 && (
                     <div>
                       <button
@@ -1764,6 +1923,98 @@ export default function AdminPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'operators' && (
+        <div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>Operators</h3>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Telegram ID" value={newOperatorTelegramId} onChange={(event) => setNewOperatorTelegramId(event.target.value)} />
+              <input className={styles.input} placeholder="Name" value={newOperatorName} onChange={(event) => setNewOperatorName(event.target.value)} />
+              <input className={styles.input} placeholder="Username" value={newOperatorUsername} onChange={(event) => setNewOperatorUsername(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <select className={styles.select} value={newOperatorRole} onChange={(event) => setNewOperatorRole(event.target.value as 'OPERATOR' | 'ADMIN' | 'OWNER')}>
+                <option value="OPERATOR">OPERATOR</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="OWNER">OWNER</option>
+              </select>
+              <select className={styles.select} value={newOperatorStatus} onChange={(event) => setNewOperatorStatus(event.target.value as 'active' | 'disabled')}>
+                <option value="active">active</option>
+                <option value="disabled">disabled</option>
+              </select>
+              <button className={styles.createBtn} onClick={() => void handleCreateOperator()} disabled={!newOperatorTelegramId.trim() || !newOperatorName.trim()}>
+                CREATE OPERATOR
+              </button>
+            </div>
+            <div className={styles.orderList}>
+              {operators.map((operator) => (
+                <div key={operator.id} className={styles.orderCard}>
+                  <div className={styles.orderHeader}>
+                    <span className={styles.orderId}>{operator.firstName} {operator.username ? `@${operator.username}` : ''}</span>
+                    <span className={styles.orderTotal}>{operator.role}</span>
+                  </div>
+                  <p className={styles.orderMeta}>TG: {operator.telegramId} • Status: {operator.operatorStatus ?? 'active'}</p>
+                  <button className={styles.replyBtn} onClick={() => void handleToggleOperator(operator.id, operator.operatorStatus === 'disabled' ? 'disabled' : 'active')}>
+                    {operator.operatorStatus === 'disabled' ? 'Enable' : 'Disable'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'bots' && (
+        <div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>Telegram Bots</h3>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Bot token" value={newBotToken} onChange={(event) => setNewBotToken(event.target.value)} />
+              <input className={styles.input} placeholder="Display name" value={newBotDisplayName} onChange={(event) => setNewBotDisplayName(event.target.value)} />
+              <input className={styles.input} placeholder="Web App URL" value={newBotWebAppUrl} onChange={(event) => setNewBotWebAppUrl(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <label className={styles.checkLabel}>
+                <input type="checkbox" checked={newBotIsPrimary} onChange={(event) => setNewBotIsPrimary(event.target.checked)} />
+                Primary bot
+              </label>
+              <button className={styles.createBtn} onClick={() => void handleCreateBot()} disabled={!newBotToken.trim()}>
+                CHECK & CONNECT
+              </button>
+            </div>
+            <div className={styles.orderList}>
+              {telegramBots.map((bot) => {
+                const draft = botConfigDraft[bot.id] ?? {};
+                return (
+                  <div key={bot.id} className={styles.orderCard}>
+                    <div className={styles.orderHeader}>
+                      <span className={styles.orderId}>@{bot.username}</span>
+                      <span className={styles.orderTotal}>{bot.status}</span>
+                    </div>
+                    <p className={styles.orderMeta}>ID: {bot.telegramBotId} • Token: {bot.maskedToken}</p>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Menu button text" value={draft.menuButtonText ?? bot.menuButtonText ?? ''} onChange={(event) => setBotConfigDraft((current) => ({ ...current, [bot.id]: { ...(current[bot.id] ?? {}), menuButtonText: event.target.value } }))} />
+                      <input className={styles.input} placeholder="Menu button URL" value={draft.menuButtonUrl ?? bot.menuButtonUrl ?? bot.webAppUrl ?? ''} onChange={(event) => setBotConfigDraft((current) => ({ ...current, [bot.id]: { ...(current[bot.id] ?? {}), menuButtonUrl: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Webhook URL" value={draft.webhookUrl ?? bot.webhookUrl ?? ''} onChange={(event) => setBotConfigDraft((current) => ({ ...current, [bot.id]: { ...(current[bot.id] ?? {}), webhookUrl: event.target.value } }))} />
+                      <input className={styles.input} placeholder="Webhook secret" value={draft.webhookSecret ?? ''} onChange={(event) => setBotConfigDraft((current) => ({ ...current, [bot.id]: { ...(current[bot.id] ?? {}), webhookSecret: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <label className={styles.checkLabel}><input type="checkbox" checked={draft.webhookEnabled ?? bot.webhookEnabled} onChange={(event) => setBotConfigDraft((current) => ({ ...current, [bot.id]: { ...(current[bot.id] ?? {}), webhookEnabled: event.target.checked } }))} />Webhook enabled</label>
+                      <button className={styles.replyBtn} onClick={() => void handleTestBot(bot.id)}>Test</button>
+                      <button className={styles.replyBtn} onClick={() => void handleConfigureBot(bot.id)}>Configure</button>
+                      <button className={styles.replyBtn} onClick={() => void handleToggleBot(bot.id, bot.status)}>{bot.status === 'enabled' ? 'Disable' : 'Enable'}</button>
+                    </div>
+                    {bot.webhookLastStatus ? <p className={styles.orderMeta}>Webhook status: {bot.webhookLastStatus}</p> : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -1,0 +1,10 @@
+.page { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.title { margin: 0; font-size: 20px; }
+.filterRow { display: flex; gap: 8px; }
+.select { width: 100%; border-radius: 10px; padding: 10px; }
+.loading { opacity: 0.8; }
+.list { display: grid; gap: 10px; }
+.card { border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px; display: grid; gap: 6px; }
+.row { display: flex; justify-content: space-between; gap: 8px; }
+.meta { margin: 0; font-size: 13px; opacity: 0.85; }
+.button { border: 0; border-radius: 10px; padding: 10px; font-weight: 600; cursor: pointer; }

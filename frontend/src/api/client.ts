@@ -26,6 +26,8 @@ import type {
   UserProfile,
   WishlistItem,
   AdminPaymentRecord,
+  AdminOperator,
+  AdminTelegramBot,
 } from '../types'
 
 function normalizeApiBase(value: string) {
@@ -151,8 +153,14 @@ export const api = {
   markOrderPaid(id: number) {
     return publicRequest<{ order: Order }>(`/orders/${id}/mark-paid`, { method: 'POST' })
   },
+  confirmOrderDeliveryPrice(id: number, payload: { deliveryPrice: number; reason: string }) {
+    return publicRequest<{ order: Order }>(`/orders/${id}/delivery-price`, { method: 'PATCH', body: JSON.stringify(payload) })
+  },
   getOrders() {
     return publicRequest<{ orders: Order[] }>('/orders')
+  },
+  getOperatorQueue() {
+    return publicRequest<{ orders: Order[] }>('/orders/operator/queue')
   },
   getOrder(id: number) {
     return publicRequest<{ order: Order }>(`/orders/${id}`)
@@ -263,6 +271,39 @@ export const api = {
   },
   rejectAdminOrderPayment(orderId: number) {
     return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/payment`, { method: 'PATCH', body: JSON.stringify({ action: 'reject' }) })
+  },
+  assignAdminOrderOperator(orderId: number, operatorId: number | null) {
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/operator`, { method: 'PATCH', body: JSON.stringify({ operatorId }) })
+  },
+  updateAdminOrderDeliveryPrice(orderId: number, payload: { deliveryPrice: number; reason: string }) {
+    return adminRequest<{ order: Order }>(`/admin/orders/${orderId}/delivery-price`, { method: 'PATCH', body: JSON.stringify(payload) })
+  },
+  getAdminOperators() {
+    return adminRequest<{ operators: AdminOperator[] }>('/admin/operators')
+  },
+  createAdminOperator(payload: { telegramId: string; name: string; username?: string; role?: 'OPERATOR' | 'ADMIN' | 'OWNER'; status?: 'active' | 'disabled' }) {
+    return adminRequest<{ operator: AdminOperator }>('/admin/operators', { method: 'POST', body: JSON.stringify(payload) })
+  },
+  updateAdminOperator(id: number, payload: Partial<{ role: 'OPERATOR' | 'ADMIN' | 'OWNER' | 'CUSTOMER'; status: 'active' | 'disabled'; name: string; username: string | null }>) {
+    return adminRequest<{ operator: AdminOperator }>(`/admin/operators/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+  },
+  getAdminTelegramBots() {
+    return adminRequest<{ bots: AdminTelegramBot[] }>('/admin/telegram-bots')
+  },
+  createAdminTelegramBot(payload: { token: string; displayName?: string; webAppUrl?: string; status?: string; isPrimary?: boolean }) {
+    return adminRequest<{ bot: AdminTelegramBot; connection: { connected: boolean; botId: string; username: string | null; displayName: string | null } }>('/admin/telegram-bots', { method: 'POST', body: JSON.stringify(payload) })
+  },
+  updateAdminTelegramBot(id: number, payload: Partial<{ token: string; displayName: string; webAppUrl: string | null; menuButtonText: string | null; menuButtonUrl: string | null; webhookUrl: string | null; webhookSecret: string | null; webhookEnabled: boolean; status: string; isPrimary: boolean }>) {
+    return adminRequest<{ bot: AdminTelegramBot }>(`/admin/telegram-bots/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+  },
+  deleteAdminTelegramBot(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/telegram-bots/${id}`, { method: 'DELETE' })
+  },
+  testAdminTelegramBot(id: number) {
+    return adminRequest<{ connected: boolean; botId: string; username: string | null; displayName: string | null }>(`/admin/telegram-bots/${id}/test`, { method: 'POST' })
+  },
+  configureAdminTelegramBot(id: number, payload: Partial<{ menuButtonText: string; menuButtonUrl: string; webhookUrl: string; webhookSecret: string; webhookEnabled: boolean }>) {
+    return adminRequest<{ bot: AdminTelegramBot }>(`/admin/telegram-bots/${id}/configure`, { method: 'POST', body: JSON.stringify(payload) })
   },
   getAdminUsers(page = 1) {
     return adminRequest<{ users: UserProfile[]; total: number; page: number; pages: number }>(`/admin/users?page=${page}`)

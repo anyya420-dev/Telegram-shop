@@ -36,10 +36,21 @@ export default function Layout() {
   const location = useLocation();
 
   useEffect(() => {
-    if (!loading && user && !user.selectedCityId) {
+    if (loading || !user) {
+      return;
+    }
+    if ((user.role === 'ADMIN' || user.role === 'OWNER') && location.pathname !== '/admin') {
+      navigate('/admin', { replace: true });
+      return;
+    }
+    if (user.role === 'OPERATOR' && location.pathname !== '/operator') {
+      navigate('/operator', { replace: true });
+      return;
+    }
+    if (user.role !== 'OPERATOR' && user.role !== 'ADMIN' && user.role !== 'OWNER' && !user.selectedCityId) {
       navigate('/select-city', { replace: true });
     }
-  }, [loading, navigate, user]);
+  }, [loading, location.pathname, navigate, user]);
 
   if (loading) {
     return (
@@ -50,6 +61,7 @@ export default function Layout() {
   }
 
   const cartCount = cart?.items.length ?? 0;
+  const hasBackOfficeRole = user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'OPERATOR';
 
   const activeTab = NAV_ITEMS.find((item) =>
     item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)
@@ -68,28 +80,32 @@ export default function Layout() {
         ) : null}
         <Outlet />
       </main>
-      <nav className={styles.nav}>
-        {NAV_ITEMS.map((item) => {
-          const isActive = activeTab === item.path;
-          return (
-            <button
-              key={item.path}
-              className={`${styles.navItem} ${isActive ? styles.active : ''}`}
-              onClick={() => navigate(item.path)}
-              type="button"
-            >
-              <span className={styles.navIconWrap}>
-                <item.Icon active={isActive} />
-                {item.labelKey === 'nav.cart' && cartCount > 0 && (
-                  <span className={styles.navBadge}>{cartCount}</span>
-                )}
-              </span>
-              <span className={styles.navLabel}>{t(item.labelKey)}</span>
-            </button>
-          );
-        })}
-      </nav>
-      <CityPicker />
+      {!hasBackOfficeRole && (
+        <>
+          <nav className={styles.nav}>
+            {NAV_ITEMS.map((item) => {
+              const isActive = activeTab === item.path;
+              return (
+                <button
+                  key={item.path}
+                  className={`${styles.navItem} ${isActive ? styles.active : ''}`}
+                  onClick={() => navigate(item.path)}
+                  type="button"
+                >
+                  <span className={styles.navIconWrap}>
+                    <item.Icon active={isActive} />
+                    {item.labelKey === 'nav.cart' && cartCount > 0 && (
+                      <span className={styles.navBadge}>{cartCount}</span>
+                    )}
+                  </span>
+                  <span className={styles.navLabel}>{t(item.labelKey)}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <CityPicker />
+        </>
+      )}
     </div>
   );
 }

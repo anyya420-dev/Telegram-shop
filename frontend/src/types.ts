@@ -23,6 +23,8 @@ export type UserProfile = {
   username: string | null
   firstName: string
   lastName?: string | null
+  role?: 'OWNER' | 'ADMIN' | 'OPERATOR' | 'CUSTOMER'
+  operatorStatus?: 'active' | 'disabled' | null
   selectedCityId: number | null
   selectedCity: City | null
   language: Language
@@ -180,6 +182,14 @@ export type Order = {
   createdAt: string
   items: OrderItem[]
   city: { id: number; name: string; nameEn: string | null }
+  assignedOperator?: {
+    id: number
+    firstName: string
+    username: string | null
+    telegramId: string
+    role: string
+    operatorStatus: string | null
+  } | null
   statusHistory: OrderStatusEntry[]
   paymentMethod: PaymentMethod | null
   deliveryOption: DeliveryOption | null
@@ -380,6 +390,36 @@ export type AdminOrder = Order & {
     firstName: string
     username: string | null
     telegramId: string
+  }
+
+  export type AdminOperator = {
+    id: number
+    telegramId: string
+    firstName: string
+    username: string | null
+    role: 'OWNER' | 'ADMIN' | 'OPERATOR' | 'CUSTOMER'
+    operatorStatus: 'active' | 'disabled' | null
+    createdAt: string
+    updatedAt: string
+  }
+
+  export type AdminTelegramBot = {
+    id: number
+    telegramBotId: string
+    username: string
+    displayName: string
+    maskedToken: string
+    status: string
+    webAppUrl: string | null
+    menuButtonText: string | null
+    menuButtonUrl: string | null
+    webhookUrl: string | null
+    webhookEnabled: boolean
+    webhookLastStatus: string | null
+    isPrimary: boolean
+    hasWebhookSecret: boolean
+    createdAt: string
+    updatedAt: string
   }
 }
 

@@ -16,6 +16,7 @@ import {
   sanitizePaymentMethod,
   verifyStripeWebhookSignature,
 } from '../services/payments.js'
+import { notifyOperatorOrderPaid } from '../services/notifier.js'
 
 const router = Router()
 
@@ -62,6 +63,14 @@ router.post('/orders/:orderId/session', authRateLimiter, async (request, respons
   }
   if (!order.paymentMethodId) {
     sendError(response, 400, 'payment_method_missing', 'Payment method is not set for this order')
+    return
+  }
+  if (order.deliveryPrice == null || order.status !== 'ready_for_payment') {
+    sendError(response, 400, 'delivery_price_not_confirmed', 'Payment is unavailable until delivery price is confirmed')
+    return
+  }
+  if (order.paymentStatus === 'blocked_delivery_price') {
+    sendError(response, 400, 'delivery_price_not_confirmed', 'Payment is unavailable until delivery price is confirmed')
     return
   }
   if (order.paymentStatus === 'paid') {
@@ -276,6 +285,20 @@ router.post('/webhooks/stripe', authRateLimiter, async (request, response) => {
         data: { orderId: payment.orderId, status: 'processing', comment: 'Stripe payment verified' },
       })
     })
+
+    const paidOrder = await prisma.order.findUnique({
+      where: { id: payment.orderId },
+      include: { assignedOperator: true },
+    })
+    if (paidOrder?.assignedOperator?.telegramId) {
+      notifyOperatorOrderPaid(paidOrder.assignedOperator.telegramId, {
+        id: paidOrder.id,
+        subtotal: paidOrder.subtotal,
+        delivery: paidOrder.deliveryFee,
+        discount: paidOrder.discountAmount,
+        total: paidOrder.total,
+      })
+    }
 
     response.json({ ok: true })
     return

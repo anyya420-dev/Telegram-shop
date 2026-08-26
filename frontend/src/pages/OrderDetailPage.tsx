@@ -12,11 +12,14 @@ import styles from './OrderDetailPage.module.css'
 
 function statusLabel(status: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
+    waiting_for_delivery_price: t('orders.statusDeliveryCalculation'),
+    ready_for_payment: t('orders.statusWaitingForPayment'),
     pending: t('orders.statusPending'),
     payment_pending: t('orders.statusPaymentPending'),
     confirmed: t('orders.statusConfirmed'),
     processing: t('orders.statusProcessing'),
     ready: t('orders.statusReady'),
+    shipped: t('orders.statusShipped'),
     delivered: t('orders.statusDelivered'),
     cancelled: t('orders.statusCancelled'),
   }
@@ -120,7 +123,7 @@ export default function OrderDetailPage() {
     )
   }
 
-  const canCancel = ['pending', 'confirmed', 'payment_pending'].includes(order.status)
+  const canCancel = ['waiting_for_delivery_price', 'ready_for_payment', 'pending', 'confirmed', 'payment_pending'].includes(order.status)
   const canRefund = ['delivered', 'cancelled'].includes(order.status) && !order.refundStatus
   const localizedCity = language === 'en' && order.city.nameEn ? order.city.nameEn : order.city.name
   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)

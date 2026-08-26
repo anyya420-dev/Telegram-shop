@@ -6,6 +6,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 process.env.DATABASE_URL ??= 'postgresql://localhost/dev'
 
 export const prisma = new PrismaClient()
+export const APP_ROLES = ['OWNER', 'ADMIN', 'OPERATOR', 'CUSTOMER'] as const
+export type AppRole = (typeof APP_ROLES)[number]
 export const DEMO_TELEGRAM_USER = {
   id: '900000001',
   username: 'demo_customer',
@@ -102,6 +104,16 @@ export function verifyTelegramInitData(initData: string, botToken: string) {
   const expected = Buffer.from(calculatedHash, 'hex')
 
   if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    return null
+  }
+
+  const authDate = Number(params.get('auth_date'))
+  if (!Number.isFinite(authDate)) {
+    return null
+  }
+  const maxAuthAgeSeconds = Number(process.env.TELEGRAM_INITDATA_MAX_AGE_SECONDS ?? 60 * 60 * 24)
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  if (authDate <= 0 || nowSeconds - authDate > maxAuthAgeSeconds) {
     return null
   }
 
@@ -247,6 +259,20 @@ export async function getAuthorizedUser(request: Request, response: Response) {
   return user
 }
 
+export async function getAuthorizedUserByRole(request: Request, response: Response, allowedRoles: AppRole[]) {
+  const user = await getAuthorizedUser(request, response)
+  if (!user) {
+    return null
+  }
+
+  if (!hasAnyRole(user.role, allowedRoles)) {
+    sendError(response, 403, 'forbidden', 'Insufficient permissions')
+    return null
+  }
+
+  return user
+}
+
 export async function getOrCreateCart(userId: number) {
   return prisma.cart.upsert({
     where: { userId },
@@ -334,4 +360,13 @@ export async function buildCartResponse(userId: number) {
     },
     recommended: recommended.map(mapProduct),
   }
+}
+export function normalizeRole(value: unknown): AppRole {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : ''
+  return APP_ROLES.includes(normalized as AppRole) ? normalized as AppRole : 'CUSTOMER'
+}
+
+export function hasAnyRole(value: unknown, allowed: AppRole[]) {
+  const role = normalizeRole(value)
+  return allowed.includes(role)
 }

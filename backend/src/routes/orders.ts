@@ -1,10 +1,13 @@
 import { Router } from 'express'
 import { Prisma } from '@prisma/client'
 import {
+  AppRole,
   authRateLimiter,
   buildCartResponse,
   getAuthorizedUser,
+  getAuthorizedUserByRole,
   isAllowedQuantity,
+  normalizeRole,
   normalizeQuantity,
   parsePositiveInt,
   prisma,
@@ -12,9 +15,9 @@ import {
 } from '../lib.js'
 import { getOrCreateCasinoBalance } from '../services/casino.js'
 import { notifyOrderStatusChange } from '../services/notifier.js'
-import { createOrRefreshOrderPayment } from '../services/payments.js'
 
 const router = Router()
+const OPERATOR_ROLES: AppRole[] = ['OWNER', 'ADMIN', 'OPERATOR']
 
 class OrderRequestError extends Error {
   constructor(
@@ -52,6 +55,35 @@ router.get('/', authRateLimiter, async (request, response) => {
     include: ORDER_INCLUDE,
     orderBy: { createdAt: 'desc' },
     take: 50,
+  })
+
+  response.json({ orders })
+})
+
+// GET /api/orders/operator/queue - operator/admin order panel feed
+router.get('/operator/queue', authRateLimiter, async (request, response) => {
+  const actor = await getAuthorizedUserByRole(request, response, OPERATOR_ROLES)
+  if (!actor) return
+
+  const actorRole = normalizeRole(actor.role)
+  const where = actorRole === 'OPERATOR'
+    ? {
+      OR: [
+        { assignedOperatorId: actor.id },
+        { assignedOperatorId: null, status: 'waiting_for_delivery_price' },
+      ],
+    }
+    : {}
+
+  const orders = await prisma.order.findMany({
+    where,
+    include: {
+      ...ORDER_INCLUDE,
+      user: { select: { id: true, firstName: true, username: true, telegramId: true } },
+      assignedOperator: { select: { id: true, firstName: true, username: true, telegramId: true, role: true, operatorStatus: true } },
+    },
+    orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+    take: 100,
   })
 
   response.json({ orders })
@@ -171,7 +203,7 @@ router.post('/', authRateLimiter, async (request, response) => {
         if (!deliveryOption) {
           throw new OrderRequestError(400, 'delivery_option_unavailable', 'Selected delivery option is unavailable')
         }
-        deliveryFee = deliveryOption.price
+        deliveryFee = 0
       }
 
       const subtotal = normalizeQuantity(
@@ -307,13 +339,14 @@ router.post('/', authRateLimiter, async (request, response) => {
         data: {
           userId: user.id,
           cityId: currentUser.selectedCityId,
-          status: total > 0 ? 'pending' : 'confirmed',
+          status: total > 0 ? 'waiting_for_delivery_price' : 'confirmed',
           subtotal,
           discountAmount,
           deliveryFee,
+          deliveryPrice: total > 0 ? null : 0,
           total,
           comment: comment || null,
-          paymentStatus: total > 0 ? 'pending' : 'confirmed',
+          paymentStatus: total > 0 ? 'blocked_delivery_price' : 'confirmed',
           paymentMethodId,
           deliveryOptionId,
           discountId,
@@ -362,12 +395,14 @@ router.post('/', authRateLimiter, async (request, response) => {
         })
       }
 
-      if (total > 0 && paymentMethod) {
-        await createOrRefreshOrderPayment(tx, newOrder, paymentMethod)
-      }
-
       await tx.orderStatusHistory.create({
-        data: { orderId: newOrder.id, status: total > 0 ? 'pending' : 'confirmed', comment: total > 0 ? 'Order placed' : 'Order paid with casino credits' },
+        data: {
+          orderId: newOrder.id,
+          status: total > 0 ? 'waiting_for_delivery_price' : 'confirmed',
+          comment: total > 0
+            ? 'Order placed and waiting for operator delivery pricing'
+            : 'Order paid with casino credits',
+        },
       })
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } })
@@ -401,6 +436,110 @@ router.post('/', authRateLimiter, async (request, response) => {
   response.json({ order, cart: cartResponse.cart, recommended: cartResponse.recommended })
 })
 
+// PATCH /api/orders/:id/delivery-price - operator/admin confirms delivery price
+router.patch('/:id/delivery-price', authRateLimiter, async (request, response) => {
+  const actor = await getAuthorizedUserByRole(request, response, OPERATOR_ROLES)
+  if (!actor) return
+
+  const orderId = parsePositiveInt(request.params.id)
+  if (!orderId) {
+    sendError(response, 400, 'invalid_id', 'Invalid order id')
+    return
+  }
+
+  const deliveryPrice = normalizeQuantity(Number(request.body.deliveryPrice))
+  if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) {
+    sendError(response, 400, 'invalid_delivery_price', 'Delivery price must be zero or positive')
+    return
+  }
+  const reason = typeof request.body.reason === 'string' ? request.body.reason.trim() : ''
+  if (!reason) {
+    sendError(response, 400, 'delivery_price_reason_required', 'Reason is required')
+    return
+  }
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { user: true },
+      })
+      if (!order) {
+        throw new OrderRequestError(404, 'not_found', 'Order not found')
+      }
+      if (order.status === 'cancelled') {
+        throw new OrderRequestError(400, 'invalid_order_status', 'Cancelled order cannot be updated')
+      }
+      if (order.paymentStatus === 'paid') {
+        throw new OrderRequestError(400, 'invalid_order_status', 'Paid order cannot be updated')
+      }
+
+      const actorRole = normalizeRole(actor.role)
+      if (actorRole === 'OPERATOR' && order.assignedOperatorId && order.assignedOperatorId !== actor.id) {
+        throw new OrderRequestError(403, 'forbidden', 'Order is assigned to another operator')
+      }
+
+      const baseOrderTotal = normalizeQuantity(
+        Math.max(
+          0,
+          order.total - (order.deliveryPrice ?? order.deliveryFee ?? 0),
+        ),
+      )
+      const recalculatedTotal = normalizeQuantity(baseOrderTotal + deliveryPrice)
+
+      const assignedOperatorId = actorRole === 'OPERATOR'
+        ? (order.assignedOperatorId ?? actor.id)
+        : order.assignedOperatorId
+
+      await tx.deliveryPriceAudit.create({
+        data: {
+          orderId,
+          actorUserId: actor.id,
+          previousPrice: order.deliveryPrice,
+          newPrice: deliveryPrice,
+          reason,
+        },
+      })
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          status: 'ready_for_payment',
+          comment: `Delivery price confirmed: ${deliveryPrice} USDT. ${reason}`,
+        },
+      })
+
+      const nextOrder = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          assignedOperatorId,
+          deliveryFee: deliveryPrice,
+          deliveryPrice,
+          deliveryPriceReason: reason,
+          deliveryPriceConfirmedAt: new Date(),
+          deliveryPriceConfirmedById: actor.id,
+          total: recalculatedTotal,
+          status: 'ready_for_payment',
+          paymentStatus: 'pending',
+        },
+        include: ORDER_INCLUDE,
+      })
+
+      return { order, nextOrder }
+    })
+
+    notifyOrderStatusChange(updated.order.user.telegramId, orderId, 'ready_for_payment')
+    response.json({ order: updated.nextOrder })
+  } catch (error) {
+    if (error instanceof OrderRequestError) {
+      sendError(response, error.status, error.code, error.message)
+      return
+    }
+
+    throw error
+  }
+})
+
 // POST /api/orders/:id/cancel - cancel an order (user-facing, only pending/confirmed)
 router.post('/:id/cancel', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
@@ -418,8 +557,8 @@ router.post('/:id/cancel', authRateLimiter, async (request, response) => {
     return
   }
 
-  if (!['pending', 'confirmed', 'payment_pending'].includes(order.status)) {
-    sendError(response, 400, 'cannot_cancel', 'Only pending, payment pending, or confirmed orders can be cancelled')
+  if (!['waiting_for_delivery_price', 'ready_for_payment', 'pending', 'confirmed', 'payment_pending'].includes(order.status)) {
+    sendError(response, 400, 'cannot_cancel', 'Only unpaid orders can be cancelled')
     return
   }
 
@@ -553,7 +692,7 @@ router.post('/:id/mark-paid', authRateLimiter, async (request, response) => {
     return
   }
 
-  if (!['pending', 'payment_pending'].includes(order.status) || !['pending', 'processing'].includes(payment.status)) {
+  if (!['ready_for_payment', 'payment_pending'].includes(order.status) || !['pending', 'processing'].includes(payment.status)) {
     sendError(response, 400, 'invalid_order_status', 'Order is not eligible for manual payment confirmation')
     return
   }
