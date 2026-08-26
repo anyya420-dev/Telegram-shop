@@ -110,18 +110,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return citiesReloadInFlightRef.current
     }
 
-    const request = (async () => {
-      try {
-        setCitiesLoading(true)
-        const response = await api.getCities()
+    setCitiesLoading(true)
+    const request = api.getCities()
+      .then((response) => {
         setCities(response)
         return response
-      } finally {
+      })
+      .finally(() => {
         setCitiesLoading(false)
-      }
-    })()
-
+      })
     citiesReloadInFlightRef.current = request
+
     try {
       return await request
     } finally {

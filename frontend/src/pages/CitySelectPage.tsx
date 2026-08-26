@@ -33,10 +33,6 @@ export default function CitySelectPage() {
   }, [cities.length])
 
   const handleReloadCities = useCallback(async () => {
-    if (citiesLoading) {
-      return
-    }
-
     try {
       setLoadState('loading')
       setError(null)
@@ -46,7 +42,7 @@ export default function CitySelectPage() {
       setLoadState('error')
       setError(loadError instanceof ApiError && loadError.code ? t(`errors.${loadError.code}`) : t('errors.request_failed'))
     }
-  }, [citiesLoading, reloadCities, t])
+  }, [reloadCities, t])
 
   useEffect(() => {
     if (hasInitialLoadAttempt.current || cities.length > 0 || citiesLoading) {
