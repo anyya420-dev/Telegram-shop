@@ -27,7 +27,11 @@ class OrderRequestError extends Error {
 }
 
 const ORDER_INCLUDE = {
-  items: true,
+  items: {
+    include: {
+      pickupAssignment: true,
+    },
+  },
   city: true,
   statusHistory: { orderBy: { createdAt: 'asc' as const } },
   paymentMethod: true,
@@ -42,6 +46,20 @@ const ORDER_INCLUDE = {
   },
 }
 
+function sanitizeOrderForCustomer<T extends { paymentStatus: string | null; items: Array<{ pickupAssignment?: unknown }>; deliveryOption?: { type: string } | null }>(order: T) {
+  if (order.paymentStatus === 'paid' && order.deliveryOption?.type === 'pickup') {
+    return order
+  }
+
+  return {
+    ...order,
+    items: order.items.map((item) => ({
+      ...item,
+      pickupAssignment: null,
+    })),
+  }
+}
+
 // GET /api/orders - history
 router.get('/', authRateLimiter, async (request, response) => {
   const user = await getAuthorizedUser(request, response)
@@ -54,7 +72,7 @@ router.get('/', authRateLimiter, async (request, response) => {
     take: 50,
   })
 
-  response.json({ orders })
+  response.json({ orders: orders.map((order) => sanitizeOrderForCustomer(order)) })
 })
 
 // GET /api/orders/:id - single order
@@ -78,7 +96,7 @@ router.get('/:id', authRateLimiter, async (request, response) => {
     return
   }
 
-  response.json({ order })
+  response.json({ order: sanitizeOrderForCustomer(order) })
 })
 
 // POST /api/orders - checkout (create order from cart)

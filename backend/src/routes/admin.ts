@@ -1,5 +1,13 @@
 import { Router } from 'express'
-import { authRateLimiter, mapCity, mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
+import {
+  authRateLimiter,
+  mapCity,
+  mapProduct,
+  normalizeSupportedUnit,
+  parsePositiveInt,
+  prisma,
+  sendError,
+} from '../lib.js'
 import type { CookieOptions, Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import {
@@ -19,6 +27,7 @@ import {
   sanitizePayment,
   sanitizePaymentMethod,
 } from '../services/payments.js'
+import { assignPickupStoragesForPaidOrder } from '../services/pickupStorage.js'
 import { ensureCasinoDefaults, getOrCreateCasinoBalance, serializeReward } from '../services/casino.js'
 
 const router = Router()
@@ -41,6 +50,18 @@ type ProductCityInput = {
 type ProductCityValidationResult =
   | { value: ProductCityInput }
   | { error: { code: string; message: string } }
+
+type PickupStorageInput = {
+  productId: number
+  productCityId: number
+  variantKey: string | null
+  quantity: number
+  unit: string
+  photoUrl: string | null
+  address: string
+  instructions: string | null
+  isActive: boolean
+}
 
 function isOrderStatus(value: string): value is (typeof ORDER_STATUSES)[number] {
   return ORDER_STATUSES.includes(value as (typeof ORDER_STATUSES)[number])
@@ -123,13 +144,32 @@ function getPositiveInteger(value: unknown) {
   return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+function normalizeDecimal(value: number) {
+  return Number(value.toFixed(3))
+}
+
+function getPositiveQuantity(value: unknown) {
+  const parsed = getPositiveNumber(value)
+  return parsed == null ? null : normalizeDecimal(parsed)
+}
+
+function getNonNegativeQuantity(value: unknown) {
+  const parsed = getNonNegativeNumber(value)
+  return parsed == null ? null : normalizeDecimal(parsed)
+}
+
+function matchesQuantityStep(quantity: number, minimum: number, step: number) {
+  const distance = normalizeDecimal((quantity - minimum) / step)
+  return Math.abs(distance - Math.round(distance)) < 0.0001
+}
+
 function validateProductCityPayload(input: unknown): ProductCityValidationResult {
   const cityId = parsePositiveInt(String((input as Record<string, unknown>)?.cityId ?? ''))
-  const stock = getNonNegativeNumber((input as Record<string, unknown>)?.stock) ?? 0
-  const minimumQuantity = getPositiveInteger((input as Record<string, unknown>)?.minimumQuantity) ?? 1
-  const quantityStep = getPositiveInteger((input as Record<string, unknown>)?.quantityStep) ?? 1
-  const maximumQuantity = getPositiveInteger((input as Record<string, unknown>)?.maximumQuantity) ?? Math.max(stock, minimumQuantity)
-  const unit = getTrimmedString((input as Record<string, unknown>)?.unit) || 'pcs'
+  const stock = getNonNegativeQuantity((input as Record<string, unknown>)?.stock) ?? 0
+  const minimumQuantity = getPositiveQuantity((input as Record<string, unknown>)?.minimumQuantity) ?? 1
+  const quantityStep = getPositiveQuantity((input as Record<string, unknown>)?.quantityStep) ?? 1
+  const maximumQuantity = getPositiveQuantity((input as Record<string, unknown>)?.maximumQuantity) ?? Math.max(stock, minimumQuantity)
+  const unit = normalizeSupportedUnit((input as Record<string, unknown>)?.unit) ?? 'шт'
   const isAvailable = typeof (input as Record<string, unknown>)?.isAvailable === 'boolean'
     ? Boolean((input as Record<string, unknown>)?.isAvailable)
     : true
@@ -137,10 +177,55 @@ function validateProductCityPayload(input: unknown): ProductCityValidationResult
   if (!cityId) {
     return { error: { code: 'city_required', message: 'Valid city id is required' } } as const
   }
+
+  function parsePickupStoragePayload(input: Record<string, unknown>, defaults?: Partial<PickupStorageInput>) {
+    const productId = parsePositiveInt(String(input.productId ?? defaults?.productId ?? ''))
+    const productCityId = parsePositiveInt(String(input.productCityId ?? defaults?.productCityId ?? ''))
+    const quantity = getPositiveQuantity(input.quantity ?? defaults?.quantity)
+    const unit = normalizeSupportedUnit(input.unit ?? defaults?.unit)
+    const addressInput = input.address ?? defaults?.address
+    const address = typeof addressInput === 'string' ? addressInput.trim() : ''
+
+    if (!productId) {
+      return { error: { code: 'product_required', message: 'Valid product id is required' } } as const
+    }
+    if (!productCityId) {
+      return { error: { code: 'product_city_required', message: 'Valid product city id is required' } } as const
+    }
+    if (quantity == null) {
+      return { error: { code: 'quantity_invalid', message: 'Quantity must be a positive number' } } as const
+    }
+    if (!unit) {
+      return { error: { code: 'unit_invalid', message: 'Unit must be one of: шт, кг, г, oz' } } as const
+    }
+    if (!address) {
+      return { error: { code: 'address_required', message: 'Pickup address is required' } } as const
+    }
+
+    return {
+      value: {
+        productId,
+        productCityId,
+        quantity,
+        unit,
+        address,
+        variantKey: typeof input.variantKey === 'string'
+          ? (input.variantKey.trim() || null)
+          : (defaults?.variantKey ?? null),
+        photoUrl: typeof input.photoUrl === 'string'
+          ? (input.photoUrl.trim() || null)
+          : (defaults?.photoUrl ?? null),
+        instructions: typeof input.instructions === 'string'
+          ? (input.instructions.trim() || null)
+          : (defaults?.instructions ?? null),
+        isActive: typeof input.isActive === 'boolean' ? input.isActive : (defaults?.isActive ?? true),
+      } satisfies PickupStorageInput,
+    } as const
+  }
   if (maximumQuantity < minimumQuantity) {
     return { error: { code: 'quantity_invalid', message: 'Maximum quantity must be greater than or equal to minimum quantity' } } as const
   }
-  if ((maximumQuantity - minimumQuantity) % quantityStep !== 0) {
+  if (!matchesQuantityStep(maximumQuantity, minimumQuantity, quantityStep)) {
     return { error: { code: 'quantity_invalid', message: 'Quantity step must match the minimum and maximum quantity range' } } as const
   }
   if (stock > 0 && minimumQuantity > stock) {
@@ -640,6 +725,7 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
       await tx.orderStatusHistory.create({
         data: { orderId, status: 'processing', comment: 'Payment confirmed by admin' },
       })
+      await assignPickupStoragesForPaidOrder(tx, orderId)
       return tx.order.update({
         where: { id: orderId },
         data: { status: 'processing', paymentStatus: 'paid' },
@@ -1172,7 +1258,7 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
   const { stock, isAvailable, minimumQuantity, quantityStep, maximumQuantity, unit } = request.body
   const data: Record<string, unknown> = {}
   if (stock !== undefined) {
-    const parsedStock = getNonNegativeNumber(stock)
+    const parsedStock = getNonNegativeQuantity(stock)
     if (parsedStock == null) {
       sendError(response, 400, 'invalid_stock', 'Stock must be zero or greater')
       return
@@ -1181,35 +1267,36 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
   }
   if (typeof isAvailable === 'boolean') data.isAvailable = isAvailable
   if (minimumQuantity !== undefined) {
-    const parsedMinimumQuantity = getPositiveInteger(minimumQuantity)
+    const parsedMinimumQuantity = getPositiveQuantity(minimumQuantity)
     if (parsedMinimumQuantity == null) {
-      sendError(response, 400, 'quantity_invalid', 'Minimum quantity must be a positive integer')
+      sendError(response, 400, 'quantity_invalid', 'Minimum quantity must be a positive number')
       return
     }
     data.minimumQuantity = parsedMinimumQuantity
   }
   if (quantityStep !== undefined) {
-    const parsedQuantityStep = getPositiveInteger(quantityStep)
+    const parsedQuantityStep = getPositiveQuantity(quantityStep)
     if (parsedQuantityStep == null) {
-      sendError(response, 400, 'quantity_invalid', 'Quantity step must be a positive integer')
+      sendError(response, 400, 'quantity_invalid', 'Quantity step must be a positive number')
       return
     }
     data.quantityStep = parsedQuantityStep
   }
   if (maximumQuantity !== undefined) {
-    const parsedMaximumQuantity = getPositiveInteger(maximumQuantity)
+    const parsedMaximumQuantity = getPositiveQuantity(maximumQuantity)
     if (parsedMaximumQuantity == null) {
-      sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be a positive integer')
+      sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be a positive number')
       return
     }
     data.maximumQuantity = parsedMaximumQuantity
   }
   if (unit !== undefined) {
-    if (typeof unit !== 'string' || !unit.trim()) {
-      sendError(response, 400, 'unit_required', 'Unit is required')
+    const parsedUnit = normalizeSupportedUnit(unit)
+    if (!parsedUnit) {
+      sendError(response, 400, 'unit_invalid', 'Unit must be one of: шт, кг, г, oz')
       return
     }
-    data.unit = unit.trim()
+    data.unit = parsedUnit
   }
 
   if (Object.keys(data).length === 0) {
@@ -1226,7 +1313,7 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
     sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be greater than or equal to minimum quantity')
     return
   }
-  if ((nextMaximumQuantity - nextMinimumQuantity) % nextQuantityStep !== 0) {
+  if (!matchesQuantityStep(nextMaximumQuantity, nextMinimumQuantity, nextQuantityStep)) {
     sendError(response, 400, 'quantity_invalid', 'Quantity step must match the minimum and maximum quantity range')
     return
   }
@@ -1252,6 +1339,174 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
   })
 
   response.json({ productCity: pc })
+})
+
+router.get('/pickup-storages', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const storages = await prisma.pickupStorage.findMany({
+    include: {
+      product: { select: { id: true, name: true, nameEn: true } },
+      productCity: { include: { city: { select: { id: true, name: true, nameEn: true } } } },
+      assignedOrder: { select: { id: true, userId: true, paymentStatus: true, status: true } },
+      assignedOrderItem: { select: { id: true, productName: true, quantity: true, unit: true } },
+    },
+    orderBy: [{ status: 'asc' }, { id: 'desc' }],
+  })
+
+  response.json({ storages })
+})
+
+router.post('/pickup-storages', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const parsed = parsePickupStoragePayload(request.body as Record<string, unknown>)
+  if ('error' in parsed) {
+    sendError(response, 400, parsed.error.code, parsed.error.message)
+    return
+  }
+
+  const { productId, productCityId, variantKey, quantity, unit, photoUrl, address, instructions, isActive } = parsed.value
+
+  const productCity = await prisma.productCity.findUnique({
+    where: { id: productCityId },
+    select: { id: true, productId: true },
+  })
+  if (!productCity || productCity.productId !== productId) {
+    sendError(response, 400, 'product_city_mismatch', 'Selected product city does not belong to product')
+    return
+  }
+
+  const storage = await prisma.pickupStorage.create({
+    data: {
+      productId,
+      productCityId,
+      variantKey,
+      quantity,
+      unit,
+      photoUrl,
+      address,
+      instructions,
+      isActive,
+      status: isActive ? 'available' : 'inactive',
+    },
+    include: {
+      product: { select: { id: true, name: true, nameEn: true } },
+      productCity: { include: { city: { select: { id: true, name: true, nameEn: true } } } },
+      assignedOrder: { select: { id: true, userId: true, paymentStatus: true, status: true } },
+      assignedOrderItem: { select: { id: true, productName: true, quantity: true, unit: true } },
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'pickup_storage_created',
+      entity: 'pickup_storage',
+      entityId: storage.id,
+      meta: JSON.stringify({ productId, productCityId, quantity, unit, variantKey }),
+    },
+  })
+
+  response.status(201).json({ storage })
+})
+
+router.patch('/pickup-storages/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const storageId = parsePositiveInt(request.params.id)
+  if (!storageId) {
+    sendError(response, 400, 'invalid_id', 'Invalid storage id')
+    return
+  }
+
+  const existing = await prisma.pickupStorage.findUnique({
+    where: { id: storageId },
+    include: { assignment: true },
+  })
+  if (!existing) {
+    sendError(response, 404, 'not_found', 'Pickup storage not found')
+    return
+  }
+
+  if (existing.assignment && (request.body.productId !== undefined || request.body.productCityId !== undefined || request.body.quantity !== undefined || request.body.unit !== undefined || request.body.variantKey !== undefined)) {
+    sendError(response, 400, 'storage_locked', 'Assigned storage cannot change matching attributes')
+    return
+  }
+
+  const parsed = parsePickupStoragePayload(
+    request.body as Record<string, unknown>,
+    {
+      productId: existing.productId,
+      productCityId: existing.productCityId,
+      variantKey: existing.variantKey,
+      quantity: existing.quantity,
+      unit: existing.unit,
+      photoUrl: existing.photoUrl,
+      address: existing.address,
+      instructions: existing.instructions,
+      isActive: existing.isActive,
+    },
+  )
+  if ('error' in parsed) {
+    sendError(response, 400, parsed.error.code, parsed.error.message)
+    return
+  }
+
+  const { productId, productCityId, variantKey, quantity, unit, photoUrl, address, instructions, isActive } = parsed.value
+
+  const productCity = await prisma.productCity.findUnique({
+    where: { id: productCityId },
+    select: { productId: true },
+  })
+  if (!productCity || productCity.productId !== productId) {
+    sendError(response, 400, 'product_city_mismatch', 'Selected product city does not belong to product')
+    return
+  }
+
+  const data: Record<string, unknown> = {
+    productId,
+    productCityId,
+    variantKey,
+    quantity,
+    unit,
+    photoUrl,
+    address,
+    instructions,
+    isActive,
+  }
+
+  if (!existing.assignment) {
+    data.status = isActive ? 'available' : 'inactive'
+  } else if (!isActive) {
+    data.isActive = false
+  }
+
+  const storage = await prisma.pickupStorage.update({
+    where: { id: storageId },
+    data,
+    include: {
+      product: { select: { id: true, name: true, nameEn: true } },
+      productCity: { include: { city: { select: { id: true, name: true, nameEn: true } } } },
+      assignedOrder: { select: { id: true, userId: true, paymentStatus: true, status: true } },
+      assignedOrderItem: { select: { id: true, productName: true, quantity: true, unit: true } },
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'pickup_storage_updated',
+      entity: 'pickup_storage',
+      entityId: storage.id,
+      meta: JSON.stringify({ productId, productCityId, quantity, unit, variantKey, isActive }),
+    },
+  })
+
+  response.json({ storage })
 })
 
 // ──── Users ────────────────────────────────────────────────────────────────

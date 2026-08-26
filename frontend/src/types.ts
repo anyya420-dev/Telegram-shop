@@ -102,6 +102,22 @@ export type OrderItem = {
   quantity: number
   price: number
   lineTotal: number
+  variantKey?: string | null
+  pickupAssignment?: PickupStorageAssignment | null
+}
+
+export type PickupStorageAssignment = {
+  id: number
+  orderItemId: number
+  pickupStorageId: number
+  productName: string
+  variantKey: string | null
+  quantity: number
+  unit: string
+  photoUrl: string | null
+  address: string
+  instructions: string | null
+  createdAt: string
 }
 
 export type OrderStatusEntry = {
@@ -189,6 +205,7 @@ export type Order = {
   rewardId?: number | null
   casinoCreditsUsed?: number
   payments?: Payment[]
+  pickupStorageResolutionRequired?: boolean
 }
 
 export type BalanceTransaction = {
@@ -361,6 +378,48 @@ export type AdminProductCity = {
   city: {
     id?: number
     name: string
+  }
+
+  export type AdminPickupStorage = {
+    id: number
+    productId: number
+    productCityId: number
+    variantKey: string | null
+    quantity: number
+    unit: string
+    photoUrl: string | null
+    address: string
+    instructions: string | null
+    isActive: boolean
+    status: string
+    assignedAt: string | null
+    createdAt: string
+    updatedAt: string
+    product: {
+      id: number
+      name: string
+      nameEn: string | null
+    }
+    productCity: {
+      id: number
+      city: {
+        id: number
+        name: string
+        nameEn: string | null
+      }
+    }
+    assignedOrder: {
+      id: number
+      userId: number
+      paymentStatus: string | null
+      status: string
+    } | null
+    assignedOrderItem: {
+      id: number
+      productName: string
+      quantity: number
+      unit: string
+    } | null
   }
 }
 

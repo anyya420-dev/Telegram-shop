@@ -27,6 +27,7 @@ import type {
   WishlistItem,
   AdminPaymentRecord,
   Administrator,
+  AdminPickupStorage,
 } from '../types'
 
 function normalizeApiBase(value: string) {
@@ -317,6 +318,35 @@ export const api = {
   },
   updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean; minimumQuantity: number; quantityStep: number; maximumQuantity: number; unit: string }>) {
     return adminRequest<{ productCity: unknown }>(`/admin/product-cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminPickupStorages() {
+    return adminRequest<{ storages: AdminPickupStorage[] }>('/admin/pickup-storages')
+  },
+  createAdminPickupStorage(data: {
+    productId: number
+    productCityId: number
+    variantKey?: string | null
+    quantity: number
+    unit: string
+    photoUrl?: string | null
+    address: string
+    instructions?: string | null
+    isActive?: boolean
+  }) {
+    return adminRequest<{ storage: AdminPickupStorage }>('/admin/pickup-storages', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminPickupStorage(id: number, data: Partial<{
+    productId: number
+    productCityId: number
+    variantKey: string | null
+    quantity: number
+    unit: string
+    photoUrl: string | null
+    address: string
+    instructions: string | null
+    isActive: boolean
+  }>) {
+    return adminRequest<{ storage: AdminPickupStorage }>(`/admin/pickup-storages/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminDiscounts() {
     return adminRequest<{ discounts: Discount[] }>('/admin/discounts')

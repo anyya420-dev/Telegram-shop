@@ -79,6 +79,7 @@ model Product {
 
   category      Category      @relation(fields: [categoryId], references: [id])
   productCities ProductCity[]
+  pickupStorages PickupStorage[]
   reviews       Review[]
 
   @@map("products")
@@ -100,6 +101,7 @@ model ProductCity {
   cartItems  CartItem[]
   orderItems OrderItem[]
   wishlists  Wishlist[]
+  pickupStorages PickupStorage[]
 
   @@unique([productId, cityId])
   @@map("product_cities")
@@ -134,6 +136,7 @@ model Order {
   operatorId              Int?     @map("operator_id")
   operatorDeliveryPrice   Float?   @map("operator_delivery_price")
   deliveryPriceConfirmed  Boolean  @default(false) @map("delivery_price_confirmed")
+  pickupStorageResolutionRequired Boolean @default(false) @map("pickup_storage_resolution_required")
   casinoCreditsUsed Float      @default(0) @map("casino_credits_used")
   cancelledAt      DateTime?   @map("cancelled_at")
   refundStatus     String?     @map("refund_status") // none | requested | approved | rejected
@@ -151,6 +154,7 @@ model Order {
   reward         CasinoReward?        @relation("OrderReward")
   statusHistory  OrderStatusHistory[]
   payments       Payment[]
+  pickupStorages PickupStorage[]      @relation("PickupStorageOrder")
 
   @@map("orders")
 }
@@ -225,11 +229,60 @@ model OrderItem {
   quantity      Float
   price         Float
   lineTotal     Float   @map("line_total")
+  variantKey    String? @map("variant_key")
 
   order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productCity ProductCity @relation(fields: [productCityId], references: [id])
+  pickupAssignment PickupStorageAssignment?
 
   @@map("order_items")
+}
+
+model PickupStorage {
+  id           Int      @id @default(autoincrement())
+  productId    Int      @map("product_id")
+  productCityId Int     @map("product_city_id")
+  variantKey   String?  @map("variant_key")
+  quantity     Float
+  unit         String
+  photoUrl     String?  @map("photo_url")
+  address      String
+  instructions String?
+  isActive     Boolean  @default(true) @map("is_active")
+  status       String   @default("available")
+  assignedAt   DateTime? @map("assigned_at")
+  assignedOrderId Int?  @map("assigned_order_id")
+  assignedOrderItemId Int? @unique @map("assigned_order_item_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  product      Product   @relation(fields: [productId], references: [id])
+  productCity  ProductCity @relation(fields: [productCityId], references: [id])
+  assignedOrder Order?   @relation("PickupStorageOrder", fields: [assignedOrderId], references: [id])
+  assignedOrderItem OrderItem? @relation(fields: [assignedOrderItemId], references: [id])
+  assignment  PickupStorageAssignment?
+
+  @@index([productCityId, variantKey, quantity, unit, isActive, status])
+  @@map("pickup_storages")
+}
+
+model PickupStorageAssignment {
+  id              Int      @id @default(autoincrement())
+  orderItemId     Int      @unique @map("order_item_id")
+  pickupStorageId Int      @unique @map("pickup_storage_id")
+  productName     String   @map("product_name")
+  variantKey      String?  @map("variant_key")
+  quantity        Float
+  unit            String
+  photoUrl        String?  @map("photo_url")
+  address         String
+  instructions    String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  orderItem       OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  pickupStorage   PickupStorage @relation(fields: [pickupStorageId], references: [id])
+
+  @@map("pickup_storage_assignments")
 }
 
 model CartItem {

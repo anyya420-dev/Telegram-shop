@@ -5,10 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminOrder, AdminPaymentRecord, AdminPickupStorage, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
+type Tab = 'stats' | 'orders' | 'products' | 'storage' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
 
 type ProductCityDraft = {
   cityId: string;
@@ -90,6 +90,7 @@ type PaymentEditDraft = Partial<{
 }>;
 
 const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
+const UNIT_OPTIONS = ['шт', 'кг', 'г', 'oz'] as const;
 
 function createDefaultProductCityDraft(cityId = ''): ProductCityDraft {
   return {
@@ -99,7 +100,7 @@ function createDefaultProductCityDraft(cityId = ''): ProductCityDraft {
     minimumQuantity: '1',
     quantityStep: '1',
     maximumQuantity: '1',
-    unit: 'шт.',
+    unit: 'шт',
   };
 }
 
@@ -120,6 +121,23 @@ function parsePositiveInteger(value: string, label: string) {
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(label);
   }
+
+  function parsePositiveNumber(value: string, label: string) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(label);
+    }
+    return Number(parsed.toFixed(3));
+  }
+
+  function normalizeUnitInput(value: string) {
+    const normalized = value.trim().toLowerCase();
+    if (['шт', 'шт.', 'pcs', 'pc', 'piece'].includes(normalized)) return 'шт';
+    if (['кг', 'kg'].includes(normalized)) return 'кг';
+    if (['г', 'g'].includes(normalized)) return 'г';
+    if (normalized === 'oz') return 'oz';
+    return '';
+  }
   return parsed;
 }
 
@@ -130,18 +148,19 @@ function buildProductCityPayload(draft: ProductCityDraft) {
   }
 
   const stock = parseNonNegativeNumber(draft.stock, 'Stock must be zero or greater');
-  const minimumQuantity = parsePositiveInteger(draft.minimumQuantity, 'Minimum quantity must be a positive integer');
-  const quantityStep = parsePositiveInteger(draft.quantityStep, 'Quantity step must be a positive integer');
-  const maximumQuantity = parsePositiveInteger(draft.maximumQuantity, 'Maximum quantity must be a positive integer');
-  const unit = draft.unit.trim();
+  const minimumQuantity = parsePositiveNumber(draft.minimumQuantity, 'Minimum quantity must be a positive number');
+  const quantityStep = parsePositiveNumber(draft.quantityStep, 'Quantity step must be a positive number');
+  const maximumQuantity = parsePositiveNumber(draft.maximumQuantity, 'Maximum quantity must be a positive number');
+  const unit = normalizeUnitInput(draft.unit);
 
   if (!unit) {
-    throw new Error('Unit is required');
+    throw new Error('Unit must be one of: шт, кг, г, oz');
   }
   if (maximumQuantity < minimumQuantity) {
     throw new Error('Maximum quantity must be greater than or equal to minimum quantity');
   }
-  if ((maximumQuantity - minimumQuantity) % quantityStep !== 0) {
+  const distance = (maximumQuantity - minimumQuantity) / quantityStep;
+  if (Math.abs(distance - Math.round(distance)) > 0.0001) {
     throw new Error('Quantity step must match the minimum and maximum quantity range');
   }
   if (stock > 0 && minimumQuantity > stock) {
@@ -274,6 +293,29 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
   const [editingProductCity, setEditingProductCity] = useState<number | null>(null);
   const [productCityEdits, setProductCityEdits] = useState<Record<number, ProductCityEditDraft>>({});
   const [newProductCityDrafts, setNewProductCityDrafts] = useState<Record<number, ProductCityDraft>>({});
+  const [pickupStorages, setPickupStorages] = useState<AdminPickupStorage[]>([]);
+  const [newStorageProductId, setNewStorageProductId] = useState('');
+  const [newStorageProductCityId, setNewStorageProductCityId] = useState('');
+  const [newStorageVariantKey, setNewStorageVariantKey] = useState('');
+  const [newStorageQuantity, setNewStorageQuantity] = useState('');
+  const [newStorageUnit, setNewStorageUnit] = useState<'шт' | 'кг' | 'г' | 'oz'>('шт');
+  const [newStoragePhotoUrl, setNewStoragePhotoUrl] = useState('');
+  const [newStorageAddress, setNewStorageAddress] = useState('');
+  const [newStorageInstructions, setNewStorageInstructions] = useState('');
+  const [newStorageActive, setNewStorageActive] = useState(true);
+  const [creatingStorage, setCreatingStorage] = useState(false);
+  const [editingStorage, setEditingStorage] = useState<number | null>(null);
+  const [storageEdits, setStorageEdits] = useState<Record<number, Partial<{
+    productId: string;
+    productCityId: string;
+    variantKey: string;
+    quantity: string;
+    unit: string;
+    photoUrl: string;
+    address: string;
+    instructions: string;
+    isActive: boolean;
+  }>>>({});
 
   const [replyText, setReplyText] = useState<Record<number, string>>({});
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
@@ -285,7 +327,7 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
   const [newPassword, setNewPassword] = useState('');
 
   const tabs = useMemo(
-    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
+    () => ['stats', 'orders', 'products', 'storage', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
     [],
   );
 
@@ -369,6 +411,10 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
         setOrders(response.orders);
       } else if (tabName === 'products') {
         await Promise.all([refreshProducts(), categories.length === 0 ? refreshCategories() : Promise.resolve(categories), cities.length === 0 ? refreshCities() : Promise.resolve(cities)]);
+      } else if (tabName === 'storage') {
+        const [productsResponse, storagesResponse] = await Promise.all([api.getAdminProducts(), api.getAdminPickupStorages()]);
+        setProducts(productsResponse.products);
+        setPickupStorages(storagesResponse.storages);
       } else if (tabName === 'users') {
         const response = await api.getAdminUsers(1);
         setUsers(response.users);
