@@ -13,21 +13,27 @@ const bot = new Telegraf(token)
 
 bot.start(async (context) => {
   await context.reply(
-    'Добро пожаловать в Telegram Shop. Откройте Web App, чтобы выбрать город и начать покупки.',
-    Markup.keyboard([[Markup.button.webApp('Открыть магазин', webAppUrl)]]).resize(),
+    'Добро пожаловать в NARCOS. Откройте Web App, чтобы выбрать город и начать покупки.',
+    Markup.inlineKeyboard([
+      [Markup.button.webApp('🛍 Открыть NARCOS', webAppUrl)],
+    ]),
   )
 })
 
 bot.command('shop', async (context) => {
-  await context.reply('Откройте магазин через кнопку ниже.', {
-    reply_markup: Markup.inlineKeyboard([
-      Markup.button.webApp('🛍 Магазин', webAppUrl),
-    ]).reply_markup,
-  })
+  await context.reply(
+    'Откройте NARCOS через кнопку ниже.',
+    Markup.inlineKeyboard([
+      [Markup.button.webApp('🛍 NARCOS', webAppUrl)],
+    ]),
+  )
 })
 
 bot.launch().then(() => {
-  console.log('Telegram bot started')
+  console.log('NARCOS shop bot started')
+}).catch((error) => {
+  console.error('NARCOS shop bot failed to start:', error)
+  process.exit(1)
 })
 
 process.once('SIGINT', () => bot.stop('SIGINT'))
