@@ -15,6 +15,7 @@ import SupportPage from './pages/SupportPage';
 import CitySelectPage from './pages/CitySelectPage';
 import OrdersPage from './pages/OrdersPage';
 import OrderDetailPage from './pages/OrderDetailPage';
+import OperatorPage from './pages/OperatorPage';
 import AdminPage from './pages/AdminPage';
 import WishlistPage from './pages/WishlistPage';
 
@@ -24,6 +25,7 @@ export default function App() {
       <AppProvider>
         <Routes>
           <Route path="/select-city" element={<CitySelectPage />} />
+          <Route path="/operator" element={<OperatorPage />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/home" replace />} />
             <Route path="home" element={<HomePage />} />

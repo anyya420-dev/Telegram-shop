@@ -12,6 +12,7 @@ import citiesRouter from './routes/cities.js'
 import deliveryRouter from './routes/delivery.js'
 import discountsRouter from './routes/discounts.js'
 import ordersRouter from './routes/orders.js'
+import operatorsRouter from './routes/operators.js'
 import paymentsRouter from './routes/payments.js'
 import productsRouter from './routes/products.js'
 import reviewsRouter from './routes/reviews.js'
@@ -149,6 +150,7 @@ export function createApp() {
   app.use('/api/products', productsRouter)
   app.use('/api/cart', cartRouter)
   app.use('/api/orders', ordersRouter)
+  app.use('/api/operators', operatorsRouter)
   app.use('/api/payments', paymentsRouter)
   app.use('/api/users', usersRouter)
   app.use('/api/balance', balanceRouter)
