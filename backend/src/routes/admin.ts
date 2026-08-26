@@ -4,7 +4,7 @@ import type { CookieOptions, Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import {
   createAdminSession,
-  ensureBootstrapPasswordFromEnv,
+  ensureAdminPasswordFromEnv,
   getActiveAdminSession,
   revokeAdminSession,
   verifyAdminPassword,
@@ -179,7 +179,7 @@ async function getAdminUser(request: Request, response: Response) {
 }
 
 router.post('/auth/login', authRateLimiter, async (request, response) => {
-  await ensureBootstrapPasswordFromEnv()
+  await ensureAdminPasswordFromEnv()
 
   const password = typeof request.body.password === 'string' ? request.body.password : ''
   if (!password) {

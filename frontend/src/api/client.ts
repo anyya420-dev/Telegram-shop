@@ -28,14 +28,18 @@ import type {
   AdminPaymentRecord,
 } from '../types'
 
-export function resolveApiUrl(env = (import.meta as { env?: Record<string, string> }).env) {
-  const configuredValue = env?.VITE_API_URL?.trim() ?? ''
+export function resolveApiUrl(env = (import.meta as { env?: Record<string, string | boolean> }).env) {
+  const configuredValue = typeof env?.VITE_API_URL === 'string' ? env.VITE_API_URL.trim() : ''
+  const isProduction = env?.PROD === true || env?.PROD === 'true' || env?.MODE === 'production'
 
   if (!configuredValue) {
-    return ''
+    return isProduction ? 'https://narcos-shop.onrender.com/api' : '/api'
   }
 
-  const normalizedValue = configuredValue.replace(/\/+$/, '')
+  const preparedValue = configuredValue.startsWith('http://') || configuredValue.startsWith('https://') || configuredValue.startsWith('/')
+    ? configuredValue
+    : `https://${configuredValue}`
+  const normalizedValue = preparedValue.replace(/\/+$/, '')
   return normalizedValue.endsWith('/api') ? normalizedValue : `${normalizedValue}/api`
 }
 

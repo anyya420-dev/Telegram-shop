@@ -56,12 +56,22 @@ export async function rotateAdminPassword(nextPassword: string) {
   })
 }
 
-export async function ensureBootstrapPasswordFromEnv() {
-  const configured = await hasAdminPasswordConfigured()
-  if (configured) return
-
+export async function ensureAdminPasswordFromEnv() {
   const bootstrap = (process.env.ADMIN_PASSWORD ?? '').trim()
   if (!bootstrap) return
+
+  const current = await prisma.adminSecurity.findFirst({ orderBy: { id: 'asc' } })
+  if (!current) {
+    await rotateAdminPassword(bootstrap)
+    return
+  }
+
+  const expectedHash = Buffer.from(current.passwordHash, 'hex')
+  const candidateHash = Buffer.from(hashPassword(bootstrap, current.passwordSalt), 'hex')
+  if (expectedHash.length === candidateHash.length && timingSafeEqual(expectedHash, candidateHash)) {
+    return
+  }
+
   await rotateAdminPassword(bootstrap)
 }
 

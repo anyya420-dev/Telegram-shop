@@ -21,7 +21,12 @@ import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
 import { prisma } from './lib.js'
 
-const fallbackProductionOrigins = ['https://telegram-shop.onrender.com', 'https://telegram-shop-3781.onrender.com']
+const fallbackProductionOrigins = [
+  'https://telegram-shop.onrender.com',
+  'https://telegram-shop-3781.onrender.com',
+  'https://narcos-shop.onrender.com',
+  'https://narcos-shop-3781.onrender.com',
+]
 
 function normalizeOrigin(value: string) {
   try {

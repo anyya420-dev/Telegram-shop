@@ -146,6 +146,31 @@ test('admin session flow keeps public endpoints independent', async () => {
   assert.equal(publicAfterLogout.status, 200)
 })
 
+test('admin password follows ADMIN_PASSWORD env changes', async () => {
+  const initialLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(initialLogin.status, 200)
+
+  process.env.ADMIN_PASSWORD = 'admin-secret-updated'
+
+  const oldPasswordLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(oldPasswordLogin.status, 401)
+
+  const updatedPasswordLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret-updated' }),
+  })
+  assert.equal(updatedPasswordLogin.status, 200)
+})
+
 test('cors allows only production frontend origin and handles preflight', async () => {
   const preflight = await request('/api/admin/auth/status', {
     method: 'OPTIONS',
@@ -174,6 +199,14 @@ test('cors allows only production frontend origin and handles preflight', async 
   })
   assert.equal(configuredWebAppOrigin.status, 200)
   assert.equal(configuredWebAppOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-webapp.onrender.com')
+
+  const narcosOrigin = await request('/api/health', {
+    headers: {
+      Origin: 'https://narcos-shop.onrender.com',
+    },
+  })
+  assert.equal(narcosOrigin.status, 200)
+  assert.equal(narcosOrigin.headers.get('access-control-allow-origin'), 'https://narcos-shop.onrender.com')
 
   const disallowed = await request('/api/health', {
     headers: {
