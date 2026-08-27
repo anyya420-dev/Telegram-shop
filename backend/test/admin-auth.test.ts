@@ -1757,3 +1757,176 @@ test('pickup storage is one-time exact assignment and hidden until order is paid
   assert.equal(paidOrder2.body.order.items[0].pickupAssignment, null)
   assert.equal(paidOrder2.body.order.pickupStorageResolutionRequired, true)
 })
+
+test('pickup assignment matches each line independently for multi-product order', async () => {
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(adminLogin.status, 200)
+  const adminCookie = adminLogin.headers.get('set-cookie') ?? ''
+
+  const city = await prisma.city.create({ data: { name: 'Multi Pickup City', isActive: true } })
+  const category = await prisma.category.create({ data: { name: 'Multi Pickup Category', isActive: true } })
+
+  const tshirt = await prisma.product.create({
+    data: {
+      name: 'T-shirt',
+      description: 'Shirt',
+      price: 50,
+      categoryId: category.id,
+      productCities: {
+        create: {
+          cityId: city.id,
+          stock: 10,
+          minimumQuantity: 1,
+          quantityStep: 1,
+          maximumQuantity: 10,
+          unit: 'шт',
+          isAvailable: true,
+        },
+      },
+    },
+    include: { productCities: true },
+  })
+
+  const coffee = await prisma.product.create({
+    data: {
+      name: 'Coffee',
+      description: 'Coffee',
+      price: 80,
+      categoryId: category.id,
+      productCities: {
+        create: {
+          cityId: city.id,
+          stock: 10,
+          minimumQuantity: 0.5,
+          quantityStep: 0.5,
+          maximumQuantity: 5,
+          unit: 'кг',
+          isAvailable: true,
+        },
+      },
+    },
+    include: { productCities: true },
+  })
+
+  const tshirtCity = tshirt.productCities[0]
+  const coffeeCity = coffee.productCities[0]
+
+  const pickupOption = await prisma.deliveryOption.create({
+    data: { name: 'Pickup multi', type: 'pickup', price: 0, isActive: true },
+  })
+  const paymentMethod = await prisma.paymentMethod.create({
+    data: {
+      type: 'crypto',
+      title: 'USDT multi',
+      asset: 'USDT',
+      network: 'TRC20',
+      walletAddress: 'TUSDT_PICKUP_MULTI',
+      isEnabled: true,
+    },
+  })
+
+  const tshirtStorage = await requestJson('/api/admin/pickup-storages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      productId: tshirt.id,
+      productCityId: tshirtCity.id,
+      quantity: 1,
+      unit: 'шт',
+      address: 'Storage A',
+      instructions: 'Shirt pickup',
+      isActive: true,
+    }),
+  })
+  assert.equal(tshirtStorage.response.status, 201)
+
+  const coffeeStorage = await requestJson('/api/admin/pickup-storages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      productId: coffee.id,
+      productCityId: coffeeCity.id,
+      quantity: 0.5,
+      unit: 'кг',
+      address: 'Storage C',
+      instructions: 'Coffee pickup',
+      isActive: true,
+    }),
+  })
+  assert.equal(coffeeStorage.response.status, 201)
+
+  const user = await prisma.user.create({
+    data: { telegramId: '900000043', firstName: 'Multi Buyer', selectedCityId: city.id },
+  })
+  const token = createSessionToken!(user.telegramId)
+
+  const addTshirt = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: tshirtCity.id, quantity: 1 }),
+  })
+  assert.equal(addTshirt.response.status, 200)
+
+  const addCoffee = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: coffeeCity.id, quantity: 0.5 }),
+  })
+  assert.equal(addCoffee.response.status, 200)
+
+  const checkout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: pickupOption.id }),
+  })
+  assert.equal(checkout.response.status, 200)
+  const orderId = checkout.body.order.id as number
+
+  const paymentSession = await requestJson(`/api/payments/orders/${orderId}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paymentSession.response.status, 201)
+
+  const submit = await requestJson(`/api/payments/${paymentSession.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionHash: 'TXHASH_PICKUP_MULTI_0000003' }),
+  })
+  assert.equal(submit.response.status, 200)
+
+  const confirm = await requestJson(`/api/admin/payments/${paymentSession.body.payment.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ status: 'paid', reason: 'verified multi' }),
+  })
+  assert.equal(confirm.response.status, 200)
+
+  const paidOrder = await requestJson(`/api/orders/${orderId}`, {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paidOrder.response.status, 200)
+  assert.equal(paidOrder.body.order.items.length, 2)
+
+  const shirtItem = paidOrder.body.order.items.find((item: any) => item.productName === 'T-shirt')
+  const coffeeItem = paidOrder.body.order.items.find((item: any) => item.productName === 'Coffee')
+  assert.ok(shirtItem?.pickupAssignment)
+  assert.ok(coffeeItem?.pickupAssignment)
+  assert.equal(shirtItem.pickupAssignment.address, 'Storage A')
+  assert.equal(shirtItem.pickupAssignment.unit, 'шт')
+  assert.equal(coffeeItem.pickupAssignment.address, 'Storage C')
+  assert.equal(coffeeItem.pickupAssignment.unit, 'кг')
+  assert.notEqual(shirtItem.pickupAssignment.pickupStorageId, coffeeItem.pickupAssignment.pickupStorageId)
+
+  const shirtStorageDb = await prisma.pickupStorage.findUniqueOrThrow({ where: { id: tshirtStorage.body.storage.id } })
+  const coffeeStorageDb = await prisma.pickupStorage.findUniqueOrThrow({ where: { id: coffeeStorage.body.storage.id } })
+  assert.equal(shirtStorageDb.status, 'assigned')
+  assert.equal(coffeeStorageDb.status, 'assigned')
+  assert.equal(shirtStorageDb.assignedOrderId, orderId)
+  assert.equal(coffeeStorageDb.assignedOrderId, orderId)
+  assert.notEqual(shirtStorageDb.assignedOrderItemId, coffeeStorageDb.assignedOrderItemId)
+})
