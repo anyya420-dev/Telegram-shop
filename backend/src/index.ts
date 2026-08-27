@@ -60,6 +60,14 @@ export function createApp() {
   const app = express()
   const allowedOrigins = getAllowedOrigins()
 
+  app.use((_request, response, next) => {
+    response.setHeader('X-Content-Type-Options', 'nosniff')
+    response.setHeader('X-Frame-Options', 'DENY')
+    response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.setHeader('X-Permitted-Cross-Domain-Policies', 'none')
+    next()
+  })
+
   app.use((request, response, next) => {
     response.setHeader('Vary', 'Origin, Access-Control-Request-Method, Access-Control-Request-Headers')
     const origin = request.headers.origin
