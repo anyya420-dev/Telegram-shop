@@ -7,7 +7,7 @@ services:
   - type: web
     name: telegram-shop-backend
     runtime: node
-    plan: free
+    plan: starter
     healthCheckPath: /health
     buildCommand: npm install --include=dev && npm run build --workspace backend
     preDeployCommand: npm run db:generate --workspace backend && npm run db:migrate:deploy --workspace backend
