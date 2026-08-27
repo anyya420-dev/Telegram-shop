@@ -34,6 +34,7 @@ export default function OrderDetailPage() {
   const [pageError, setPageError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [refunding, setRefunding] = useState(false)
+  const [paying, setPaying] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
   async function loadOrder() {
@@ -88,6 +89,20 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function handlePayNow() {
+    if (!order || paying) return
+    setPaying(true)
+    setActionError(null)
+    try {
+      const response = await api.createOrderPayment(order.id)
+      navigate(`/checkout/payment?orderId=${order.id}&paymentId=${response.payment.id}`)
+    } catch (error) {
+      setActionError(getErrorMessage(error, t, 'request_failed'))
+    } finally {
+      setPaying(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className={styles.loading}>
@@ -122,6 +137,8 @@ export default function OrderDetailPage() {
 
   const canCancel = ['pending', 'confirmed', 'payment_pending'].includes(order.status)
   const canRefund = ['delivered', 'cancelled'].includes(order.status) && !order.refundStatus
+  const isAwaitingDeliveryPrice = order.deliveryOption?.type === 'delivery' && !order.deliveryPriceConfirmed && order.paymentStatus !== 'paid'
+  const canPayNow = order.deliveryOption?.type === 'delivery' && order.deliveryPriceConfirmed && order.paymentStatus !== 'paid' && order.status !== 'cancelled'
   const localizedCity = language === 'en' && order.city.nameEn ? order.city.nameEn : order.city.name
   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
   const localizedDelivery = order.deliveryOption
@@ -185,6 +202,13 @@ export default function OrderDetailPage() {
               <Truck size={16} strokeWidth={1.7} />
               <span>{t('cart.delivery')}</span>
               <strong>{localizedDelivery}</strong>
+            </div>
+          ) : null}
+          {order.deliveryAddress ? (
+            <div className={styles.infoRow}>
+              <MapPin size={16} strokeWidth={1.7} />
+              <span>{t('checkout.deliveryAddress', 'Адрес')}</span>
+              <strong>{order.deliveryAddress}</strong>
             </div>
           ) : null}
           {order.paymentMethod ? (
@@ -281,6 +305,22 @@ export default function OrderDetailPage() {
       ) : null}
 
       {actionError ? <p className={styles.actionError}>{actionError}</p> : null}
+
+      {isAwaitingDeliveryPrice ? (
+        <div className={styles.awaitingDelivery}>
+          <p>{t('orders.awaitingDeliveryPrice', '⏳ Ожидаем подтверждения стоимости доставки от оператора. После подтверждения вы сможете оплатить заказ здесь.')}</p>
+        </div>
+      ) : null}
+
+      {canPayNow ? (
+        <div className={styles.awaitingDelivery}>
+          <p>{t('orders.deliveryPriceConfirmed', 'Стоимость доставки подтверждена')}: <strong>{formatCurrency(order.operatorDeliveryPrice ?? order.deliveryFee, language)}</strong></p>
+          <p>{t('orders.newTotal', 'Итог к оплате')}: <strong>{formatCurrency(order.total, language)}</strong></p>
+          <button className={styles.payBtn} onClick={() => void handlePayNow()} disabled={paying} type="button">
+            {paying ? t('common.loading') : t('orders.payNow', 'Оплатить сейчас')}
+          </button>
+        </div>
+      ) : null}
 
       {canCancel ? (
         <button className={styles.cancelBtn} onClick={() => void handleCancel()} disabled={cancelling} type="button">

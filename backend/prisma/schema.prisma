@@ -137,6 +137,7 @@ model Order {
   operatorId              Int?     @map("operator_id")
   operatorDeliveryPrice   Float?   @map("operator_delivery_price")
   deliveryPriceConfirmed  Boolean  @default(false) @map("delivery_price_confirmed")
+  deliveryAddress         String?  @map("delivery_address")
   pickupStorageResolutionRequired Boolean @default(false) @map("pickup_storage_resolution_required")
   casinoCreditsUsed Float      @default(0) @map("casino_credits_used")
   cancelledAt      DateTime?   @map("cancelled_at")

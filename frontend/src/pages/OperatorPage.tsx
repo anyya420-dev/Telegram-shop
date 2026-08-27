@@ -27,6 +27,7 @@ type OperatorOrder = {
   createdAt: string
   operatorDeliveryPrice: number | null
   deliveryPriceConfirmed: boolean
+  deliveryAddress: string | null
   user: {
     id: number
     firstName: string
@@ -280,6 +281,9 @@ export default function OperatorPage() {
                   <span>
                     Delivery: {order.deliveryOption?.name ?? 'Not selected'}
                   </span>
+                  {order.deliveryAddress ? (
+                    <span>Address: {order.deliveryAddress}</span>
+                  ) : null}
                   <span>
                     Confirmed: {order.deliveryPriceConfirmed ? 'Yes' : 'No'}
                   </span>

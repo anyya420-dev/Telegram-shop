@@ -152,7 +152,7 @@ export const api = {
   removeCartItem(itemId: number) {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
   },
-  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
+  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; deliveryAddress?: string; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
     return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload) })
   },
   markOrderPaid(id: number) {

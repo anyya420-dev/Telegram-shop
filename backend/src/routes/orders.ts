@@ -110,6 +110,7 @@ router.post('/', authRateLimiter, async (request, response) => {
   }
 
   const comment = typeof request.body.comment === 'string' ? request.body.comment.trim() : undefined
+  const deliveryAddress = typeof request.body.deliveryAddress === 'string' ? request.body.deliveryAddress.trim() : undefined
   const discountCode = typeof request.body.discountCode === 'string' ? request.body.discountCode.trim().toUpperCase() : null
   const deliveryOptionId = parsePositiveInt(request.body.deliveryOptionId) ?? null
   const paymentMethodId = parsePositiveInt(request.body.paymentMethodId) ?? null
@@ -182,6 +183,7 @@ router.post('/', authRateLimiter, async (request, response) => {
       }
 
       let deliveryFee = 0
+      let isDeliveryType = false
       if (deliveryOptionId) {
         const deliveryOption = await tx.deliveryOption.findFirst({
           where: { id: deliveryOptionId, isActive: true },
@@ -189,7 +191,16 @@ router.post('/', authRateLimiter, async (request, response) => {
         if (!deliveryOption) {
           throw new OrderRequestError(400, 'delivery_option_unavailable', 'Selected delivery option is unavailable')
         }
-        deliveryFee = deliveryOption.price
+        isDeliveryType = deliveryOption.type === 'delivery'
+        if (isDeliveryType) {
+          if (!deliveryAddress) {
+            throw new OrderRequestError(400, 'delivery_address_required', 'Delivery address is required for this delivery option')
+          }
+          // Operator will confirm delivery price; fee starts at 0
+          deliveryFee = 0
+        } else {
+          deliveryFee = deliveryOption.price
+        }
       }
 
       const subtotal = normalizeQuantity(
@@ -331,7 +342,9 @@ router.post('/', authRateLimiter, async (request, response) => {
           deliveryFee,
           total,
           comment: comment || null,
-          paymentStatus: total > 0 ? 'pending' : 'confirmed',
+          deliveryAddress: isDeliveryType ? (deliveryAddress ?? null) : null,
+          deliveryPriceConfirmed: !isDeliveryType,
+          paymentStatus: isDeliveryType ? 'awaiting_delivery_price' : (total > 0 ? 'pending' : 'confirmed'),
           paymentMethodId,
           deliveryOptionId,
           discountId,
@@ -380,12 +393,13 @@ router.post('/', authRateLimiter, async (request, response) => {
         })
       }
 
-      if (total > 0 && paymentMethod) {
+      if (total > 0 && paymentMethod && !isDeliveryType) {
         await createOrRefreshOrderPayment(tx, newOrder, paymentMethod)
       }
 
+      const historyComment = isDeliveryType ? 'Order placed — awaiting operator delivery price' : (total > 0 ? 'Order placed' : 'Order paid with casino credits')
       await tx.orderStatusHistory.create({
-        data: { orderId: newOrder.id, status: total > 0 ? 'pending' : 'confirmed', comment: total > 0 ? 'Order placed' : 'Order paid with casino credits' },
+        data: { orderId: newOrder.id, status: total > 0 ? 'pending' : 'confirmed', comment: historyComment },
       })
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } })

@@ -116,7 +116,7 @@ router.post('/orders/:id/accept', async (request, response) => {
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { id: true, operatorId: true, status: true },
+    select: { id: true, operatorId: true, status: true, deliveryPriceConfirmed: true, deliveryOptionId: true },
   })
 
   if (!order) {
@@ -124,8 +124,10 @@ router.post('/orders/:id/accept', async (request, response) => {
     return
   }
 
-  if (order.status !== 'confirmed') {
-    sendError(response, 400, 'order_unavailable', 'Only confirmed orders can be accepted')
+  // Allow accepting pending delivery orders (deliveryPriceConfirmed=false) as well as confirmed orders
+  const isAcceptable = order.status === 'confirmed' || (order.status === 'pending' && order.deliveryPriceConfirmed === false)
+  if (!isAcceptable) {
+    sendError(response, 400, 'order_unavailable', 'Only confirmed or pending delivery orders can be accepted')
     return
   }
 
@@ -138,7 +140,7 @@ router.post('/orders/:id/accept', async (request, response) => {
     where: {
       id: orderId,
       operatorId: null,
-      status: 'confirmed',
+      OR: [{ status: 'confirmed' }, { status: 'pending', deliveryPriceConfirmed: false }],
     },
     data: {
       operatorId: operator.id,
@@ -202,8 +204,19 @@ router.patch('/orders/:id/delivery-price', async (request, response) => {
       deliveryPriceConfirmed: true,
       deliveryFee: normalizedDeliveryPrice,
       total,
+      paymentStatus: 'pending',
     },
     include: ORDER_INCLUDE,
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: (await prisma.user.findFirst({ where: { telegramId: operator.telegramId }, select: { id: true } }))?.id ?? 0,
+      action: 'delivery_price_confirmed',
+      entity: 'order',
+      entityId: orderId,
+      meta: JSON.stringify({ deliveryPrice: normalizedDeliveryPrice, total }),
+    },
   })
 
   response.json({ order: updated, message: 'Delivery price confirmed' })

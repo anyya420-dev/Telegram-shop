@@ -191,6 +191,9 @@ export type Order = {
   deliveryFee: number
   total: number
   comment: string | null
+  deliveryAddress: string | null
+  deliveryPriceConfirmed: boolean
+  operatorDeliveryPrice: number | null
   paymentMethodId: number | null
   cancelledAt: string | null
   refundStatus: string | null
