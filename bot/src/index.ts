@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { Markup, Telegraf } from 'telegraf'
 
 const token = process.env.TELEGRAM_BOT_TOKEN
-const webAppUrl = process.env.WEB_APP_URL ?? 'http://localhost:5173'
+const webAppUrl = process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? 'https://narcos-shop.onrender.com'
 
 if (!token) {
   console.warn('TELEGRAM_BOT_TOKEN is not set. Bot worker will stay idle until the token is provided.')
@@ -25,15 +25,6 @@ if (!token) {
       'Добро пожаловать в NARCOS. Откройте Web App, чтобы выбрать город и начать покупки.',
       Markup.inlineKeyboard([
         [Markup.button.webApp('🛍 Открыть NARCOS', webAppUrl)],
-      ]),
-    )
-  })
-
-  bot.command('shop', async (context) => {
-    await context.reply(
-      'Откройте NARCOS через кнопку ниже.',
-      Markup.inlineKeyboard([
-        [Markup.button.webApp('🛍 NARCOS', webAppUrl)],
       ]),
     )
   })

@@ -39,7 +39,7 @@ export default function ProductPage() {
 
   useEffect(() => {
     async function loadProduct() {
-      if (!id || !user?.selectedCityId) {
+      if (!id) {
         setLoading(false)
         return
       }
@@ -47,7 +47,7 @@ export default function ProductPage() {
       try {
         setLoading(true)
         setPageError(null)
-        const { product: responseProduct } = await api.getProduct(Number(id), user.selectedCityId)
+        const { product: responseProduct } = await api.getProduct(Number(id), user?.selectedCityId ?? undefined)
         setProduct(responseProduct)
         setQuantity(clampProductQuantity(responseProduct, responseProduct.minimumQuantity || 1))
 
@@ -55,7 +55,7 @@ export default function ProductPage() {
           const [reviewsResponse, wishlistResponse] = await Promise.all([api.getReviews(Number(id)), api.getWishlist()])
           setReviews(reviewsResponse.reviews)
           setAvgRating(reviewsResponse.avgRating)
-          const currentReview = reviewsResponse.reviews.find((review) => review.userId === user.id)
+          const currentReview = user ? reviewsResponse.reviews.find((review) => review.userId === user.id) : undefined
           if (currentReview) {
             setMyRating(currentReview.rating)
             setMyComment(currentReview.comment ?? '')
@@ -85,7 +85,7 @@ export default function ProductPage() {
   const localizedCategory = product ? getLocalizedProductCategoryName(product, language) : ''
   const localizedUnit = product ? getLocalizedUnit(product.unit, language, product.unitTranslations) : ''
   const quantityBounds = product ? getProductQuantityBounds(product) : null
-  const canOrder = Boolean(product?.isAvailable && quantityBounds?.canOrder)
+  const canOrder = Boolean(product?.isAvailable && quantityBounds?.canOrder && user?.selectedCityId)
 
   const itemInCart = useMemo(
     () => cart?.items.find((item) => item.productCity.productCityId === product?.productCityId) ?? null,
@@ -159,18 +159,6 @@ export default function ProductPage() {
     )
   }
 
-  if (!user?.selectedCityId) {
-    return (
-      <div className={styles.error}>
-        <p>{t('city.subtitle')}</p>
-        <button className={styles.viewCartBtn} onClick={openCityPicker} type="button">
-          <MapPin size={16} strokeWidth={1.5} />
-          {t('cityPicker.changeCity')}
-        </button>
-      </div>
-    )
-  }
-
   if (!product) {
     return (
       <div className={styles.error}>
@@ -208,7 +196,7 @@ export default function ProductPage() {
           {localizedUnit ? <span className={styles.unit}>/ {localizedUnit}</span> : null}
         </div>
 
-        {user.selectedCity ? (
+        {user?.selectedCity ? (
           <div className={styles.stockRow}>
             <MapPin size={14} strokeWidth={1.5} />
             <span className={styles.stockText}>{getLocalizedCityName(user.selectedCity, language)}</span>
@@ -216,6 +204,17 @@ export default function ProductPage() {
         ) : null}
 
         {localizedDescription ? <p className={styles.description}>{localizedDescription}</p> : null}
+
+        {!user?.selectedCityId ? (
+          <div className={styles.notInCity}>
+            <AlertCircle size={16} strokeWidth={1.5} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+            {t('checkout.selectCity')}
+            <button className={styles.viewCartBtn} onClick={openCityPicker} type="button">
+              <MapPin size={16} strokeWidth={1.5} />
+              {t('cityPicker.changeCity')}
+            </button>
+          </div>
+        ) : null}
 
         <div className={styles.stockRow}>
           <span className={`${styles.stockDot} ${canOrder ? styles.inStock : styles.outOfStock}`} />

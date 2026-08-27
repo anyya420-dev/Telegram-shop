@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, MapPin, Settings, Star, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, AdminOrder, AdminPaymentRecord, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminOrder, AdminPaymentRecord, AdminPickupStorage, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'products' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
+type Tab = 'stats' | 'orders' | 'products' | 'storage' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
 
 type ProductCityDraft = {
   cityId: string;
@@ -89,6 +90,7 @@ type PaymentEditDraft = Partial<{
 }>;
 
 const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'];
+const UNIT_OPTIONS = ['шт', 'кг', 'г', 'oz'] as const;
 
 function createDefaultProductCityDraft(cityId = ''): ProductCityDraft {
   return {
@@ -98,7 +100,7 @@ function createDefaultProductCityDraft(cityId = ''): ProductCityDraft {
     minimumQuantity: '1',
     quantityStep: '1',
     maximumQuantity: '1',
-    unit: 'шт.',
+    unit: 'шт',
   };
 }
 
@@ -122,6 +124,23 @@ function parsePositiveInteger(value: string, label: string) {
   return parsed;
 }
 
+function parsePositiveNumber(value: string, label: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(label);
+  }
+  return Number(parsed.toFixed(3));
+}
+
+function normalizeUnitInput(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (['шт', 'шт.', 'pcs', 'pc', 'piece'].includes(normalized)) return 'шт';
+  if (['кг', 'kg'].includes(normalized)) return 'кг';
+  if (['г', 'g'].includes(normalized)) return 'г';
+  if (normalized === 'oz') return 'oz';
+  return '';
+}
+
 function buildProductCityPayload(draft: ProductCityDraft) {
   const cityId = Number(draft.cityId);
   if (!Number.isInteger(cityId) || cityId <= 0) {
@@ -129,18 +148,19 @@ function buildProductCityPayload(draft: ProductCityDraft) {
   }
 
   const stock = parseNonNegativeNumber(draft.stock, 'Stock must be zero or greater');
-  const minimumQuantity = parsePositiveInteger(draft.minimumQuantity, 'Minimum quantity must be a positive integer');
-  const quantityStep = parsePositiveInteger(draft.quantityStep, 'Quantity step must be a positive integer');
-  const maximumQuantity = parsePositiveInteger(draft.maximumQuantity, 'Maximum quantity must be a positive integer');
-  const unit = draft.unit.trim();
+  const minimumQuantity = parsePositiveNumber(draft.minimumQuantity, 'Minimum quantity must be a positive number');
+  const quantityStep = parsePositiveNumber(draft.quantityStep, 'Quantity step must be a positive number');
+  const maximumQuantity = parsePositiveNumber(draft.maximumQuantity, 'Maximum quantity must be a positive number');
+  const unit = normalizeUnitInput(draft.unit);
 
   if (!unit) {
-    throw new Error('Unit is required');
+    throw new Error('Unit must be one of: шт, кг, г, oz');
   }
   if (maximumQuantity < minimumQuantity) {
     throw new Error('Maximum quantity must be greater than or equal to minimum quantity');
   }
-  if ((maximumQuantity - minimumQuantity) % quantityStep !== 0) {
+  const distance = (maximumQuantity - minimumQuantity) / quantityStep;
+  if (Math.abs(distance - Math.round(distance)) > 0.0001) {
     throw new Error('Quantity step must match the minimum and maximum quantity range');
   }
   if (stock > 0 && minimumQuantity > stock) {
@@ -161,11 +181,17 @@ function buildProductCityPayload(draft: ProductCityDraft) {
   };
 }
 
-export default function AdminPage() {
+export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin' | 'owner' }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const language = i18n.language as Language;
+  const panelTitle = panelMode === 'owner' ? 'Owner Panel' : 'Admin Panel';
+  const loginTitle = panelMode === 'owner'
+    ? t('admin.ownerLogin', { defaultValue: 'Owner login' })
+    : t('admin.login', { defaultValue: 'Admin login' });
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [adminRole, setAdminRole] = useState<string>('admin');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [tab, setTab] = useState<Tab>('stats');
@@ -267,12 +293,41 @@ export default function AdminPage() {
   const [editingProductCity, setEditingProductCity] = useState<number | null>(null);
   const [productCityEdits, setProductCityEdits] = useState<Record<number, ProductCityEditDraft>>({});
   const [newProductCityDrafts, setNewProductCityDrafts] = useState<Record<number, ProductCityDraft>>({});
+  const [pickupStorages, setPickupStorages] = useState<AdminPickupStorage[]>([]);
+  const [newStorageProductId, setNewStorageProductId] = useState('');
+  const [newStorageProductCityId, setNewStorageProductCityId] = useState('');
+  const [newStorageVariantKey, setNewStorageVariantKey] = useState('');
+  const [newStorageQuantity, setNewStorageQuantity] = useState('');
+  const [newStorageUnit, setNewStorageUnit] = useState<'шт' | 'кг' | 'г' | 'oz'>('шт');
+  const [newStoragePhotoUrl, setNewStoragePhotoUrl] = useState('');
+  const [newStorageAddress, setNewStorageAddress] = useState('');
+  const [newStorageInstructions, setNewStorageInstructions] = useState('');
+  const [newStorageActive, setNewStorageActive] = useState(true);
+  const [creatingStorage, setCreatingStorage] = useState(false);
+  const [editingStorage, setEditingStorage] = useState<number | null>(null);
+  const [storageEdits, setStorageEdits] = useState<Record<number, Partial<{
+    productId: string;
+    productCityId: string;
+    variantKey: string;
+    quantity: string;
+    unit: string;
+    photoUrl: string;
+    address: string;
+    instructions: string;
+    isActive: boolean;
+  }>>>({});
 
   const [replyText, setReplyText] = useState<Record<number, string>>({});
   const [updatingOrder, setUpdatingOrder] = useState<number | null>(null);
+  const [administrators, setAdministrators] = useState<Administrator[]>([]);
+  const [newAdminUsername, setNewAdminUsername] = useState('');
+  const [generatedAdminPassword, setGeneratedAdminPassword] = useState<string | null>(null);
+  const [shopName, setShopName] = useState('NARCOS');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   const tabs = useMemo(
-    () => ['stats', 'orders', 'products', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
+    () => ['stats', 'orders', 'products', 'storage', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
     [],
   );
 
@@ -304,13 +359,15 @@ export default function AdminPage() {
     let mounted = true;
     void (async () => {
       try {
-        await api.adminStatus();
+        const status = await api.adminStatus();
         if (mounted) {
           setAuthenticated(true);
+          setAdminRole(status.role);
         }
       } catch {
         if (mounted) {
           setAuthenticated(false);
+          setAdminRole('admin');
         }
       } finally {
         if (mounted) {
@@ -340,6 +397,29 @@ export default function AdminPage() {
     })();
   }, [authenticated]);
 
+  useEffect(() => {
+    if (!products.length) return;
+    if (!newStorageProductId) {
+      setNewStorageProductId(String(products[0].id));
+    }
+  }, [products, newStorageProductId]);
+
+  useEffect(() => {
+    if (!products.length) return;
+    const selectedProduct = products.find((product) => String(product.id) === newStorageProductId) ?? products[0];
+    if (!selectedProduct) return;
+    if (selectedProduct.id !== Number(newStorageProductId)) {
+      setNewStorageProductId(String(selectedProduct.id));
+    }
+    const defaultCity = selectedProduct.productCities[0];
+    if (!defaultCity) return;
+    const hasCurrentCity = selectedProduct.productCities.some((entry) => String(entry.id) === newStorageProductCityId);
+    if (!newStorageProductCityId || !hasCurrentCity) {
+      setNewStorageProductCityId(String(defaultCity.id));
+      setNewStorageUnit((normalizeUnitInput(defaultCity.unit) || 'шт') as 'шт' | 'кг' | 'г' | 'oz');
+    }
+  }, [products, newStorageProductId, newStorageProductCityId]);
+
   async function loadTab(tabName: Tab) {
     setError(null);
     if (tabName === 'orders') {
@@ -354,6 +434,10 @@ export default function AdminPage() {
         setOrders(response.orders);
       } else if (tabName === 'products') {
         await Promise.all([refreshProducts(), categories.length === 0 ? refreshCategories() : Promise.resolve(categories), cities.length === 0 ? refreshCities() : Promise.resolve(cities)]);
+      } else if (tabName === 'storage') {
+        const [productsResponse, storagesResponse] = await Promise.all([api.getAdminProducts(), api.getAdminPickupStorages()]);
+        setProducts(productsResponse.products);
+        setPickupStorages(storagesResponse.storages);
       } else if (tabName === 'users') {
         const response = await api.getAdminUsers(1);
         setUsers(response.users);
@@ -379,6 +463,17 @@ export default function AdminPage() {
         setPaymentRecords(paymentsResponse.payments);
       } else if (tabName === 'casino') {
         setCasinoConfig(await api.getAdminCasinoConfig());
+      }
+
+      const status = await api.adminStatus();
+      setAdminRole(status.role);
+      if (status.role === 'owner') {
+        const [adminsResponse, settingsResponse] = await Promise.all([
+          api.getAdminAdministrators(),
+          api.getAdminSettings(),
+        ]);
+        setAdministrators(adminsResponse.administrators);
+        setShopName(settingsResponse.shopName);
       }
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to load admin data'));
@@ -649,10 +744,16 @@ export default function AdminPage() {
       const payload: Parameters<typeof api.updateProductCity>[1] = {};
       if (typeof edits.stock === 'string' && edits.stock !== '') payload.stock = parseNonNegativeNumber(edits.stock, 'Stock must be zero or greater');
       if (typeof edits.isAvailable === 'boolean') payload.isAvailable = edits.isAvailable;
-      if (typeof edits.minimumQuantity === 'string' && edits.minimumQuantity !== '') payload.minimumQuantity = parsePositiveInteger(edits.minimumQuantity, 'Minimum quantity must be a positive integer');
-      if (typeof edits.quantityStep === 'string' && edits.quantityStep !== '') payload.quantityStep = parsePositiveInteger(edits.quantityStep, 'Quantity step must be a positive integer');
-      if (typeof edits.maximumQuantity === 'string' && edits.maximumQuantity !== '') payload.maximumQuantity = parsePositiveInteger(edits.maximumQuantity, 'Maximum quantity must be a positive integer');
-      if (typeof edits.unit === 'string') payload.unit = edits.unit;
+      if (typeof edits.minimumQuantity === 'string' && edits.minimumQuantity !== '') payload.minimumQuantity = parsePositiveNumber(edits.minimumQuantity, 'Minimum quantity must be a positive number');
+      if (typeof edits.quantityStep === 'string' && edits.quantityStep !== '') payload.quantityStep = parsePositiveNumber(edits.quantityStep, 'Quantity step must be a positive number');
+      if (typeof edits.maximumQuantity === 'string' && edits.maximumQuantity !== '') payload.maximumQuantity = parsePositiveNumber(edits.maximumQuantity, 'Maximum quantity must be a positive number');
+      if (typeof edits.unit === 'string') {
+        const normalizedUnit = normalizeUnitInput(edits.unit);
+        if (!normalizedUnit) {
+          throw new Error('Unit must be one of: шт, кг, г, oz');
+        }
+        payload.unit = normalizedUnit;
+      }
       await api.updateProductCity(productCityId, payload);
       setEditingProductCity(null);
       await refreshProducts();
@@ -677,6 +778,83 @@ export default function AdminPage() {
       await refreshProducts();
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to add city availability'));
+    }
+  }
+
+  async function handleCreatePickupStorage() {
+    if (creatingStorage) return;
+    setError(null);
+    setCreatingStorage(true);
+    try {
+      const productId = parsePositiveInteger(newStorageProductId, 'Select a product');
+      const productCityId = parsePositiveInteger(newStorageProductCityId, 'Select product city');
+      const quantity = parsePositiveNumber(newStorageQuantity, 'Quantity must be a positive number');
+      const address = newStorageAddress.trim();
+      if (!address) {
+        throw new Error('Pickup address is required');
+      }
+
+      const response = await api.createAdminPickupStorage({
+        productId,
+        productCityId,
+        variantKey: newStorageVariantKey.trim() || null,
+        quantity,
+        unit: newStorageUnit,
+        photoUrl: newStoragePhotoUrl.trim() || null,
+        address,
+        instructions: newStorageInstructions.trim() || null,
+        isActive: newStorageActive,
+      });
+      setPickupStorages((current) => [response.storage, ...current.filter((item) => item.id !== response.storage.id)]);
+      setNewStorageVariantKey('');
+      setNewStorageQuantity('');
+      setNewStoragePhotoUrl('');
+      setNewStorageAddress('');
+      setNewStorageInstructions('');
+      setNewStorageActive(true);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to create pickup storage'));
+    } finally {
+      setCreatingStorage(false);
+    }
+  }
+
+  async function handleSavePickupStorage(storageId: number) {
+    const edits = storageEdits[storageId];
+    if (!edits) return;
+    setError(null);
+    try {
+      const payload: Parameters<typeof api.updateAdminPickupStorage>[1] = {};
+      if (typeof edits.productId === 'string' && edits.productId !== '') payload.productId = parsePositiveInteger(edits.productId, 'Invalid product');
+      if (typeof edits.productCityId === 'string' && edits.productCityId !== '') payload.productCityId = parsePositiveInteger(edits.productCityId, 'Invalid product city');
+      if (typeof edits.variantKey === 'string') payload.variantKey = edits.variantKey.trim() || null;
+      if (typeof edits.quantity === 'string' && edits.quantity !== '') payload.quantity = parsePositiveNumber(edits.quantity, 'Quantity must be a positive number');
+      if (typeof edits.unit === 'string') {
+        const normalizedUnit = normalizeUnitInput(edits.unit);
+        if (!normalizedUnit) {
+          throw new Error('Unit must be one of: шт, кг, г, oz');
+        }
+        payload.unit = normalizedUnit;
+      }
+      if (typeof edits.photoUrl === 'string') payload.photoUrl = edits.photoUrl.trim() || null;
+      if (typeof edits.address === 'string') {
+        const address = edits.address.trim();
+        if (!address) throw new Error('Pickup address is required');
+        payload.address = address;
+      }
+      if (typeof edits.instructions === 'string') payload.instructions = edits.instructions.trim() || null;
+      if (typeof edits.isActive === 'boolean') payload.isActive = edits.isActive;
+
+      const response = await api.updateAdminPickupStorage(storageId, payload);
+      setPickupStorages((current) => current.map((storage) => (storage.id === storageId ? response.storage : storage)));
+      setEditingStorage(null);
+      setStorageEdits((current) => {
+        const next = { ...current };
+        delete next[storageId];
+        return next;
+      });
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update pickup storage'));
     }
   }
 
@@ -894,8 +1072,9 @@ export default function AdminPage() {
     setAuthLoading(true);
 
     try {
-      await api.adminLogin({ password });
+      const response = await api.adminLogin({ password, mode: panelMode });
       setAuthenticated(true);
+      setAdminRole(response.role ?? 'admin');
       setPassword('');
       await loadTab(tab);
     } catch (e: unknown) {
@@ -911,13 +1090,89 @@ export default function AdminPage() {
       await api.adminLogout();
     } finally {
       setAuthenticated(false);
+      setAdminRole('admin');
+    }
+  }
+
+  async function handleCreateAdministrator() {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.createAdministrator({ username: newAdminUsername.trim() || undefined });
+      setGeneratedAdminPassword(response.generatedPassword);
+      setNewAdminUsername('');
+      const refreshed = await api.getAdminAdministrators();
+      setAdministrators(refreshed.administrators);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to create administrator'));
+    }
+  }
+
+  async function handleToggleAdministrator(adminId: number, isActive: boolean) {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.updateAdministrator(adminId, { isActive });
+      setAdministrators((current) => current.map((item) => (item.id === adminId ? response.administrator : item)));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update administrator'));
+    }
+  }
+
+  async function handleDeleteAdministrator(adminId: number) {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      await api.deleteAdministrator(adminId);
+      setAdministrators((current) => current.filter((item) => item.id !== adminId));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to delete administrator'));
+    }
+  }
+
+  async function handleResetAdministratorPassword(adminId: number) {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.resetAdministratorPassword(adminId);
+      setGeneratedAdminPassword(response.generatedPassword);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to reset administrator password'));
+    }
+  }
+
+  async function handleSaveShopName() {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    try {
+      const response = await api.updateAdminSettings({ shopName: shopName.trim() });
+      setShopName(response.shopName);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update shop name'));
+    }
+  }
+
+  async function handleChangePassword(target: 'self' | 'owner') {
+    if (!currentPassword.trim() || !newPassword.trim()) return;
+    setError(null);
+    try {
+      await api.adminChangePassword({
+        currentPassword: currentPassword.trim(),
+        newPassword: newPassword.trim(),
+        target,
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setAuthenticated(false);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to change password'));
     }
   }
 
   if (!authChecked) {
     return (
       <div className={styles.page}>
-        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />Admin Panel</h1>
+        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
         <p className={styles.loading}>{t('common.loading', { defaultValue: 'Loading...' })}</p>
       </div>
     );
@@ -926,10 +1181,10 @@ export default function AdminPage() {
   if (!authenticated) {
     return (
       <div className={styles.page}>
-        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />Admin Panel</h1>
+        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
         {error && <p className={styles.error}>{error}</p>}
         <div className={styles.form}>
-          <h3 className={styles.formTitle}>{t('admin.login', { defaultValue: 'Admin login' })}</h3>
+          <h3 className={styles.formTitle}>{loginTitle}</h3>
           <input
             className={styles.input}
             type="password"
@@ -948,8 +1203,11 @@ export default function AdminPage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />Admin Panel</h1>
+      <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
       <div className={styles.filterRow}>
+        <button className={styles.filterBtn} onClick={() => navigate('/shop')} type="button">
+          Вернуться в магазин
+        </button>
         <button className={styles.filterBtn} onClick={() => void handleLogout()}>
           {t('common.logout', { defaultValue: 'Logout' })}
         </button>
@@ -1136,7 +1394,9 @@ export default function AdminPage() {
                             <input className={styles.inputSmall} type="number" placeholder="Min" value={entry.minimumQuantity} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], minimumQuantity: event.target.value } }))} />
                             <input className={styles.inputSmall} type="number" placeholder="Step" value={entry.quantityStep} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], quantityStep: event.target.value } }))} />
                             <input className={styles.inputSmall} type="number" placeholder="Max" value={entry.maximumQuantity} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], maximumQuantity: event.target.value } }))} />
-                            <input className={styles.inputSmall} placeholder="Unit" value={entry.unit} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], unit: event.target.value } }))} />
+                            <select className={styles.select} value={entry.unit} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], unit: event.target.value } }))}>
+                              {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                            </select>
                             <label className={styles.checkLabel}>
                               <input type="checkbox" checked={entry.isAvailable} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], isAvailable: event.target.checked } }))} />
                               {t('admin.available', { defaultValue: 'Available' })}
@@ -1234,7 +1494,9 @@ export default function AdminPage() {
                               <input className={styles.inputSmall} type="number" placeholder="Min" value={productCityEdits[productCity.id]?.minimumQuantity ?? String(productCity.minimumQuantity)} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], minimumQuantity: event.target.value } }))} />
                               <input className={styles.inputSmall} type="number" placeholder="Step" value={productCityEdits[productCity.id]?.quantityStep ?? String(productCity.quantityStep)} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], quantityStep: event.target.value } }))} />
                               <input className={styles.inputSmall} type="number" placeholder="Max" value={productCityEdits[productCity.id]?.maximumQuantity ?? String(productCity.maximumQuantity)} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], maximumQuantity: event.target.value } }))} />
-                              <input className={styles.inputSmall} placeholder="Unit" value={productCityEdits[productCity.id]?.unit ?? productCity.unit} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], unit: event.target.value } }))} />
+                              <select className={styles.select} value={productCityEdits[productCity.id]?.unit ?? productCity.unit} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], unit: event.target.value } }))}>
+                                {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                              </select>
                               <label className={styles.checkLabel}>
                                 <input type="checkbox" checked={productCityEdits[productCity.id]?.isAvailable ?? productCity.isAvailable} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], isAvailable: event.target.checked } }))} />
                                 {t('admin.available', { defaultValue: 'Available' })}
@@ -1273,7 +1535,9 @@ export default function AdminPage() {
                         <input className={styles.inputSmall} type="number" placeholder="Min" value={addCityDraft.minimumQuantity} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, minimumQuantity: event.target.value } }))} />
                         <input className={styles.inputSmall} type="number" placeholder="Step" value={addCityDraft.quantityStep} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, quantityStep: event.target.value } }))} />
                         <input className={styles.inputSmall} type="number" placeholder="Max" value={addCityDraft.maximumQuantity} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, maximumQuantity: event.target.value } }))} />
-                        <input className={styles.inputSmall} placeholder="Unit" value={addCityDraft.unit} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, unit: event.target.value } }))} />
+                        <select className={styles.select} value={addCityDraft.unit} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, unit: event.target.value } }))}>
+                          {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                        </select>
                       </div>
                       <div className={styles.replyRow}>
                         <label className={styles.checkLabel}>
@@ -1290,6 +1554,130 @@ export default function AdminPage() {
               );
             })}
             {products.length === 0 && <p className={styles.loading}>{t('admin.noProducts', { defaultValue: 'No products found.' })}</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'storage' && (
+        <div>
+          <div className={styles.filterRow}>
+            <button className={styles.filterBtn} onClick={() => void loadTab('storage')}>
+              {t('admin.refresh', { defaultValue: 'Refresh' })}
+            </button>
+          </div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>Pickup storage records</h3>
+            <div className={styles.formRow}>
+              <select
+                className={styles.select}
+                value={newStorageProductId}
+                onChange={(event) => {
+                  const nextProductId = event.target.value;
+                  setNewStorageProductId(nextProductId);
+                  const selectedProduct = products.find((product) => String(product.id) === nextProductId);
+                  if (selectedProduct?.productCities[0]) {
+                    setNewStorageProductCityId(String(selectedProduct.productCities[0].id));
+                    setNewStorageUnit((normalizeUnitInput(selectedProduct.productCities[0].unit) || 'шт') as 'шт' | 'кг' | 'г' | 'oz');
+                  }
+                }}
+              >
+                {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              </select>
+              <select
+                className={styles.select}
+                value={newStorageProductCityId}
+                onChange={(event) => {
+                  const nextProductCityId = event.target.value;
+                  setNewStorageProductCityId(nextProductCityId);
+                  const selectedProduct = products.find((product) => String(product.id) === newStorageProductId);
+                  const selectedCity = selectedProduct?.productCities.find((productCity) => String(productCity.id) === nextProductCityId);
+                  if (selectedCity) {
+                    setNewStorageUnit((normalizeUnitInput(selectedCity.unit) || 'шт') as 'шт' | 'кг' | 'г' | 'oz');
+                  }
+                }}
+              >
+                {(products.find((product) => String(product.id) === newStorageProductId)?.productCities ?? []).map((productCity) => (
+                  <option key={productCity.id} value={productCity.id}>
+                    {productCity.city.name} · unit {productCity.unit}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Variant / options (optional)" value={newStorageVariantKey} onChange={(event) => setNewStorageVariantKey(event.target.value)} />
+              <input className={styles.input} type="number" step="0.001" placeholder="Quantity" value={newStorageQuantity} onChange={(event) => setNewStorageQuantity(event.target.value)} />
+              <select className={styles.select} value={newStorageUnit} onChange={(event) => setNewStorageUnit(event.target.value as 'шт' | 'кг' | 'г' | 'oz')}>
+                {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+              </select>
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Address" value={newStorageAddress} onChange={(event) => setNewStorageAddress(event.target.value)} />
+              <input className={styles.input} placeholder="Photo URL (optional)" value={newStoragePhotoUrl} onChange={(event) => setNewStoragePhotoUrl(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Instructions (optional)" value={newStorageInstructions} onChange={(event) => setNewStorageInstructions(event.target.value)} />
+              <label className={styles.checkLabel}>
+                <input type="checkbox" checked={newStorageActive} onChange={(event) => setNewStorageActive(event.target.checked)} />
+                {t('admin.active', { defaultValue: 'Active' })}
+              </label>
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleCreatePickupStorage()} disabled={creatingStorage || !newStorageProductId || !newStorageProductCityId || !newStorageQuantity || !newStorageAddress.trim()}>
+              {creatingStorage ? t('common.loading', { defaultValue: 'Loading...' }) : 'Create storage record'}
+            </button>
+          </div>
+
+          <div className={styles.orderList}>
+            {pickupStorages.map((storage) => (
+              <div key={storage.id} className={styles.orderCard}>
+                <div className={styles.orderHeader}>
+                  <span className={styles.orderId}>#{storage.id} {storage.product.name}</span>
+                  <span className={`${styles.refundTag} ${storage.status === 'assigned' ? styles.tagInactive : styles.tagActive}`}>
+                    {storage.status}
+                  </span>
+                </div>
+                <p className={styles.orderMeta}>
+                  {storage.productCity.city.name} • {storage.quantity} {storage.unit}
+                  {storage.variantKey ? ` • ${storage.variantKey}` : ''}
+                </p>
+                <p className={styles.orderMeta}>{storage.address}</p>
+                {storage.instructions ? <p className={styles.orderMeta}>{storage.instructions}</p> : null}
+                {storage.assignedOrder ? <p className={styles.orderMeta}>Assigned to order #{storage.assignedOrder.id}</p> : null}
+
+                {editingStorage === storage.id ? (
+                  <div className={styles.form}>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Variant / options" value={storageEdits[storage.id]?.variantKey ?? (storage.variantKey ?? '')} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], variantKey: event.target.value } }))} />
+                      <input className={styles.input} type="number" step="0.001" placeholder="Quantity" value={storageEdits[storage.id]?.quantity ?? String(storage.quantity)} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], quantity: event.target.value } }))} />
+                      <select className={styles.select} value={storageEdits[storage.id]?.unit ?? storage.unit} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], unit: event.target.value } }))}>
+                        {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Address" value={storageEdits[storage.id]?.address ?? storage.address} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], address: event.target.value } }))} />
+                      <input className={styles.input} placeholder="Photo URL" value={storageEdits[storage.id]?.photoUrl ?? (storage.photoUrl ?? '')} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], photoUrl: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Instructions" value={storageEdits[storage.id]?.instructions ?? (storage.instructions ?? '')} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], instructions: event.target.value } }))} />
+                      <label className={styles.checkLabel}>
+                        <input type="checkbox" checked={storageEdits[storage.id]?.isActive ?? storage.isActive} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], isActive: event.target.checked } }))} />
+                        {t('admin.active', { defaultValue: 'Active' })}
+                      </label>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleSavePickupStorage(storage.id)}>{t('common.save', { defaultValue: 'Save' })}</button>
+                      <button className={styles.replyBtn} onClick={() => setEditingStorage(null)}>{t('common.cancel', { defaultValue: 'Cancel' })}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.replyRow}>
+                    <button className={styles.replyBtn} onClick={() => { setEditingStorage(storage.id); setStorageEdits((current) => ({ ...current, [storage.id]: {} })); }}>
+                      {t('admin.edit', { defaultValue: 'Edit' })}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {pickupStorages.length === 0 && <p className={styles.loading}>No pickup storage records yet.</p>}
           </div>
         </div>
       )}
@@ -1317,6 +1705,73 @@ export default function AdminPage() {
             ))}
             {users.length === 0 && <p className={styles.loading}>{t('admin.noUsers', { defaultValue: 'No users found.' })}</p>}
           </div>
+
+          {adminRole === 'owner' && (
+            <>
+              <div className={styles.form}>
+                <h3 className={styles.formTitle}>Owner Settings</h3>
+                <div className={styles.formRow}>
+                  <input
+                    className={styles.input}
+                    placeholder="Shop name"
+                    value={shopName}
+                    onChange={(event) => setShopName(event.target.value)}
+                  />
+                  <button className={styles.createBtn} onClick={() => void handleSaveShopName()} disabled={!shopName.trim()}>
+                    Save shop name
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.form}>
+                <h3 className={styles.formTitle}>Change password</h3>
+                <div className={styles.formRow}>
+                  <input className={styles.input} type="password" placeholder="Current password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+                  <input className={styles.input} type="password" placeholder="New password (min 10 chars)" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+                </div>
+                <div className={styles.replyRow}>
+                  <button className={styles.replyBtn} onClick={() => void handleChangePassword('self')}>Change my password</button>
+                  <button className={styles.replyBtn} onClick={() => void handleChangePassword('owner')}>Change OWNER password</button>
+                </div>
+              </div>
+
+              <div className={styles.form}>
+                <h3 className={styles.formTitle}>Administrators</h3>
+                <div className={styles.formRow}>
+                  <input className={styles.input} placeholder="Username (optional)" value={newAdminUsername} onChange={(event) => setNewAdminUsername(event.target.value)} />
+                  <button className={styles.createBtn} onClick={() => void handleCreateAdministrator()}>Create administrator</button>
+                </div>
+                {generatedAdminPassword ? <p className={styles.orderMeta}>Generated password: <strong>{generatedAdminPassword}</strong></p> : null}
+              </div>
+
+              <div className={styles.discountList}>
+                {administrators.map((administrator) => (
+                  <div key={administrator.id} className={styles.discountCard}>
+                    <div>
+                      <span className={styles.discountCode}>{administrator.username}</span>
+                      <span className={styles.orderMeta}> • {administrator.role}</span>
+                      <span className={`${styles.refundTag} ${administrator.isActive ? styles.tagActive : styles.tagInactive}`}>
+                        {administrator.isActive ? 'active' : 'inactive'}
+                      </span>
+                    </div>
+                    {administrator.role !== 'owner' ? (
+                      <div className={styles.replyRow}>
+                        <button className={styles.replyBtn} onClick={() => void handleToggleAdministrator(administrator.id, !administrator.isActive)}>
+                          {administrator.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button className={styles.replyBtn} onClick={() => void handleResetAdministratorPassword(administrator.id)}>
+                          Reset password
+                        </button>
+                        <button className={styles.replyBtn} onClick={() => void handleDeleteAdministrator(administrator.id)}>
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

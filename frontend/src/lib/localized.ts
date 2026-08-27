@@ -2,7 +2,10 @@ import type { Category, City, Language, LocalizedText, ProductSummary } from '..
 
 const unitTranslations: Record<string, Record<Language, string>> = {
   кг: { ru: 'кг', en: 'kg' },
-  'шт.': { ru: 'шт.', en: 'pcs' },
+  г: { ru: 'г', en: 'g' },
+  oz: { ru: 'oz', en: 'oz' },
+  'шт': { ru: 'шт', en: 'pcs' },
+  'шт.': { ru: 'шт', en: 'pcs' },
 }
 
 export function getLocalizedText(base: string, translations: LocalizedText | null | undefined, language: Language) {

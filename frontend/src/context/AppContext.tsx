@@ -20,6 +20,7 @@ type AppState = {
   orders: Order[]
   ordersLoading: boolean
   cityPickerOpen: boolean
+  shopName: string
   openCityPicker: () => void
   closeCityPicker: () => void
   reloadCities: () => Promise<City[]>
@@ -71,6 +72,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
+  const [shopName, setShopName] = useState('NARCOS')
 
   function t(key: string): string {
     return i18n.t(key)
@@ -96,14 +98,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     categoryId: number | 'all' = 'all',
     sort: 'newest' | 'price_asc' | 'price_desc' | 'popular' = 'newest',
   ) => {
-    if (!user?.selectedCityId) {
-      setProducts([])
-      return
-    }
-
     try {
       setError(null)
-      const response = await api.getCatalog({ cityId: user.selectedCityId, search, categoryId, sort })
+      const response = await api.getCatalog({ cityId: user?.selectedCityId ?? undefined, search, categoryId, sort })
       setProducts(response.products)
     } catch (catalogError) {
       setError(translateError(catalogError, t, 'catalog_refresh_failed'))
@@ -154,22 +151,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCities(response.cities)
         setCitiesLoading(false)
         setCategories(response.categories)
+        setShopName(response.shopName || 'NARCOS')
+        document.title = response.shopName || 'NARCOS'
 
-        if (!response.user.selectedCityId) {
-          setProducts([])
-          setCart(emptyCart())
-          setRecommended([])
-        } else {
-          setCartLoading(true)
-          const [catalogResponse, cartResponse] = await Promise.all([
-            api.getCatalog({ cityId: response.user.selectedCityId }),
-            api.getCart(),
-          ])
-          setProducts(catalogResponse.products)
-          setCart(cartResponse.cart)
-          setRecommended(cartResponse.recommended)
-          setCartLoading(false)
-        }
+        setCartLoading(true)
+        const [catalogResponse, cartResponse] = await Promise.all([
+          api.getCatalog({ cityId: response.user.selectedCityId ?? undefined }),
+          api.getCart(),
+        ])
+        setProducts(catalogResponse.products)
+        setCart(cartResponse.cart)
+        setRecommended(cartResponse.recommended)
+        setCartLoading(false)
       } catch (bootstrapError) {
         setError(translateError(bootstrapError, t, 'shop_load_failed'))
       } finally {
@@ -324,6 +317,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     orders,
     ordersLoading,
     cityPickerOpen,
+    shopName,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
     reloadCities,

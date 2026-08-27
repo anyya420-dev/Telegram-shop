@@ -62,9 +62,10 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
 
   await getOrCreateCart(user.id)
 
-  const [cities, categories] = await Promise.all([
+  const [cities, categories, shopNameSetting] = await Promise.all([
     prisma.city.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
     prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
+    prisma.appSetting.findUnique({ where: { key: 'shop_name' } }),
   ])
 
   response.json({
@@ -73,6 +74,7 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
     user: mapUser(user),
     cities: cities.map(mapCity),
     categories: categories.map(mapCategory),
+    shopName: shopNameSetting?.value || 'NARCOS',
   })
 })
 

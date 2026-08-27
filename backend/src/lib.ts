@@ -38,6 +38,34 @@ export function normalizeQuantity(value: number) {
   return Number(value.toFixed(2))
 }
 
+export const SUPPORTED_UNITS = ['шт', 'кг', 'г', 'oz'] as const
+
+const UNIT_ALIASES: Record<string, (typeof SUPPORTED_UNITS)[number]> = {
+  'шт': 'шт',
+  'шт.': 'шт',
+  pcs: 'шт',
+  pc: 'шт',
+  piece: 'шт',
+  kg: 'кг',
+  'кг': 'кг',
+  g: 'г',
+  'г': 'г',
+  oz: 'oz',
+}
+
+export function normalizeSupportedUnit(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) {
+    return null
+  }
+
+  return UNIT_ALIASES[normalized] ?? null
+}
+
 export function parsePositiveInt(value: unknown) {
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null

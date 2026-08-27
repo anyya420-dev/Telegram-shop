@@ -23,20 +23,37 @@ function buildCatalogOrderBy(sort: CatalogSort): Prisma.ProductCityOrderByWithRe
   }
 }
 
+function pickBrowseProductCities<T extends {
+  productId: number
+  city: { sortOrder: number }
+  stock: number
+}>(productCities: T[]) {
+  const uniqueByProduct = new Map<number, (typeof productCities)[number]>()
+
+  for (const item of productCities) {
+    const current = uniqueByProduct.get(item.productId)
+    if (!current) {
+      uniqueByProduct.set(item.productId, item)
+      continue
+    }
+
+    if (item.city.sortOrder < current.city.sortOrder || (item.city.sortOrder === current.city.sortOrder && item.stock > current.stock)) {
+      uniqueByProduct.set(item.productId, item)
+    }
+  }
+
+  return [...uniqueByProduct.values()]
+}
+
 router.get('/', async (request, response) => {
   const cityId = parsePositiveInt(request.query.cityId)
   const search = String(request.query.search ?? '').trim()
   const categoryId = request.query.categoryId ? parsePositiveInt(request.query.categoryId) ?? undefined : undefined
   const sort = getCatalogSort(request.query.sort)
 
-  if (!cityId) {
-    sendError(response, 400, 'city_required', 'cityId must be a positive integer')
-    return
-  }
-
   const productCities = await prisma.productCity.findMany({
     where: {
-      cityId,
+      cityId: cityId ?? undefined,
       isAvailable: true,
       stock: { gt: 0 },
       product: {
@@ -57,6 +74,11 @@ router.get('/', async (request, response) => {
       },
     },
     include: {
+      city: {
+        select: {
+          sortOrder: true,
+        },
+      },
       product: {
         include: {
           category: true,
@@ -66,7 +88,8 @@ router.get('/', async (request, response) => {
     orderBy: buildCatalogOrderBy(sort),
   })
 
-  response.json({ products: productCities.map(mapProduct) })
+  const products = cityId ? productCities : pickBrowseProductCities(productCities)
+  response.json({ products: products.map(mapProduct) })
 })
 
 export default router

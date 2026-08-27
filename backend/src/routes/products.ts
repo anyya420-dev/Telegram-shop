@@ -71,26 +71,52 @@ router.get('/:productId', async (request, response) => {
   const productId = parsePositiveInt(request.params.productId)
   const cityId = parsePositiveInt(request.query.cityId)
 
-  if (!productId || !cityId) {
-    sendError(response, 400, 'product_city_required', 'productId and cityId must be positive integers')
+  if (!productId) {
+    sendError(response, 400, 'product_required', 'productId must be a positive integer')
     return
   }
 
-  const productCity = await prisma.productCity.findFirst({
-    where: {
-      productId,
-      cityId,
-      product: { isActive: true },
-    },
-    include: {
-      product: {
-        include: {
-          category: true,
+  const productCity = cityId
+    ? await prisma.productCity.findFirst({
+        where: {
+          productId,
+          cityId,
+          product: { isActive: true },
         },
-      },
-    },
-  })
-
+        include: {
+          city: {
+            select: {
+              sortOrder: true,
+            },
+          },
+          product: {
+            include: {
+              category: true,
+            },
+          },
+        },
+      })
+    : await prisma.productCity.findFirst({
+        where: {
+          productId,
+          isAvailable: true,
+          stock: { gt: 0 },
+          product: { isActive: true },
+        },
+        include: {
+          city: {
+            select: {
+              sortOrder: true,
+            },
+          },
+          product: {
+            include: {
+              category: true,
+            },
+          },
+        },
+        orderBy: [{ city: { sortOrder: 'asc' } }, { stock: 'desc' }],
+      })
   if (!productCity) {
     sendError(response, 404, 'product_not_found', 'Product not found for selected city')
     return

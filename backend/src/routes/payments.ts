@@ -16,6 +16,7 @@ import {
   sanitizePaymentMethod,
   verifyStripeWebhookSignature,
 } from '../services/payments.js'
+import { assignPickupStoragesForPaidOrder } from '../services/pickupStorage.js'
 
 const router = Router()
 
@@ -277,6 +278,7 @@ router.post('/webhooks/stripe', authRateLimiter, async (request, response) => {
         where: { id: payment.orderId },
         data: { paymentStatus: 'paid', status: 'processing' },
       })
+      await assignPickupStoragesForPaidOrder(tx, payment.orderId)
       await tx.orderStatusHistory.create({
         data: { orderId: payment.orderId, status: 'processing', comment: 'Stripe payment verified' },
       })

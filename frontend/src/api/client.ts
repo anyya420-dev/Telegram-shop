@@ -26,6 +26,8 @@ import type {
   UserProfile,
   WishlistItem,
   AdminPaymentRecord,
+  Administrator,
+  AdminPickupStorage,
 } from '../types'
 
 function normalizeApiBase(value: string) {
@@ -114,8 +116,9 @@ export const api = {
       body: JSON.stringify(payload),
     }, { includeSessionToken: false })
   },
-  getCatalog(params: { cityId: number; search?: string; categoryId?: number | 'all'; sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular' }) {
-    const searchParams = new URLSearchParams({ cityId: String(params.cityId) })
+  getCatalog(params: { cityId?: number; search?: string; categoryId?: number | 'all'; sort?: 'newest' | 'price_asc' | 'price_desc' | 'popular' }) {
+    const searchParams = new URLSearchParams()
+    if (params.cityId) searchParams.set('cityId', String(params.cityId))
     if (params.search) searchParams.set('search', params.search)
     if (params.categoryId && params.categoryId !== 'all') searchParams.set('categoryId', String(params.categoryId))
     if (params.sort) searchParams.set('sort', params.sort)
@@ -124,8 +127,9 @@ export const api = {
   getCities() {
     return publicRequest<City[]>('/cities', undefined, { includeSessionToken: false })
   },
-  getProduct(productId: number, cityId: number) {
-    return publicRequest<{ product: ProductDetail }>(`/products/${productId}?cityId=${cityId}`, undefined, { includeSessionToken: false })
+  getProduct(productId: number, cityId?: number) {
+    const query = cityId ? `?cityId=${cityId}` : ''
+    return publicRequest<{ product: ProductDetail }>(`/products/${productId}${query}`, undefined, { includeSessionToken: false })
   },
   getCart() {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>('/cart')
@@ -232,8 +236,8 @@ export const api = {
     return publicRequest<{ payment: Payment }>(`/payments/${paymentId}/crypto/submit`, { method: 'POST', body: JSON.stringify(payload) })
   },
 
-  adminLogin(data: { password: string }) {
-    return adminRequest<{ ok: boolean }>('/admin/auth/login', {
+  adminLogin(data: { password: string; mode?: 'admin' | 'owner' }) {
+    return adminRequest<{ ok: boolean; role?: string; username?: string | null }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     })
@@ -242,7 +246,31 @@ export const api = {
     return adminRequest<{ ok: boolean }>('/admin/auth/logout', { method: 'POST' })
   },
   adminStatus() {
-    return adminRequest<{ authenticated: boolean }>('/admin/auth/status')
+    return adminRequest<{ authenticated: boolean; role: string; username: string | null }>('/admin/auth/status')
+  },
+  adminChangePassword(data: { currentPassword: string; newPassword: string; target?: 'owner' | 'self' }) {
+    return adminRequest<{ ok: boolean }>('/admin/auth/change-password', { method: 'POST', body: JSON.stringify(data) })
+  },
+  getAdminAdministrators() {
+    return adminRequest<{ administrators: Administrator[] }>('/admin/administrators')
+  },
+  createAdministrator(data: { username?: string }) {
+    return adminRequest<{ administrator: Administrator; generatedPassword: string }>('/admin/administrators', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdministrator(id: number, data: { username?: string; isActive?: boolean }) {
+    return adminRequest<{ administrator: Administrator }>(`/admin/administrators/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  resetAdministratorPassword(id: number) {
+    return adminRequest<{ ok: boolean; generatedPassword: string }>(`/admin/administrators/${id}/reset-password`, { method: 'POST' })
+  },
+  deleteAdministrator(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/administrators/${id}`, { method: 'DELETE' })
+  },
+  getAdminSettings() {
+    return adminRequest<{ shopName: string }>('/admin/settings')
+  },
+  updateAdminSettings(data: { shopName: string }) {
+    return adminRequest<{ shopName: string }>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminStats() {
     return adminRequest<AdminStats>('/admin/stats')
@@ -290,6 +318,35 @@ export const api = {
   },
   updateProductCity(id: number, data: Partial<{ stock: number; isAvailable: boolean; minimumQuantity: number; quantityStep: number; maximumQuantity: number; unit: string }>) {
     return adminRequest<{ productCity: unknown }>(`/admin/product-cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  getAdminPickupStorages() {
+    return adminRequest<{ storages: AdminPickupStorage[] }>('/admin/pickup-storages')
+  },
+  createAdminPickupStorage(data: {
+    productId: number
+    productCityId: number
+    variantKey?: string | null
+    quantity: number
+    unit: string
+    photoUrl?: string | null
+    address: string
+    instructions?: string | null
+    isActive?: boolean
+  }) {
+    return adminRequest<{ storage: AdminPickupStorage }>('/admin/pickup-storages', { method: 'POST', body: JSON.stringify(data) })
+  },
+  updateAdminPickupStorage(id: number, data: Partial<{
+    productId: number
+    productCityId: number
+    variantKey: string | null
+    quantity: number
+    unit: string
+    photoUrl: string | null
+    address: string
+    instructions: string | null
+    isActive: boolean
+  }>) {
+    return adminRequest<{ storage: AdminPickupStorage }>(`/admin/pickup-storages/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminDiscounts() {
     return adminRequest<{ discounts: Discount[] }>('/admin/discounts')

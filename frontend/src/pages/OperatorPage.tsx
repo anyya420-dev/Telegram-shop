@@ -85,8 +85,6 @@ export default function OperatorPage() {
 
     if (telegram.initData) {
       headers.set('X-Telegram-Init-Data', telegram.initData)
-    } else if (telegram.user?.id) {
-      headers.set('X-Telegram-User-Id', String(telegram.user.id))
     }
 
     const response = await fetch(`${API_BASE_URL}/api/operators${path}`, {
@@ -100,7 +98,7 @@ export default function OperatorPage() {
     }
 
     return response.json() as Promise<T>
-  }, [telegram.initData, telegram.user?.id])
+  }, [telegram.initData])
 
   const loadOrders = useCallback(async () => {
     try {
@@ -201,7 +199,7 @@ export default function OperatorPage() {
         </div>
       ) : null}
 
-      {!telegram.initData && !telegram.user?.id ? (
+      {!telegram.initData ? (
         <div className={styles.emptyState}>
           <AlertCircle size={22} strokeWidth={1.8} />
           <p>Open this page from Telegram WebApp to authenticate as an operator.</p>

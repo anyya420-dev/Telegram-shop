@@ -134,7 +134,11 @@ export default function CheckoutPage() {
   }
 
   async function submitCheckout() {
-    if (!cart || cart.items.length === 0 || !user?.selectedCityId || submitting) return
+    if (!cart || cart.items.length === 0 || submitting) return
+    if (!user?.selectedCityId) {
+      setSubmitError(t('checkout.selectCity'))
+      return
+    }
     if (deliveryOptions.length > 0 && !selectedDeliveryId) {
       setSubmitError(t('checkout.deliveryRequired'))
       return
@@ -581,7 +585,7 @@ export default function CheckoutPage() {
         <div className={styles.line}><span>{t('cart.delivery')}</span><span>{selectedDelivery ? formatCurrency(selectedDelivery.price, language) : t('checkout.notSelected')}</span></div>
         <div className={styles.total}><span>{t('cart.orderTotal')}</span><span>{formatCurrency(total, language)}</span></div>
         {submitError && <p className={styles.error}>{submitError}</p>}
-        <button className={styles.primaryBtn} onClick={() => void submitCheckout()} disabled={submitting || (total > 0 && paymentMethods.length === 0)} type="button">
+        <button className={styles.primaryBtn} onClick={() => void submitCheckout()} disabled={submitting || !user?.selectedCityId || (total > 0 && paymentMethods.length === 0)} type="button">
           {submitting ? t('cart.checkingOut') : t('checkout.confirm')}
         </button>
       </div>

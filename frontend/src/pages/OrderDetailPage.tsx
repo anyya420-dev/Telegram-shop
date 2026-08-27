@@ -215,6 +215,14 @@ export default function OrderDetailPage() {
               </p>
             </div>
             <p className={styles.itemTotal}>{formatCurrency(item.lineTotal, language)}</p>
+            {item.pickupAssignment ? (
+              <div className={styles.comment} style={{ marginTop: 8 }}>
+                <p className={styles.commentLabel}>Pickup details</p>
+                <p className={styles.commentText}>{item.pickupAssignment.address}</p>
+                {item.pickupAssignment.instructions ? <p className={styles.commentText}>{item.pickupAssignment.instructions}</p> : null}
+                {item.pickupAssignment.photoUrl ? <p className={styles.commentText}>{item.pickupAssignment.photoUrl}</p> : null}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

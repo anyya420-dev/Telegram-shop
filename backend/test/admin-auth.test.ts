@@ -874,6 +874,80 @@ test('session bootstrap accepts initData signed by active managed bot token', as
   }
 })
 
+test('operators auth requires verified Telegram init data and rejects spoofed headers', async () => {
+  const previousAllowDemoMode = process.env.ALLOW_DEMO_MODE
+  const previousTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
+  process.env.ALLOW_DEMO_MODE = 'false'
+  process.env.TELEGRAM_BOT_TOKEN = '111111111:env-operator-token'
+
+  try {
+    const managedBotToken = '333333333:managed-operator-token'
+    await prisma.telegramBot.create({
+      data: {
+        token: managedBotToken,
+        botId: 'managed-operator-bot',
+        username: 'managed_operator_bot',
+        firstName: 'Managed Operator Bot',
+        isActive: true,
+      },
+    })
+
+    const spoofedHeader = await requestJson('/api/operators/pending', {
+      headers: {
+        'X-Telegram-User-Id': '123456789',
+      },
+    })
+    assert.equal(spoofedHeader.response.status, 401)
+    assert.equal(spoofedHeader.body.code, 'telegram_init_data_required')
+
+    const unregisteredInitData = createTelegramInitData(
+      { id: 700000031, first_name: 'NotOperator', username: 'not_operator' },
+      managedBotToken,
+    )
+    const unregisteredOperator = await requestJson('/api/operators/pending', {
+      headers: {
+        'X-Telegram-Init-Data': unregisteredInitData,
+      },
+    })
+    assert.equal(unregisteredOperator.response.status, 403)
+    assert.equal(unregisteredOperator.body.code, 'operator_access_denied')
+
+    const activeTelegramId = '700000032'
+    await prisma.operator.create({
+      data: {
+        telegramId: activeTelegramId,
+        firstName: 'Active',
+        username: 'active_operator',
+        isActive: true,
+      },
+    })
+
+    const activeInitData = createTelegramInitData(
+      { id: Number(activeTelegramId), first_name: 'Active', username: 'active_operator' },
+      managedBotToken,
+    )
+    const authenticatedOperator = await requestJson('/api/operators/pending', {
+      headers: {
+        'X-Telegram-Init-Data': activeInitData,
+      },
+    })
+    assert.equal(authenticatedOperator.response.status, 200)
+    assert.ok(Array.isArray(authenticatedOperator.body.orders))
+  } finally {
+    if (previousAllowDemoMode === undefined) {
+      delete process.env.ALLOW_DEMO_MODE
+    } else {
+      process.env.ALLOW_DEMO_MODE = previousAllowDemoMode
+    }
+
+    if (previousTelegramBotToken === undefined) {
+      delete process.env.TELEGRAM_BOT_TOKEN
+    } else {
+      process.env.TELEGRAM_BOT_TOKEN = previousTelegramBotToken
+    }
+  }
+})
+
 test('customer can cancel payment pending order', async () => {
   const telegramId = '900000005'
   const user = await prisma.user.create({
@@ -1050,6 +1124,19 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
     'X-Session-Token': sessionToken,
   }
 
+  const browseCatalog = await requestJson('/api/catalog?search=aurora', {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(browseCatalog.response.status, 200)
+  assert.equal(browseCatalog.body.products.length, 1)
+  assert.equal(browseCatalog.body.products[0].productCityId, activeCityProduct.id)
+
+  const browseProductDetail = await requestJson(`/api/products/${activeProduct.id}`, {
+    headers: { 'X-Session-Token': sessionToken },
+  })
+  assert.equal(browseProductDetail.response.status, 200)
+  assert.equal(browseProductDetail.body.product.productCityId, activeCityProduct.id)
+
   const cityUpdate = await requestJson('/api/users/city', {
     method: 'PATCH',
     headers: authHeaders,
@@ -1065,8 +1152,8 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
   assert.equal(catalogNorth.response.status, 200)
   assert.equal(catalogNorth.body.products.length, 1)
   assert.equal(catalogNorth.body.products[0].productCityId, activeCityProduct.id)
-  assert.equal(catalogNorth.body.products[0].unit, 'шт.')
-  assert.equal(catalogNorth.body.products[0].unitTranslations.ru, 'шт.')
+  assert.ok(['шт', 'шт.'].includes(catalogNorth.body.products[0].unit))
+  assert.ok(['шт', 'шт.'].includes(catalogNorth.body.products[0].unitTranslations.ru))
 
   const catalogByCategory = await requestJson(`/api/catalog?cityId=${cityNorth.id}&categoryId=${categoryCoffee.id}`, {
     headers: { 'X-Session-Token': sessionToken },
@@ -1430,4 +1517,416 @@ test('checkout applies casino credits and owned rewards server-side', async () =
   })
   assert.equal(casinoState.response.status, 200)
   assert.equal(casinoState.body.balance.credits, 700)
+})
+
+test('owner manages administrators, revokes sessions, and updates shop name', async () => {
+  const ownerLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret', mode: 'owner' }),
+  })
+  assert.equal(ownerLogin.status, 200)
+  const ownerCookie = ownerLogin.headers.get('set-cookie') ?? ''
+  assert.ok(ownerCookie)
+
+  const createAdmin = await requestJson('/api/admin/administrators', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: ownerCookie },
+    body: JSON.stringify({ username: 'qa_admin' }),
+  })
+  assert.equal(createAdmin.response.status, 201)
+  assert.equal(createAdmin.body.administrator.username, 'qa_admin')
+  const adminId = Number(createAdmin.body.administrator.id)
+  assert.ok(adminId > 0)
+  const generatedPassword = String(createAdmin.body.generatedPassword ?? '')
+  assert.ok(generatedPassword.length >= 16)
+
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: generatedPassword }),
+  })
+  assert.equal(adminLogin.status, 200)
+  const adminCookie = adminLogin.headers.get('set-cookie') ?? ''
+  assert.ok(adminCookie)
+
+  const adminStats = await request('/api/admin/stats', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(adminStats.status, 200)
+
+  const adminOwnerOnly = await request('/api/admin/administrators', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(adminOwnerOnly.status, 403)
+
+  const deactivated = await request(`/api/admin/administrators/${adminId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: ownerCookie },
+    body: JSON.stringify({ isActive: false }),
+  })
+  assert.equal(deactivated.status, 200)
+
+  const adminStatsAfterDeactivate = await request('/api/admin/stats', {
+    headers: { cookie: adminCookie },
+  })
+  assert.equal(adminStatsAfterDeactivate.status, 401)
+
+  const updateSetting = await requestJson('/api/admin/settings', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: ownerCookie },
+    body: JSON.stringify({ shopName: 'NARCOS VERIFIED' }),
+  })
+  assert.equal(updateSetting.response.status, 200)
+  assert.equal(updateSetting.body.shopName, 'NARCOS VERIFIED')
+
+  const bootstrap = await requestJson('/api/session/bootstrap', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      initData: '',
+      isTelegramEnvironment: false,
+    }),
+  })
+  assert.equal(bootstrap.response.status, 200)
+  assert.equal(bootstrap.body.shopName, 'NARCOS VERIFIED')
+})
+
+test('pickup storage is one-time exact assignment and hidden until order is paid', async () => {
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(adminLogin.status, 200)
+  const adminCookie = adminLogin.headers.get('set-cookie') ?? ''
+
+  const city = await prisma.city.create({ data: { name: 'Pickup City', isActive: true } })
+  const category = await prisma.category.create({ data: { name: 'Pickup Category', isActive: true } })
+  const product = await prisma.product.create({
+    data: {
+      name: 'Coffee Pickup',
+      description: 'Coffee pickup',
+      price: 100,
+      categoryId: category.id,
+      productCities: {
+        create: {
+          cityId: city.id,
+          stock: 2,
+          minimumQuantity: 0.5,
+          quantityStep: 0.5,
+          maximumQuantity: 2,
+          unit: 'кг',
+          isAvailable: true,
+        },
+      },
+    },
+    include: { productCities: true },
+  })
+  const productCity = product.productCities[0]
+
+  const pickupOption = await prisma.deliveryOption.create({
+    data: { name: 'Pickup point', type: 'pickup', price: 0, isActive: true },
+  })
+  const paymentMethod = await prisma.paymentMethod.create({
+    data: {
+      type: 'crypto',
+      title: 'USDT',
+      asset: 'USDT',
+      network: 'TRC20',
+      walletAddress: 'TUSDT_PICKUP_WALLET',
+      isEnabled: true,
+    },
+  })
+
+  const createStorage = await requestJson('/api/admin/pickup-storages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      productId: product.id,
+      productCityId: productCity.id,
+      quantity: 0.5,
+      unit: 'kg',
+      address: 'Pickup Address 1',
+      instructions: 'Use code 1234',
+      isActive: true,
+    }),
+  })
+  assert.equal(createStorage.response.status, 201)
+  assert.equal(createStorage.body.storage.unit, 'кг')
+
+  const user = await prisma.user.create({
+    data: { telegramId: '900000041', firstName: 'Pickup Buyer', selectedCityId: city.id },
+  })
+  const token = createSessionToken!(user.telegramId)
+
+  const addCart = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: productCity.id, quantity: 0.5 }),
+  })
+  assert.equal(addCart.response.status, 200)
+
+  const checkout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: pickupOption.id }),
+  })
+  assert.equal(checkout.response.status, 200)
+  const orderId = checkout.body.order.id as number
+
+  const orderBeforePayment = await requestJson(`/api/orders/${orderId}`, {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(orderBeforePayment.response.status, 200)
+  assert.equal(orderBeforePayment.body.order.items[0].pickupAssignment, null)
+
+  const paymentSession = await requestJson(`/api/payments/orders/${orderId}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paymentSession.response.status, 201)
+
+  const submitted = await requestJson(`/api/payments/${paymentSession.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionHash: 'TXHASH_PICKUP_00000001' }),
+  })
+  assert.equal(submitted.response.status, 200)
+
+  const confirmPaid = await requestJson(`/api/admin/payments/${paymentSession.body.payment.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ status: 'paid', reason: 'verified' }),
+  })
+  assert.equal(confirmPaid.response.status, 200)
+
+  const paidOrder = await requestJson(`/api/orders/${orderId}`, {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paidOrder.response.status, 200)
+  assert.equal(paidOrder.body.order.items[0].pickupAssignment.address, 'Pickup Address 1')
+  assert.equal(paidOrder.body.order.items[0].pickupAssignment.unit, 'кг')
+
+  const storageAfterAssign = await prisma.pickupStorage.findUniqueOrThrow({ where: { id: createStorage.body.storage.id } })
+  assert.equal(storageAfterAssign.status, 'assigned')
+  assert.equal(storageAfterAssign.assignedOrderId, orderId)
+  assert.ok(storageAfterAssign.assignedOrderItemId)
+
+  const user2 = await prisma.user.create({
+    data: { telegramId: '900000042', firstName: 'Second Buyer', selectedCityId: city.id },
+  })
+  const token2 = createSessionToken!(user2.telegramId)
+
+  await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: productCity.id, quantity: 0.5 }),
+  })
+
+  const checkout2 = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: pickupOption.id }),
+  })
+  assert.equal(checkout2.response.status, 200)
+
+  const paymentSession2 = await requestJson(`/api/payments/orders/${checkout2.body.order.id}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2 },
+  })
+  assert.equal(paymentSession2.response.status, 201)
+
+  await requestJson(`/api/payments/${paymentSession2.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionHash: 'TXHASH_PICKUP_00000002' }),
+  })
+
+  const confirmPaid2 = await requestJson(`/api/admin/payments/${paymentSession2.body.payment.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ status: 'paid', reason: 'verified second' }),
+  })
+  assert.equal(confirmPaid2.response.status, 200)
+
+  const paidOrder2 = await requestJson(`/api/orders/${checkout2.body.order.id}`, {
+    headers: { 'X-Session-Token': token2 },
+  })
+  assert.equal(paidOrder2.response.status, 200)
+  assert.equal(paidOrder2.body.order.items[0].pickupAssignment, null)
+  assert.equal(paidOrder2.body.order.pickupStorageResolutionRequired, true)
+})
+
+test('pickup assignment matches each line independently for multi-product order', async () => {
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(adminLogin.status, 200)
+  const adminCookie = adminLogin.headers.get('set-cookie') ?? ''
+
+  const city = await prisma.city.create({ data: { name: 'Multi Pickup City', isActive: true } })
+  const category = await prisma.category.create({ data: { name: 'Multi Pickup Category', isActive: true } })
+
+  const tshirt = await prisma.product.create({
+    data: {
+      name: 'T-shirt',
+      description: 'Shirt',
+      price: 50,
+      categoryId: category.id,
+      productCities: {
+        create: {
+          cityId: city.id,
+          stock: 10,
+          minimumQuantity: 1,
+          quantityStep: 1,
+          maximumQuantity: 10,
+          unit: 'шт',
+          isAvailable: true,
+        },
+      },
+    },
+    include: { productCities: true },
+  })
+
+  const coffee = await prisma.product.create({
+    data: {
+      name: 'Coffee',
+      description: 'Coffee',
+      price: 80,
+      categoryId: category.id,
+      productCities: {
+        create: {
+          cityId: city.id,
+          stock: 10,
+          minimumQuantity: 0.5,
+          quantityStep: 0.5,
+          maximumQuantity: 5,
+          unit: 'кг',
+          isAvailable: true,
+        },
+      },
+    },
+    include: { productCities: true },
+  })
+
+  const tshirtCity = tshirt.productCities[0]
+  const coffeeCity = coffee.productCities[0]
+
+  const pickupOption = await prisma.deliveryOption.create({
+    data: { name: 'Pickup multi', type: 'pickup', price: 0, isActive: true },
+  })
+  const paymentMethod = await prisma.paymentMethod.create({
+    data: {
+      type: 'crypto',
+      title: 'USDT multi',
+      asset: 'USDT',
+      network: 'TRC20',
+      walletAddress: 'TUSDT_PICKUP_MULTI',
+      isEnabled: true,
+    },
+  })
+
+  const tshirtStorage = await requestJson('/api/admin/pickup-storages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      productId: tshirt.id,
+      productCityId: tshirtCity.id,
+      quantity: 1,
+      unit: 'шт',
+      address: 'Storage A',
+      instructions: 'Shirt pickup',
+      isActive: true,
+    }),
+  })
+  assert.equal(tshirtStorage.response.status, 201)
+
+  const coffeeStorage = await requestJson('/api/admin/pickup-storages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      productId: coffee.id,
+      productCityId: coffeeCity.id,
+      quantity: 0.5,
+      unit: 'кг',
+      address: 'Storage C',
+      instructions: 'Coffee pickup',
+      isActive: true,
+    }),
+  })
+  assert.equal(coffeeStorage.response.status, 201)
+
+  const user = await prisma.user.create({
+    data: { telegramId: '900000043', firstName: 'Multi Buyer', selectedCityId: city.id },
+  })
+  const token = createSessionToken!(user.telegramId)
+
+  const addTshirt = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: tshirtCity.id, quantity: 1 }),
+  })
+  assert.equal(addTshirt.response.status, 200)
+
+  const addCoffee = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: coffeeCity.id, quantity: 0.5 }),
+  })
+  assert.equal(addCoffee.response.status, 200)
+
+  const checkout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: pickupOption.id }),
+  })
+  assert.equal(checkout.response.status, 200)
+  const orderId = checkout.body.order.id as number
+
+  const paymentSession = await requestJson(`/api/payments/orders/${orderId}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paymentSession.response.status, 201)
+
+  const submit = await requestJson(`/api/payments/${paymentSession.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionHash: 'TXHASH_PICKUP_MULTI_0000003' }),
+  })
+  assert.equal(submit.response.status, 200)
+
+  const confirm = await requestJson(`/api/admin/payments/${paymentSession.body.payment.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ status: 'paid', reason: 'verified multi' }),
+  })
+  assert.equal(confirm.response.status, 200)
+
+  const paidOrder = await requestJson(`/api/orders/${orderId}`, {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paidOrder.response.status, 200)
+  assert.equal(paidOrder.body.order.items.length, 2)
+
+  const shirtItem = paidOrder.body.order.items.find((item: any) => item.productName === 'T-shirt')
+  const coffeeItem = paidOrder.body.order.items.find((item: any) => item.productName === 'Coffee')
+  assert.ok(shirtItem?.pickupAssignment)
+  assert.ok(coffeeItem?.pickupAssignment)
+  assert.equal(shirtItem.pickupAssignment.address, 'Storage A')
+  assert.equal(shirtItem.pickupAssignment.unit, 'шт')
+  assert.equal(coffeeItem.pickupAssignment.address, 'Storage C')
+  assert.equal(coffeeItem.pickupAssignment.unit, 'кг')
+  assert.notEqual(shirtItem.pickupAssignment.pickupStorageId, coffeeItem.pickupAssignment.pickupStorageId)
+
+  const shirtStorageDb = await prisma.pickupStorage.findUniqueOrThrow({ where: { id: tshirtStorage.body.storage.id } })
+  const coffeeStorageDb = await prisma.pickupStorage.findUniqueOrThrow({ where: { id: coffeeStorage.body.storage.id } })
+  assert.equal(shirtStorageDb.status, 'assigned')
+  assert.equal(coffeeStorageDb.status, 'assigned')
+  assert.equal(shirtStorageDb.assignedOrderId, orderId)
+  assert.equal(coffeeStorageDb.assignedOrderId, orderId)
+  assert.notEqual(shirtStorageDb.assignedOrderItemId, coffeeStorageDb.assignedOrderItemId)
 })

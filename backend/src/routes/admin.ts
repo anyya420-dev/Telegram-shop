@@ -1,12 +1,25 @@
 import { Router } from 'express'
-import { authRateLimiter, mapCity, mapProduct, parsePositiveInt, prisma, sendError } from '../lib.js'
+import {
+  authRateLimiter,
+  mapCity,
+  mapProduct,
+  normalizeSupportedUnit,
+  parsePositiveInt,
+  prisma,
+  sendError,
+} from '../lib.js'
 import type { CookieOptions, Request, Response } from 'express'
 import { notifyOrderStatusChange } from '../services/notifier.js'
 import {
   createAdminSession,
   ensureAdminPasswordFromEnv,
+  generateAdminPassword,
   getActiveAdminSession,
+  revokeAdminSessionsByAccountId,
   revokeAdminSession,
+  rotateAdminAccountPassword,
+  rotateOwnerPassword,
+  verifyAdminAccountPassword,
   verifyAdminPassword,
 } from '../services/adminSession.js'
 import {
@@ -14,6 +27,7 @@ import {
   sanitizePayment,
   sanitizePaymentMethod,
 } from '../services/payments.js'
+import { assignPickupStoragesForPaidOrder } from '../services/pickupStorage.js'
 import { ensureCasinoDefaults, getOrCreateCasinoBalance, serializeReward } from '../services/casino.js'
 
 const router = Router()
@@ -35,6 +49,22 @@ type ProductCityInput = {
 
 type ProductCityValidationResult =
   | { value: ProductCityInput }
+  | { error: { code: string; message: string } }
+
+type PickupStorageInput = {
+  productId: number
+  productCityId: number
+  variantKey: string | null
+  quantity: number
+  unit: string
+  photoUrl: string | null
+  address: string
+  instructions: string | null
+  isActive: boolean
+}
+
+type PickupStorageValidationResult =
+  | { value: PickupStorageInput }
   | { error: { code: string; message: string } }
 
 function isOrderStatus(value: string): value is (typeof ORDER_STATUSES)[number] {
@@ -80,7 +110,13 @@ function clearAdminCookie(response: Response) {
   })
 }
 
-type AdminContext = { id: number | null }
+type AdminContext = {
+  id: number
+  sessionId: number
+  accountId: number
+  role: string
+  username: string
+}
 
 function getTrimmedString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -112,13 +148,32 @@ function getPositiveInteger(value: unknown) {
   return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+function normalizeDecimal(value: number) {
+  return Number(value.toFixed(3))
+}
+
+function getPositiveQuantity(value: unknown) {
+  const parsed = getPositiveNumber(value)
+  return parsed == null ? null : normalizeDecimal(parsed)
+}
+
+function getNonNegativeQuantity(value: unknown) {
+  const parsed = getNonNegativeNumber(value)
+  return parsed == null ? null : normalizeDecimal(parsed)
+}
+
+function matchesQuantityStep(quantity: number, minimum: number, step: number) {
+  const distance = normalizeDecimal((quantity - minimum) / step)
+  return Math.abs(distance - Math.round(distance)) < 0.0001
+}
+
 function validateProductCityPayload(input: unknown): ProductCityValidationResult {
   const cityId = parsePositiveInt(String((input as Record<string, unknown>)?.cityId ?? ''))
-  const stock = getNonNegativeNumber((input as Record<string, unknown>)?.stock) ?? 0
-  const minimumQuantity = getPositiveInteger((input as Record<string, unknown>)?.minimumQuantity) ?? 1
-  const quantityStep = getPositiveInteger((input as Record<string, unknown>)?.quantityStep) ?? 1
-  const maximumQuantity = getPositiveInteger((input as Record<string, unknown>)?.maximumQuantity) ?? Math.max(stock, minimumQuantity)
-  const unit = getTrimmedString((input as Record<string, unknown>)?.unit) || 'pcs'
+  const stock = getNonNegativeQuantity((input as Record<string, unknown>)?.stock) ?? 0
+  const minimumQuantity = getPositiveQuantity((input as Record<string, unknown>)?.minimumQuantity) ?? 1
+  const quantityStep = getPositiveQuantity((input as Record<string, unknown>)?.quantityStep) ?? 1
+  const maximumQuantity = getPositiveQuantity((input as Record<string, unknown>)?.maximumQuantity) ?? Math.max(stock, minimumQuantity)
+  const unit = normalizeSupportedUnit((input as Record<string, unknown>)?.unit) ?? 'шт'
   const isAvailable = typeof (input as Record<string, unknown>)?.isAvailable === 'boolean'
     ? Boolean((input as Record<string, unknown>)?.isAvailable)
     : true
@@ -129,7 +184,7 @@ function validateProductCityPayload(input: unknown): ProductCityValidationResult
   if (maximumQuantity < minimumQuantity) {
     return { error: { code: 'quantity_invalid', message: 'Maximum quantity must be greater than or equal to minimum quantity' } } as const
   }
-  if ((maximumQuantity - minimumQuantity) % quantityStep !== 0) {
+  if (!matchesQuantityStep(maximumQuantity, minimumQuantity, quantityStep)) {
     return { error: { code: 'quantity_invalid', message: 'Quantity step must match the minimum and maximum quantity range' } } as const
   }
   if (stock > 0 && minimumQuantity > stock) {
@@ -152,6 +207,51 @@ function validateProductCityPayload(input: unknown): ProductCityValidationResult
   } as const
 }
 
+function parsePickupStoragePayload(input: Record<string, unknown>, defaults?: Partial<PickupStorageInput>): PickupStorageValidationResult {
+  const productId = parsePositiveInt(String(input.productId ?? defaults?.productId ?? ''))
+  const productCityId = parsePositiveInt(String(input.productCityId ?? defaults?.productCityId ?? ''))
+  const quantity = getPositiveQuantity(input.quantity ?? defaults?.quantity)
+  const unit = normalizeSupportedUnit(input.unit ?? defaults?.unit)
+  const addressInput = input.address ?? defaults?.address
+  const address = typeof addressInput === 'string' ? addressInput.trim() : ''
+
+  if (!productId) {
+    return { error: { code: 'product_required', message: 'Valid product id is required' } } as const
+  }
+  if (!productCityId) {
+    return { error: { code: 'product_city_required', message: 'Valid product city id is required' } } as const
+  }
+  if (quantity == null) {
+    return { error: { code: 'quantity_invalid', message: 'Quantity must be a positive number' } } as const
+  }
+  if (!unit) {
+    return { error: { code: 'unit_invalid', message: 'Unit must be one of: шт, кг, г, oz' } } as const
+  }
+  if (!address) {
+    return { error: { code: 'address_required', message: 'Pickup address is required' } } as const
+  }
+
+  return {
+    value: {
+      productId,
+      productCityId,
+      quantity,
+      unit,
+      address,
+      variantKey: typeof input.variantKey === 'string'
+        ? (input.variantKey.trim() || null)
+        : (defaults?.variantKey ?? null),
+      photoUrl: typeof input.photoUrl === 'string'
+        ? (input.photoUrl.trim() || null)
+        : (defaults?.photoUrl ?? null),
+      instructions: typeof input.instructions === 'string'
+        ? (input.instructions.trim() || null)
+        : (defaults?.instructions ?? null),
+      isActive: typeof input.isActive === 'boolean' ? input.isActive : (defaults?.isActive ?? true),
+    } satisfies PickupStorageInput,
+  } as const
+}
+
 async function ensureCategoryExists(categoryId: number) {
   return prisma.category.findUnique({ where: { id: categoryId }, select: { id: true } })
 }
@@ -166,7 +266,11 @@ async function ensureProductExists(productId: number) {
   return prisma.product.findUnique({ where: { id: productId }, select: { id: true } })
 }
 
-async function getAdminUser(request: Request, response: Response) {
+function isOwner(admin: AdminContext) {
+  return admin.role === 'owner'
+}
+
+async function getAdminUser(request: Request, response: Response, options?: { requireOwner?: boolean }) {
   const token = parseCookie(request, ADMIN_SESSION_COOKIE_NAME)
   const session = await getActiveAdminSession(token)
   if (!session) {
@@ -175,7 +279,27 @@ async function getAdminUser(request: Request, response: Response) {
     return null
   }
 
-  return { id: session.id } satisfies AdminContext
+  const adminAccount = session.adminAccount
+  if (!adminAccount) {
+    clearAdminCookie(response)
+    sendError(response, 401, 'admin_auth_required', 'Admin authentication required')
+    return null
+  }
+
+  const admin = {
+    id: adminAccount.id,
+    sessionId: session.id,
+    accountId: adminAccount.id,
+    role: adminAccount.role,
+    username: adminAccount.username,
+  } satisfies AdminContext
+
+  if (options?.requireOwner && !isOwner(admin)) {
+    sendError(response, 403, 'owner_access_required', 'Owner access required')
+    return null
+  }
+
+  return admin
 }
 
 function sanitizeTelegramBot(bot: {
@@ -208,12 +332,13 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   await ensureAdminPasswordFromEnv()
 
   const password = typeof request.body.password === 'string' ? request.body.password : ''
+  const mode = request.body?.mode === 'owner' ? 'owner' : 'admin'
   if (!password) {
     sendError(response, 400, 'invalid_credentials', 'Administrator password is required')
     return
   }
 
-  const result = await verifyAdminPassword(password)
+  const result = await verifyAdminPassword(password, mode)
   if (!result.valid) {
     if (result.reason === 'configuration_error') {
       sendError(response, 503, 'configuration_error', 'Admin password is not configured on the server')
@@ -223,9 +348,9 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
     return
   }
 
-  const session = await createAdminSession()
+  const session = await createAdminSession(result.account.id)
   writeAdminCookie(response, session.token, session.expiresAt)
-  response.json({ ok: true })
+  response.json({ ok: true, role: result.account.role, username: result.account.username })
 })
 
 router.post('/auth/logout', authRateLimiter, async (request, response) => {
@@ -244,7 +369,224 @@ router.get('/auth/status', authRateLimiter, async (request, response) => {
     return
   }
 
-  response.json({ authenticated: true })
+  response.json({
+    authenticated: true,
+    role: session.adminAccount?.role ?? 'admin',
+    username: session.adminAccount?.username ?? null,
+  })
+})
+
+router.post('/auth/change-password', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const currentPassword = getTrimmedString(request.body.currentPassword)
+  const nextPassword = getTrimmedString(request.body.newPassword)
+  const target = request.body.target === 'owner' ? 'owner' : 'self'
+
+  if (!currentPassword || !nextPassword || nextPassword.length < 10) {
+    sendError(response, 400, 'invalid_password', 'Current password and a strong new password are required')
+    return
+  }
+
+  const currentValid = await verifyAdminAccountPassword(admin.accountId, currentPassword)
+  if (!currentValid) {
+    sendError(response, 401, 'invalid_credentials', 'Current password is invalid')
+    return
+  }
+
+  if (target === 'owner') {
+    if (!isOwner(admin)) {
+      sendError(response, 403, 'owner_access_required', 'Owner access required')
+      return
+    }
+    await rotateOwnerPassword(nextPassword)
+    await revokeAdminSessionsByAccountId(admin.accountId)
+  } else {
+    await rotateAdminAccountPassword(admin.accountId, nextPassword)
+    await revokeAdminSessionsByAccountId(admin.accountId)
+  }
+
+  clearAdminCookie(response)
+  response.json({ ok: true })
+})
+
+function sanitizeAdminAccount(account: {
+  id: number
+  username: string
+  role: string
+  isActive: boolean
+  deletedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}) {
+  return {
+    id: account.id,
+    username: account.username,
+    role: account.role,
+    isActive: account.isActive,
+    deletedAt: account.deletedAt,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
+  }
+}
+
+router.get('/administrators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const administrators = await prisma.adminAccount.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ role: 'desc' }, { id: 'asc' }],
+  })
+
+  response.json({ administrators: administrators.map(sanitizeAdminAccount) })
+})
+
+router.post('/administrators', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const usernameInput = getTrimmedString(request.body.username).toLowerCase()
+  const username = usernameInput || `admin_${Date.now()}`
+  if (!/^[a-z0-9_]{3,40}$/.test(username)) {
+    sendError(response, 400, 'invalid_username', 'Username must contain only letters, numbers, and underscores')
+    return
+  }
+
+  const existing = await prisma.adminAccount.findUnique({ where: { username } })
+  if (existing && !existing.deletedAt) {
+    sendError(response, 409, 'admin_exists', 'Administrator username already exists')
+    return
+  }
+
+  const password = generateAdminPassword()
+  let refreshed
+  if (existing && existing.deletedAt) {
+    refreshed = await prisma.adminAccount.update({
+      where: { id: existing.id },
+      data: {
+        deletedAt: null,
+        isActive: true,
+        role: 'admin',
+      },
+    })
+    await rotateAdminAccountPassword(refreshed.id, password)
+    refreshed = await prisma.adminAccount.findUniqueOrThrow({ where: { id: refreshed.id } })
+  } else {
+    const created = await prisma.adminAccount.create({
+      data: {
+        username,
+        role: 'admin',
+        passwordHash: '',
+        passwordSalt: '',
+        passwordAlgo: 'scrypt',
+        isActive: true,
+      },
+    })
+    await rotateAdminAccountPassword(created.id, password)
+    refreshed = await prisma.adminAccount.findUniqueOrThrow({ where: { id: created.id } })
+  }
+
+  response.status(201).json({
+    administrator: sanitizeAdminAccount(refreshed),
+    generatedPassword: password,
+  })
+})
+
+router.patch('/administrators/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const accountId = parsePositiveInt(request.params.id)
+  if (!accountId) {
+    sendError(response, 400, 'invalid_id', 'Invalid administrator id')
+    return
+  }
+
+  const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
+  if (!account || account.deletedAt) {
+    sendError(response, 404, 'not_found', 'Administrator not found')
+    return
+  }
+  if (account.role === 'owner') {
+    sendError(response, 400, 'owner_locked', 'Owner account cannot be changed here')
+    return
+  }
+
+  const usernameInput = getOptionalTrimmedString(request.body.username)
+  const isActive = typeof request.body.isActive === 'boolean' ? request.body.isActive : undefined
+  const data: { username?: string; isActive?: boolean } = {}
+  if (usernameInput !== undefined && usernameInput !== null) {
+    const normalized = usernameInput.toLowerCase()
+    if (!/^[a-z0-9_]{3,40}$/.test(normalized)) {
+      sendError(response, 400, 'invalid_username', 'Username must contain only letters, numbers, and underscores')
+      return
+    }
+    data.username = normalized
+  }
+  if (isActive !== undefined) data.isActive = isActive
+
+  const updated = await prisma.adminAccount.update({
+    where: { id: accountId },
+    data,
+  })
+
+  if (updated.isActive === false) {
+    await revokeAdminSessionsByAccountId(updated.id)
+  }
+
+  response.json({ administrator: sanitizeAdminAccount(updated) })
+})
+
+router.post('/administrators/:id/reset-password', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const accountId = parsePositiveInt(request.params.id)
+  if (!accountId) {
+    sendError(response, 400, 'invalid_id', 'Invalid administrator id')
+    return
+  }
+
+  const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
+  if (!account || account.deletedAt || account.role === 'owner') {
+    sendError(response, 404, 'not_found', 'Administrator not found')
+    return
+  }
+
+  const generatedPassword = generateAdminPassword()
+  await rotateAdminAccountPassword(account.id, generatedPassword)
+  await revokeAdminSessionsByAccountId(account.id)
+
+  response.json({ ok: true, generatedPassword })
+})
+
+router.delete('/administrators/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response, { requireOwner: true })
+  if (!admin) return
+
+  const accountId = parsePositiveInt(request.params.id)
+  if (!accountId) {
+    sendError(response, 400, 'invalid_id', 'Invalid administrator id')
+    return
+  }
+  const account = await prisma.adminAccount.findUnique({ where: { id: accountId } })
+  if (!account || account.deletedAt || account.role === 'owner') {
+    sendError(response, 404, 'not_found', 'Administrator not found')
+    return
+  }
+
+  await prisma.adminAccount.update({
+    where: { id: account.id },
+    data: {
+      isActive: false,
+      deletedAt: new Date(),
+    },
+  })
+  await revokeAdminSessionsByAccountId(account.id)
+
+  response.json({ ok: true })
 })
 
 // ──── Orders ────────────────────────────────────────────────────────────────
@@ -387,6 +729,7 @@ router.patch('/orders/:id/payment', authRateLimiter, async (request, response) =
       await tx.orderStatusHistory.create({
         data: { orderId, status: 'processing', comment: 'Payment confirmed by admin' },
       })
+      await assignPickupStoragesForPaidOrder(tx, orderId)
       return tx.order.update({
         where: { id: orderId },
         data: { status: 'processing', paymentStatus: 'paid' },
@@ -661,6 +1004,10 @@ router.patch('/payments/:id/status', authRateLimiter, async (request, response) 
       },
     })
 
+    if (status === 'paid') {
+      await assignPickupStoragesForPaidOrder(tx, payment.orderId)
+    }
+
     await tx.orderStatusHistory.create({
       data: {
         orderId: payment.orderId,
@@ -919,7 +1266,7 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
   const { stock, isAvailable, minimumQuantity, quantityStep, maximumQuantity, unit } = request.body
   const data: Record<string, unknown> = {}
   if (stock !== undefined) {
-    const parsedStock = getNonNegativeNumber(stock)
+    const parsedStock = getNonNegativeQuantity(stock)
     if (parsedStock == null) {
       sendError(response, 400, 'invalid_stock', 'Stock must be zero or greater')
       return
@@ -928,35 +1275,36 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
   }
   if (typeof isAvailable === 'boolean') data.isAvailable = isAvailable
   if (minimumQuantity !== undefined) {
-    const parsedMinimumQuantity = getPositiveInteger(minimumQuantity)
+    const parsedMinimumQuantity = getPositiveQuantity(minimumQuantity)
     if (parsedMinimumQuantity == null) {
-      sendError(response, 400, 'quantity_invalid', 'Minimum quantity must be a positive integer')
+      sendError(response, 400, 'quantity_invalid', 'Minimum quantity must be a positive number')
       return
     }
     data.minimumQuantity = parsedMinimumQuantity
   }
   if (quantityStep !== undefined) {
-    const parsedQuantityStep = getPositiveInteger(quantityStep)
+    const parsedQuantityStep = getPositiveQuantity(quantityStep)
     if (parsedQuantityStep == null) {
-      sendError(response, 400, 'quantity_invalid', 'Quantity step must be a positive integer')
+      sendError(response, 400, 'quantity_invalid', 'Quantity step must be a positive number')
       return
     }
     data.quantityStep = parsedQuantityStep
   }
   if (maximumQuantity !== undefined) {
-    const parsedMaximumQuantity = getPositiveInteger(maximumQuantity)
+    const parsedMaximumQuantity = getPositiveQuantity(maximumQuantity)
     if (parsedMaximumQuantity == null) {
-      sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be a positive integer')
+      sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be a positive number')
       return
     }
     data.maximumQuantity = parsedMaximumQuantity
   }
   if (unit !== undefined) {
-    if (typeof unit !== 'string' || !unit.trim()) {
-      sendError(response, 400, 'unit_required', 'Unit is required')
+    const parsedUnit = normalizeSupportedUnit(unit)
+    if (!parsedUnit) {
+      sendError(response, 400, 'unit_invalid', 'Unit must be one of: шт, кг, г, oz')
       return
     }
-    data.unit = unit.trim()
+    data.unit = parsedUnit
   }
 
   if (Object.keys(data).length === 0) {
@@ -973,7 +1321,7 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
     sendError(response, 400, 'quantity_invalid', 'Maximum quantity must be greater than or equal to minimum quantity')
     return
   }
-  if ((nextMaximumQuantity - nextMinimumQuantity) % nextQuantityStep !== 0) {
+  if (!matchesQuantityStep(nextMaximumQuantity, nextMinimumQuantity, nextQuantityStep)) {
     sendError(response, 400, 'quantity_invalid', 'Quantity step must match the minimum and maximum quantity range')
     return
   }
@@ -999,6 +1347,174 @@ router.patch('/product-cities/:id', authRateLimiter, async (request, response) =
   })
 
   response.json({ productCity: pc })
+})
+
+router.get('/pickup-storages', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const storages = await prisma.pickupStorage.findMany({
+    include: {
+      product: { select: { id: true, name: true, nameEn: true } },
+      productCity: { include: { city: { select: { id: true, name: true, nameEn: true } } } },
+      assignedOrder: { select: { id: true, userId: true, paymentStatus: true, status: true } },
+      assignedOrderItem: { select: { id: true, productName: true, quantity: true, unit: true } },
+    },
+    orderBy: [{ status: 'asc' }, { id: 'desc' }],
+  })
+
+  response.json({ storages })
+})
+
+router.post('/pickup-storages', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const parsed = parsePickupStoragePayload((request.body ?? {}) as Record<string, unknown>)
+  if ('error' in parsed) {
+    sendError(response, 400, parsed.error.code, parsed.error.message)
+    return
+  }
+
+  const { productId, productCityId, variantKey, quantity, unit, photoUrl, address, instructions, isActive } = parsed.value
+
+  const productCity = await prisma.productCity.findUnique({
+    where: { id: productCityId },
+    select: { id: true, productId: true },
+  })
+  if (!productCity || productCity.productId !== productId) {
+    sendError(response, 400, 'product_city_mismatch', 'Selected product city does not belong to product')
+    return
+  }
+
+  const storage = await prisma.pickupStorage.create({
+    data: {
+      productId,
+      productCityId,
+      variantKey,
+      quantity,
+      unit,
+      photoUrl,
+      address,
+      instructions,
+      isActive,
+      status: isActive ? 'available' : 'inactive',
+    },
+    include: {
+      product: { select: { id: true, name: true, nameEn: true } },
+      productCity: { include: { city: { select: { id: true, name: true, nameEn: true } } } },
+      assignedOrder: { select: { id: true, userId: true, paymentStatus: true, status: true } },
+      assignedOrderItem: { select: { id: true, productName: true, quantity: true, unit: true } },
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'pickup_storage_created',
+      entity: 'pickup_storage',
+      entityId: storage.id,
+      meta: JSON.stringify({ productId, productCityId, quantity, unit, variantKey }),
+    },
+  })
+
+  response.status(201).json({ storage })
+})
+
+router.patch('/pickup-storages/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const storageId = parsePositiveInt(request.params.id)
+  if (!storageId) {
+    sendError(response, 400, 'invalid_id', 'Invalid storage id')
+    return
+  }
+
+  const existing = await prisma.pickupStorage.findUnique({
+    where: { id: storageId },
+    include: { assignment: true },
+  })
+  if (!existing) {
+    sendError(response, 404, 'not_found', 'Pickup storage not found')
+    return
+  }
+
+  if (existing.assignment && (request.body.productId !== undefined || request.body.productCityId !== undefined || request.body.quantity !== undefined || request.body.unit !== undefined || request.body.variantKey !== undefined)) {
+    sendError(response, 400, 'storage_locked', 'Assigned storage cannot change matching attributes')
+    return
+  }
+
+  const parsed = parsePickupStoragePayload(
+    (request.body ?? {}) as Record<string, unknown>,
+    {
+      productId: existing.productId,
+      productCityId: existing.productCityId,
+      variantKey: existing.variantKey,
+      quantity: existing.quantity,
+      unit: existing.unit,
+      photoUrl: existing.photoUrl,
+      address: existing.address,
+      instructions: existing.instructions,
+      isActive: existing.isActive,
+    },
+  )
+  if ('error' in parsed) {
+    sendError(response, 400, parsed.error.code, parsed.error.message)
+    return
+  }
+
+  const { productId, productCityId, variantKey, quantity, unit, photoUrl, address, instructions, isActive } = parsed.value
+
+  const productCity = await prisma.productCity.findUnique({
+    where: { id: productCityId },
+    select: { productId: true },
+  })
+  if (!productCity || productCity.productId !== productId) {
+    sendError(response, 400, 'product_city_mismatch', 'Selected product city does not belong to product')
+    return
+  }
+
+  const data: Record<string, unknown> = {
+    productId,
+    productCityId,
+    variantKey,
+    quantity,
+    unit,
+    photoUrl,
+    address,
+    instructions,
+    isActive,
+  }
+
+  if (!existing.assignment) {
+    data.status = isActive ? 'available' : 'inactive'
+  } else if (!isActive) {
+    data.isActive = false
+  }
+
+  const storage = await prisma.pickupStorage.update({
+    where: { id: storageId },
+    data,
+    include: {
+      product: { select: { id: true, name: true, nameEn: true } },
+      productCity: { include: { city: { select: { id: true, name: true, nameEn: true } } } },
+      assignedOrder: { select: { id: true, userId: true, paymentStatus: true, status: true } },
+      assignedOrderItem: { select: { id: true, productName: true, quantity: true, unit: true } },
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: admin.id,
+      action: 'pickup_storage_updated',
+      entity: 'pickup_storage',
+      entityId: storage.id,
+      meta: JSON.stringify({ productId, productCityId, quantity, unit, variantKey, isActive }),
+    },
+  })
+
+  response.json({ storage })
 })
 
 // ──── Users ────────────────────────────────────────────────────────────────
@@ -1362,6 +1878,37 @@ router.get('/stats', authRateLimiter, async (request, response) => {
     totalUsers,
     totalRevenue: totalRevenue._sum.total ?? 0,
   })
+})
+
+router.get('/settings', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const shopNameSetting = await prisma.appSetting.findUnique({ where: { key: 'shop_name' } })
+  response.json({ shopName: shopNameSetting?.value || 'NARCOS' })
+})
+
+router.patch('/settings', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const shopName = getTrimmedString(request.body.shopName)
+  if (!shopName) {
+    sendError(response, 400, 'shop_name_required', 'Shop name is required')
+    return
+  }
+  if (shopName.length > 80) {
+    sendError(response, 400, 'shop_name_too_long', 'Shop name must be 80 characters or fewer')
+    return
+  }
+
+  const setting = await prisma.appSetting.upsert({
+    where: { key: 'shop_name' },
+    create: { key: 'shop_name', value: shopName },
+    update: { value: shopName },
+  })
+
+  response.json({ shopName: setting.value })
 })
 
 // POST /api/admin/products - create a new product

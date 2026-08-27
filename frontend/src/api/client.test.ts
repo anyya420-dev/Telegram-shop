@@ -107,3 +107,13 @@ test('catalog requests forward sort and filter params to the shared client', asy
   assert.match(calls[0].url, /categoryId=7/)
   assert.match(calls[0].url, /sort=price_desc/)
 })
+
+test('catalog and product requests support browsing without selected city', async () => {
+  await api.getCatalog({ search: 'tea' })
+  await api.getProduct(9)
+
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].url.includes('cityId='), false)
+  assert.equal(calls[0].url.includes('/catalog?search=tea'), true)
+  assert.equal(calls[1].url.endsWith('/products/9'), true)
+})
