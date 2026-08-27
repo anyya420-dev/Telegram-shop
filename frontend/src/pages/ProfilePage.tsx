@@ -12,7 +12,7 @@ import { getLocalizedCityName } from '../lib/localized'
 import type { Language, UserProfile } from '../types'
 
 export default function ProfilePage() {
-  const { user: bootstrapUser, telegramEnvironment, openCityPicker, updateLanguagePreference } = useApp()
+  const { user: bootstrapUser, loading: bootstrapLoading, telegramEnvironment, openCityPicker, updateLanguagePreference } = useApp()
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -38,9 +38,16 @@ export default function ProfilePage() {
     setProfile(bootstrapUser)
   }, [bootstrapUser])
 
+  // Only fetch full profile after bootstrap has completed and the session token is set.
+  // Calling the API while bootstrapLoading is true results in a missing/null token → 401.
   useEffect(() => {
+    if (bootstrapLoading) return
+    if (!bootstrapUser) {
+      setProfileLoading(false)
+      return
+    }
     void loadProfile()
-  }, [])
+  }, [bootstrapLoading, bootstrapUser])
 
   async function handleLanguageChange(language: Language) {
     if (!profile || languageSaving || i18n.language === language) {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, ArrowLeft, CheckCircle2, Clock, Copy, RefreshCw, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import { useApp } from '../context/AppContext'
 import { getErrorMessage } from '../lib/errors'
 import type { Balance, DepositRequest, DepositWallet } from '../types'
 import { formatCurrency } from '../lib/format'
@@ -21,6 +22,7 @@ function statusIcon(status: DepositRequest['status']) {
 
 export default function BalancePage() {
   const { t } = useTranslation()
+  const { loading: bootstrapLoading, user: bootstrapUser } = useApp()
   const language = i18n.language as Language
   const [balance, setBalance] = useState<Balance | null>(null)
   const [loading, setLoading] = useState(true)
@@ -65,11 +67,16 @@ export default function BalancePage() {
   }
 
   useEffect(() => {
+    if (bootstrapLoading) return
+    if (!bootstrapUser) {
+      setLoading(false)
+      return
+    }
     void loadBalance()
     return () => {
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
     }
-  }, [])
+  }, [bootstrapLoading, bootstrapUser])
 
   function effectiveAmount() {
     const raw = selectedAmount ?? (customAmount ? Number(customAmount) : 0)
