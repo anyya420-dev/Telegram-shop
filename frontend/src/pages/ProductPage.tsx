@@ -19,7 +19,7 @@ export default function ProductPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const language = i18n.language as Language
-  const { user, addToCart, cart, products, openCityPicker } = useApp()
+  const { user, loading: bootstrapLoading, addToCart, cart, products, openCityPicker } = useApp()
 
   const [product, setProduct] = useState<ProductDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,7 +52,11 @@ export default function ProductPage() {
         setQuantity(clampProductQuantity(responseProduct, responseProduct.minimumQuantity || 1))
 
         try {
-          const [reviewsResponse, wishlistResponse] = await Promise.all([api.getReviews(Number(id)), api.getWishlist()])
+          // Only call auth-required endpoints once session token is ready
+          const [reviewsResponse, wishlistResponse] = await Promise.all([
+            api.getReviews(Number(id)),
+            bootstrapLoading ? Promise.resolve({ items: [] }) : api.getWishlist(),
+          ])
           setReviews(reviewsResponse.reviews)
           setAvgRating(reviewsResponse.avgRating)
           const currentReview = user ? reviewsResponse.reviews.find((review) => review.userId === user.id) : undefined

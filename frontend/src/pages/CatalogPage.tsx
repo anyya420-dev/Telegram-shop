@@ -20,7 +20,7 @@ export default function CatalogPage() {
   const language = i18n.language as Language
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { user, categories, products, refreshCatalog, openCityPicker } = useApp()
+  const { user, loading: bootstrapLoading, categories, products, refreshCatalog, openCityPicker } = useApp()
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | 'all'>(() => {
     const categoryId = searchParams.get('categoryId')
@@ -143,15 +143,6 @@ export default function CatalogPage() {
         </button>
       </div>
 
-      {!user?.selectedCityId ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyIcon}>
-            <MapPin size={28} strokeWidth={1.5} />
-          </div>
-          <p>{t('city.subtitle')}</p>
-        </div>
-      ) : null}
-
       {catalogError ? (
         <div className={styles.errorState}>
           <p>{catalogError}</p>
@@ -162,7 +153,7 @@ export default function CatalogPage() {
         </div>
       ) : null}
 
-      {loading ? (
+      {bootstrapLoading || loading ? (
         <div className={styles.grid}>
           {Array.from({ length: 6 }).map((_, index) => (
             <div key={index} className={styles.skeletonCard}>
@@ -175,9 +166,15 @@ export default function CatalogPage() {
       ) : products.length === 0 ? (
         <div className={styles.empty}>
           <div className={styles.emptyIcon}>
-            <Search size={28} strokeWidth={1.5} />
+            {!user?.selectedCityId ? <MapPin size={28} strokeWidth={1.5} /> : <Search size={28} strokeWidth={1.5} />}
           </div>
-          <p>{search.trim() ? t('catalog.nothingFound') : t('catalog.empty')}</p>
+          <p>{!user?.selectedCityId ? t('city.subtitle') : search.trim() ? t('catalog.nothingFound') : t('catalog.empty')}</p>
+          {!user?.selectedCityId ? (
+            <button className={styles.retryBtn} style={{ marginTop: 12 }} onClick={openCityPicker} type="button">
+              <MapPin size={14} strokeWidth={1.5} />
+              {t('cityPicker.changeCity')}
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className={styles.grid}>
