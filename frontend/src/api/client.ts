@@ -42,12 +42,10 @@ function normalizeApiBase(value: string) {
 
 export function resolveApiUrl(env = (import.meta as { env?: Record<string, string | boolean> }).env) {
   const configuredValue = typeof env?.VITE_API_URL === 'string' ? env.VITE_API_URL.trim() : ''
-  const defaultProductionApiUrl = (typeof env?.VITE_DEFAULT_API_URL === 'string' && env.VITE_DEFAULT_API_URL.trim())
-    || 'https://telegram-shop-backend.onrender.com/api'
-  const isProduction = env?.PROD === true || env?.PROD === 'true' || env?.MODE === 'production'
+  const defaultApiUrl = typeof env?.VITE_DEFAULT_API_URL === 'string' ? env.VITE_DEFAULT_API_URL.trim() : ''
 
   if (!configuredValue) {
-    return isProduction ? normalizeApiBase(defaultProductionApiUrl) : '/api'
+    return defaultApiUrl ? normalizeApiBase(defaultApiUrl) : '/api'
   }
 
   return normalizeApiBase(configuredValue)
