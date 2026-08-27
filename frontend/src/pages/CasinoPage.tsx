@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Coins, Disc3, RotateCcw, Shield, Sparkles, Trophy } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Coins, Disc3, RotateCcw, Shield, Sparkles, Trophy, Volume2, VolumeX } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { getErrorMessage } from '../lib/errors'
@@ -39,6 +39,44 @@ export default function CasinoPage() {
   const [slotSymbols, setSlotSymbols] = useState(['cherry', 'lemon', 'orange'])
   const [rouletteBet, setRouletteBet] = useState('red')
   const [rouletteNumber, setRouletteNumber] = useState('7')
+  const [soundEnabled, setSoundEnabled] = useState(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+
+  const playTone = useCallback((frequency: number, duration: number, type: OscillatorType = 'sine', volume = 0.18) => {
+    if (!soundEnabled) return
+    try {
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioContext()
+      }
+      const ctx = audioCtxRef.current
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = type
+      osc.frequency.setValueAtTime(frequency, ctx.currentTime)
+      gain.gain.setValueAtTime(volume, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration)
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + duration)
+    } catch { /* ignore AudioContext errors */ }
+  }, [soundEnabled])
+
+  const playSpin = useCallback(() => {
+    playTone(880, 0.08, 'square', 0.12)
+    setTimeout(() => playTone(660, 0.08, 'square', 0.1), 90)
+    setTimeout(() => playTone(440, 0.08, 'square', 0.08), 180)
+  }, [playTone])
+
+  const playWin = useCallback(() => {
+    playTone(523, 0.12)
+    setTimeout(() => playTone(659, 0.12), 130)
+    setTimeout(() => playTone(784, 0.2), 260)
+  }, [playTone])
+
+  const playLose = useCallback(() => {
+    playTone(220, 0.2, 'sawtooth', 0.1)
+  }, [playTone])
 
   async function loadCasino() {
     try {
@@ -67,6 +105,7 @@ export default function CasinoPage() {
     setPlaying(game)
     setError(null)
     setResult(null)
+    playSpin()
 
     let wheelTimer: number | undefined
     let slotsTimer: number | undefined
@@ -109,6 +148,8 @@ export default function CasinoPage() {
             }
           : current,
       )
+      const won = response.round.isWin
+      if (won) playWin(); else playLose()
       setResult({ game, reward: rewardLabel(response.reward, creditsLabel, emptyRewardLabel), outcome: response.round.outcomeValue })
     } catch (playError) {
       setError(getErrorMessage(playError, t, 'request_failed'))
@@ -129,10 +170,23 @@ export default function CasinoPage() {
           <h1>{t('casino.title')}</h1>
           <p className={styles.subtitle}>{t('casino.subtitle', { defaultValue: 'Play server-authoritative games, win credits, and unlock real shop discounts.' })}</p>
         </div>
-        <div className={styles.balance}>
-          <Coins size={18} strokeWidth={1.7} />
-          <strong>{credits.toFixed(0)}</strong>
-          <span>{t('casino.credits', { defaultValue: 'credits' })}</span>
+        <div className={styles.heroRight}>
+          <button
+            type="button"
+            className={styles.soundToggle}
+            onClick={() => setSoundEnabled((prev) => {
+              if (!prev && !audioCtxRef.current) audioCtxRef.current = new AudioContext()
+              return !prev
+            })}
+            title={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+          >
+            {soundEnabled ? <Volume2 size={16} strokeWidth={1.7} /> : <VolumeX size={16} strokeWidth={1.7} />}
+          </button>
+          <div className={styles.balance}>
+            <Coins size={18} strokeWidth={1.7} />
+            <strong>{credits.toFixed(0)}</strong>
+            <span>{t('casino.credits', { defaultValue: 'credits' })}</span>
+          </div>
         </div>
       </section>
 
