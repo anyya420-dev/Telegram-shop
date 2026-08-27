@@ -359,7 +359,6 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
     return response.products;
   }
 
-
   useEffect(() => {
     let mounted = true;
     void (async () => {
@@ -2428,8 +2427,8 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
           {deposits.map((d) => (
             <div key={d.id} className={styles.discountCard}>
               <div className={styles.orderMeta}>
-                <strong>#{d.id}</strong> · User {d.userId} · {d.network} · ${Number(d.amountUsdt).toFixed(2)} · Commission {d.commissionPct}%
-                → Credit ${Number(d.creditedAmount).toFixed(2)}
+                <strong>#{d.id}</strong> · User {d.userId} · {d.network} · ${Number(d.amountUsdt).toFixed(2)} · Commission {d.commissionPct ?? 0}%
+                → Credit ${Number(d.creditedAmount ?? d.amountUsdt).toFixed(2)}
               </div>
               <div className={styles.orderMeta}>TX: <code>{d.txHash ?? '—'}</code></div>
               <div className={styles.orderMeta}>

@@ -41,8 +41,8 @@ before(async () => {
   process.env.ADMIN_PASSWORD = 'admin-secret'
   process.env.DATABASE_URL = databaseUrl
   process.env.AUTH_RATE_LIMIT_MAX = '500'
-  process.env.FRONTEND_URL = 'https://telegram-shop-3781.onrender.com/'
-  process.env.WEB_APP_URL = 'https://telegram-shop-webapp.onrender.com/webapp'
+  process.env.FRONTEND_URL = 'https://telegram-shop-378j.onrender.com/'
+  process.env.WEB_APP_URL = 'https://telegram-shop-378j.onrender.com/miniapp'
   delete process.env.CORS_ALLOWED_ORIGINS
 
   run('npm', ['run', 'db:generate'])
@@ -200,38 +200,31 @@ test('cors allows only production frontend origin and handles preflight', async 
   const preflight = await request('/api/admin/auth/status', {
     method: 'OPTIONS',
     headers: {
-      Origin: 'https://telegram-shop.onrender.com',
+      Origin: 'https://telegram-shop-378j.onrender.com',
       'Access-Control-Request-Method': 'GET',
       'Access-Control-Request-Headers': 'Content-Type',
     },
   })
   assert.equal(preflight.status, 204)
-  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://telegram-shop.onrender.com')
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://telegram-shop-378j.onrender.com')
   assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true')
-
-  const legacyOrigin = await request('/api/health', {
-    headers: {
-      Origin: 'https://telegram-shop-3781.onrender.com',
-    },
-  })
-  assert.equal(legacyOrigin.status, 200)
-  assert.equal(legacyOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-3781.onrender.com')
 
   const configuredWebAppOrigin = await request('/api/health', {
     headers: {
-      Origin: 'https://telegram-shop-webapp.onrender.com',
+      Origin: 'https://telegram-shop-378j.onrender.com',
     },
   })
   assert.equal(configuredWebAppOrigin.status, 200)
-  assert.equal(configuredWebAppOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-webapp.onrender.com')
+  assert.equal(configuredWebAppOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-378j.onrender.com')
 
   const narcosOrigin = await request('/api/health', {
     headers: {
       Origin: 'https://narcos-shop.onrender.com',
     },
   })
-  assert.equal(narcosOrigin.status, 200)
-  assert.equal(narcosOrigin.headers.get('access-control-allow-origin'), 'https://narcos-shop.onrender.com')
+  assert.equal(narcosOrigin.status, 403)
+  const narcosBody = await narcosOrigin.json() as { code?: string }
+  assert.equal(narcosBody.code, 'cors_origin_not_allowed')
 
   const disallowed = await request('/api/health', {
     headers: {
@@ -726,16 +719,19 @@ test('cart and checkout enforce quantity, delivery, stock, and cart clearing rul
       deliveryOptionId: deliveryOption.id,
       discountCode: discount.code,
       comment: 'Leave at the door',
+      deliveryAddress: 'Checkout street, 10',
     }),
   })
   assert.equal(checkout.response.status, 200)
   assert.equal(checkout.body.order.subtotal, 48)
   assert.equal(checkout.body.order.discountAmount, 4.8)
-  assert.equal(checkout.body.order.deliveryFee, 5)
-  assert.equal(checkout.body.order.total, 48.2)
+  assert.equal(checkout.body.order.deliveryFee, 0)
+  assert.equal(checkout.body.order.total, 43.2)
   assert.equal(checkout.body.order.items.length, 1)
   assert.equal(checkout.body.order.items[0].quantity, 4)
   assert.equal(checkout.body.order.comment, 'Leave at the door')
+  assert.equal(checkout.body.order.deliveryAddress, 'Checkout street, 10')
+  assert.equal(checkout.body.order.deliveryPriceConfirmed, false)
   assert.equal(checkout.body.cart.items.length, 0)
 
   const updatedProductCity = await prisma.productCity.findUniqueOrThrow({ where: { id: productCity.id } })

@@ -24,10 +24,7 @@ import wishlistRouter from './routes/wishlist.js'
 import { prisma } from './lib.js'
 
 const fallbackProductionOrigins = [
-  'https://telegram-shop.onrender.com',
-  'https://telegram-shop-3781.onrender.com',
-  'https://narcos-shop.onrender.com',
-  'https://narcos-shop-3781.onrender.com',
+  'https://telegram-shop-378j.onrender.com',
 ]
 
 function normalizeOrigin(value: string) {

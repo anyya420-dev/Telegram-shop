@@ -3,9 +3,9 @@ databases:
     plan: free
 
 services:
-  # Backend Web Service (Render URL: https://narcos-shop.onrender.com)
+  # Backend Web Service (Telegram Shop API)
   - type: web
-    name: Narcos-shop
+    name: telegram-shop-backend
     runtime: node
     plan: free
     healthCheckPath: /health
@@ -26,23 +26,23 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: FRONTEND_URL
-        value: https://telegram-shop.onrender.com
+        value: https://telegram-shop-378j.onrender.com
       - key: WEB_APP_URL
-        value: https://telegram-shop.onrender.com
+        value: https://telegram-shop-378j.onrender.com
       - key: CORS_ALLOWED_ORIGINS
-        sync: false
+        value: https://telegram-shop-378j.onrender.com
       - key: ALLOW_DEMO_MODE
         value: "false"
 
-  # Frontend Static Site (Render URL: https://telegram-shop.onrender.com)
+  # Frontend Static Site (Render URL: https://telegram-shop-378j.onrender.com)
   - type: web
     runtime: static
-    name: Telegram-shop
+    name: telegram-shop-frontend
     buildCommand: npm install && npm run build --workspace frontend
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_URL
-        value: https://narcos-shop.onrender.com/api
+        value: https://telegram-shop-backend.onrender.com/api
     routes:
       - type: redirect
         source: /admin
@@ -62,5 +62,4 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: WEB_APP_URL
-        # Set to your frontend static site URL
-        sync: false
+        value: https://telegram-shop-378j.onrender.com
