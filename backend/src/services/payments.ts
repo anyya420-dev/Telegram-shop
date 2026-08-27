@@ -54,6 +54,28 @@ export function sanitizePaymentMethod(method: PaymentMethod) {
   }
 }
 
+/**
+ * Sanitizes a payment method for exposure to regular (non-admin) users.
+ * Omits internal provider credentials (`providerKey`, `providerConfig`) that
+ * could leak payment-provider secrets to end-users.
+ */
+export function sanitizePaymentMethodForUser(method: PaymentMethod) {
+  return {
+    id: method.id,
+    type: method.type,
+    title: method.title,
+    currency: method.currency,
+    asset: method.asset,
+    network: method.network,
+    walletAddress: method.type === 'crypto' ? method.walletAddress : null,
+    displayName: method.displayName,
+    instructions: method.instructions,
+    sortOrder: method.sortOrder,
+    isTonConnectEnabled: method.isTonConnectEnabled,
+    isEnabled: method.isEnabled,
+  }
+}
+
 export function sanitizePayment(payment: Payment & { paymentMethod?: PaymentMethod | null }) {
   return {
     id: payment.id,
@@ -77,7 +99,7 @@ export function sanitizePayment(payment: Payment & { paymentMethod?: PaymentMeth
     expiresAt: payment.expiresAt,
     createdAt: payment.createdAt,
     updatedAt: payment.updatedAt,
-    paymentMethod: payment.paymentMethod ? sanitizePaymentMethod(payment.paymentMethod) : undefined,
+    paymentMethod: payment.paymentMethod ? sanitizePaymentMethodForUser(payment.paymentMethod) : undefined,
   }
 }
 

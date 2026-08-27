@@ -39,6 +39,7 @@ export default function CheckoutPage() {
   const [discountError, setDiscountError] = useState<string | null>(null)
   const [validatingDiscount, setValidatingDiscount] = useState(false)
   const [comment, setComment] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [order, setOrder] = useState<Order | null>(null)
@@ -143,7 +144,12 @@ export default function CheckoutPage() {
       setSubmitError(t('checkout.deliveryRequired'))
       return
     }
-    if (total > 0 && !selectedPaymentMethodId) {
+    const selectedDelivery = deliveryOptions.find((d) => d.id === selectedDeliveryId)
+    if (selectedDelivery?.type === 'delivery' && !deliveryAddress.trim()) {
+      setSubmitError(t('checkout.addressRequired', 'Укажите адрес доставки'))
+      return
+    }
+    if (total > 0 && !selectedPaymentMethodId && selectedDelivery?.type !== 'delivery') {
       setSubmitError(t('checkout.paymentRequired'))
       return
     }
@@ -154,11 +160,16 @@ export default function CheckoutPage() {
         comment: comment.trim() || undefined,
         discountCode: selectedReward ? undefined : discountAmount > 0 ? discountCode.trim().toUpperCase() : undefined,
         deliveryOptionId: selectedDeliveryId ?? undefined,
-        paymentMethodId: total > 0 ? selectedPaymentMethodId ?? undefined : undefined,
+        deliveryAddress: selectedDelivery?.type === 'delivery' ? deliveryAddress.trim() : undefined,
+        paymentMethodId: total > 0 && selectedDelivery?.type !== 'delivery' ? selectedPaymentMethodId ?? undefined : undefined,
         rewardId: selectedRewardId ?? undefined,
         casinoCreditsToUse: appliedCasinoCredits > 0 ? appliedCasinoCredits : undefined,
       })
       setOrder(createdOrder)
+      if (selectedDelivery?.type === 'delivery') {
+        // Delivery orders: operator must confirm price before payment — show awaiting state
+        return
+      }
       if (createdOrder.total > 0) {
         try {
           const paymentResponse = await api.createOrderPayment(createdOrder.id)
@@ -244,6 +255,29 @@ export default function CheckoutPage() {
   }
 
   if (order) {
+    const isDeliveryAwaiting = order.deliveryOption?.type === 'delivery' && !order.deliveryPriceConfirmed
+    if (isDeliveryAwaiting) {
+      return (
+        <div className={styles.page}>
+          <div className={styles.header}>
+            <h1 className={styles.title}>{t('checkout.orderCreated', 'Заказ оформлен')}</h1>
+          </div>
+          <div className={styles.card}>
+            <p className={styles.sectionTitle}>{t('orders.orderTitle', { id: order.id })}</p>
+            <p className={styles.value}>{t('checkout.awaitingDeliveryPrice', 'Ваш заказ принят. Оператор уточнит стоимость доставки и свяжется с вами. После подтверждения цены вы сможете оплатить заказ в разделе «Мои заказы».')}</p>
+            {order.deliveryAddress && (
+              <div className={styles.infoRow}>
+                <MapPin size={14} strokeWidth={1.6} />
+                <span>{order.deliveryAddress}</span>
+              </div>
+            )}
+          </div>
+          <button className={styles.primaryBtn} onClick={() => navigate('/orders')} type="button">
+            {t('profile.myOrders', 'Мои заказы')}
+          </button>
+        </div>
+      )
+    }
     const method = payment?.paymentMethod ?? order.paymentMethod
     const isCryptoLike = method?.type === 'crypto'
     const canShowCryptoAddress = Boolean(isCryptoLike && payment?.network && payment?.recipient)
@@ -533,6 +567,19 @@ export default function CheckoutPage() {
           </label>
         ))}
       </div>
+
+      {deliveryOptions.find((d) => d.id === selectedDeliveryId)?.type === 'delivery' && (
+        <div className={styles.card}>
+          <p className={styles.sectionTitle}>{t('checkout.deliveryAddress', 'Адрес доставки')}</p>
+          <textarea
+            className={styles.textarea}
+            placeholder={t('checkout.deliveryAddressPlaceholder', 'Улица, дом, квартира...')}
+            value={deliveryAddress}
+            onChange={(event) => setDeliveryAddress(event.target.value)}
+            rows={3}
+          />
+        </div>
+      )}
 
       <div className={styles.card}>
         <p className={styles.sectionTitle}>{t('checkout.paymentMethod')}</p>

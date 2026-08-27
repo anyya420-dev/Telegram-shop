@@ -6,6 +6,7 @@ import type {
   AdminOrder,
   AdminProduct,
   AdminStats,
+  AdminTelegramBot,
   Balance,
   CasinoState,
   BootstrapResponse,
@@ -28,6 +29,9 @@ import type {
   AdminPaymentRecord,
   Administrator,
   AdminPickupStorage,
+  DepositRequest,
+  DepositWallet,
+  AdminDepositRequest,
 } from '../types'
 
 function normalizeApiBase(value: string) {
@@ -149,7 +153,7 @@ export const api = {
   removeCartItem(itemId: number) {
     return publicRequest<{ cart: Cart; recommended: ProductSummary[] }>(`/cart/items/${itemId}`, { method: 'DELETE' })
   },
-  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
+  checkout(payload: { comment?: string; discountCode?: string; deliveryOptionId?: number; deliveryAddress?: string; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
     return publicRequest<{ order: Order; cart: Cart; recommended: ProductSummary[] }>('/orders', { method: 'POST', body: JSON.stringify(payload) })
   },
   markOrderPaid(id: number) {
@@ -254,10 +258,10 @@ export const api = {
   getAdminAdministrators() {
     return adminRequest<{ administrators: Administrator[] }>('/admin/administrators')
   },
-  createAdministrator(data: { username?: string }) {
+  createAdministrator(data: { username?: string; telegramId?: string; role?: string; permissions?: string[] }) {
     return adminRequest<{ administrator: Administrator; generatedPassword: string }>('/admin/administrators', { method: 'POST', body: JSON.stringify(data) })
   },
-  updateAdministrator(id: number, data: { username?: string; isActive?: boolean }) {
+  updateAdministrator(id: number, data: { username?: string; isActive?: boolean; permissions?: string[]; telegramId?: string | null }) {
     return adminRequest<{ administrator: Administrator }>(`/admin/administrators/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   resetAdministratorPassword(id: number) {
@@ -267,13 +271,14 @@ export const api = {
     return adminRequest<{ ok: boolean }>(`/admin/administrators/${id}`, { method: 'DELETE' })
   },
   getAdminSettings() {
-    return adminRequest<{ shopName: string }>('/admin/settings')
+    return adminRequest<{ shopName: string; depositCommissionPct: number }>('/admin/settings')
   },
-  updateAdminSettings(data: { shopName: string }) {
-    return adminRequest<{ shopName: string }>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
+  updateAdminSettings(data: { shopName?: string; depositCommissionPct?: number }) {
+    return adminRequest<{ shopName: string; depositCommissionPct: number }>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
   },
-  getAdminStats() {
-    return adminRequest<AdminStats>('/admin/stats')
+  getAdminStats(period?: 'today' | 'week' | 'month' | 'all') {
+    const params = period ? `?period=${period}` : ''
+    return adminRequest<AdminStats>(`/admin/stats${params}`)
   },
   getAdminOrders(page = 1, status?: string) {
     const params = new URLSearchParams({ page: String(page) })
@@ -415,6 +420,9 @@ export const api = {
   adjustAdminCasinoCredits(data: { userId: number; amount: number; reason: string }) {
     return adminRequest<{ balance: unknown }>('/admin/casino/credits/adjust', { method: 'POST', body: JSON.stringify(data) })
   },
+  adjustAdminBalance(data: { userId: number; amount: number; reason: string }) {
+    return adminRequest<{ balance: unknown }>('/admin/balance/adjust', { method: 'POST', body: JSON.stringify(data) })
+  },
   getAdminCategories() {
     return adminRequest<{ categories: AdminCategory[] }>('/admin/categories')
   },
@@ -423,5 +431,60 @@ export const api = {
   },
   updateAdminCategory(id: number, data: { name?: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
     return adminRequest<{ category: AdminCategory }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+
+  // ── Deposits ──────────────────────────────────────────────────────────────
+  getDepositWallets() {
+    return publicRequest<{ wallets: DepositWallet[]; commissionPct: number }>('/deposits/wallets')
+  },
+  getMyDeposits() {
+    return publicRequest<{ deposits: DepositRequest[]; commissionPct: number }>('/deposits')
+  },
+  createDepositRequest(walletId: number, amountUsdt: number) {
+    return publicRequest<{ deposit: DepositRequest }>('/deposits', {
+      method: 'POST',
+      body: JSON.stringify({ walletId, amountUsdt }),
+    })
+  },
+  submitDepositTxHash(depositId: number, txHash: string) {
+    return publicRequest<{ deposit: DepositRequest }>(`/deposits/${depositId}/txhash`, {
+      method: 'PATCH',
+      body: JSON.stringify({ txHash }),
+    })
+  },
+
+  // ── Admin Deposits ────────────────────────────────────────────────────────
+  getAdminDeposits(page = 1, status?: string) {
+    const params = new URLSearchParams({ page: String(page) })
+    if (status) params.set('status', status)
+    return adminRequest<{ deposits: AdminDepositRequest[]; total: number; page: number; pages: number }>(`/admin/deposits?${params}`)
+  },
+  confirmAdminDeposit(id: number, note?: string) {
+    return adminRequest<{ deposit: AdminDepositRequest }>(`/admin/deposits/${id}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    })
+  },
+  rejectAdminDeposit(id: number, note?: string) {
+    return adminRequest<{ deposit: AdminDepositRequest }>(`/admin/deposits/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    })
+  },
+  // Bots
+  getAdminBots() {
+    return adminRequest<{ bots: AdminTelegramBot[] }>('/admin/bots')
+  },
+  createAdminBot(token: string) {
+    return adminRequest<{ bot: AdminTelegramBot }>('/admin/bots', { method: 'POST', body: JSON.stringify({ token }) })
+  },
+  updateAdminBot(id: number, data: { webAppUrl?: string; menuText?: string }) {
+    return adminRequest<{ bot: AdminTelegramBot }>(`/admin/bots/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  toggleAdminBot(id: number) {
+    return adminRequest<{ bot: AdminTelegramBot }>(`/admin/bots/${id}/toggle`, { method: 'PATCH' })
+  },
+  deleteAdminBot(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/bots/${id}`, { method: 'DELETE' })
   },
 }

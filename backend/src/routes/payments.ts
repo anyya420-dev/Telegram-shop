@@ -13,7 +13,7 @@ import {
   getStripeWebhookSecret,
   readStripeSignature,
   sanitizePayment,
-  sanitizePaymentMethod,
+  sanitizePaymentMethodForUser,
   verifyStripeWebhookSignature,
 } from '../services/payments.js'
 import { assignPickupStoragesForPaidOrder } from '../services/pickupStorage.js'
@@ -41,7 +41,7 @@ router.get('/methods', authRateLimiter, async (request, response) => {
     orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
   })
 
-  response.json({ methods: methods.map(sanitizePaymentMethod) })
+  response.json({ methods: methods.map(sanitizePaymentMethodForUser) })
 })
 
 router.post('/orders/:orderId/session', authRateLimiter, async (request, response) => {

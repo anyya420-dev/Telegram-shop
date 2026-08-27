@@ -191,6 +191,9 @@ export type Order = {
   deliveryFee: number
   total: number
   comment: string | null
+  deliveryAddress: string | null
+  deliveryPriceConfirmed: boolean
+  operatorDeliveryPrice: number | null
   paymentMethodId: number | null
   cancelledAt: string | null
   refundStatus: string | null
@@ -212,6 +215,10 @@ export type BalanceTransaction = {
   id: number
   type: string
   amount: number
+  status: string
+  source: string | null
+  adminId: number | null
+  referenceId: number | null
   comment: string | null
   createdAt: string
 }
@@ -333,18 +340,46 @@ export type Discount = {
 }
 
 export type AdminStats = {
+  period: string
   totalOrders: number
   pendingOrders: number
+  paidOrders: number
+  cancelledOrders: number
   totalUsers: number
+  newUsers: number
   totalRevenue: number
+  depositCount: number
+  depositUSDT: number
+  depositCredited: number
+  depositCommission: number
+  casinoBetCount: number
+  casinoBetTotal: number
+  casinoWinTotal: number
+  discountTotal: number
+  virtualBalance: number
 }
 
 export type Administrator = {
   id: number
   username: string
+  telegramId: string | null
   role: string
+  permissions: string[]
   isActive: boolean
   deletedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AdminTelegramBot = {
+  id: number
+  botId: string
+  username: string
+  firstName: string
+  isActive: boolean
+  webAppUrl: string | null
+  menuText: string | null
+  maskedToken: string
   createdAt: string
   updatedAt: string
 }
@@ -476,5 +511,41 @@ export type AdminPaymentRecord = Payment & {
       firstName: string
       username: string | null
     }
+  }
+}
+
+export type DepositWallet = {
+  id: number
+  title: string
+  asset: string | null
+  network: string | null
+  walletAddress: string | null
+  displayName: string | null
+  instructions: string | null
+  isTonConnectEnabled: boolean
+}
+
+export type DepositRequest = {
+  id: number
+  amountUsdt: number
+  network: string
+  asset: string
+  walletAddress: string
+  txHash: string | null
+  status: 'pending' | 'confirmed' | 'rejected'
+  creditedAmount: number | null
+  commissionPct: number | null
+  adminNote: string | null
+  confirmedAt: string | null
+  createdAt: string
+}
+
+export type AdminDepositRequest = DepositRequest & {
+  userId: number
+  user: {
+    id: number
+    telegramId: string
+    firstName: string
+    username: string | null
   }
 }

@@ -5,10 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminOrder, AdminPaymentRecord, AdminPickupStorage, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminDepositRequest, AdminOrder, AdminPaymentRecord, AdminPickupStorage, AdminProduct, AdminStats, AdminTelegramBot, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'products' | 'storage' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
+type Tab = 'stats' | 'orders' | 'products' | 'storage' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino' | 'deposits' | 'bots' | 'security';
 
 type ProductCityDraft = {
   cityId: string;
@@ -323,11 +323,21 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
   const [newAdminUsername, setNewAdminUsername] = useState('');
   const [generatedAdminPassword, setGeneratedAdminPassword] = useState<string | null>(null);
   const [shopName, setShopName] = useState('NARCOS');
+  const [depositCommissionPct, setDepositCommissionPct] = useState(0);
+  const [commissionInput, setCommissionInput] = useState('0');
+  const [deposits, setDeposits] = useState<AdminDepositRequest[]>([]);
+  const [depositsLoading, setDepositsLoading] = useState(false);
+  const [depositNote, setDepositNote] = useState<Record<number, string>>({});
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [bots, setBots] = useState<AdminTelegramBot[]>([]);
+  const [botsLoading, setBotsLoading] = useState(false);
+  const [newBotToken, setNewBotToken] = useState('');
+  const [botWebAppUrl, setBotWebAppUrl] = useState<Record<number, string>>({});
+  const [statsPeriod, setStatsPeriod] = useState<'today' | 'week' | 'month' | 'all'>('all');
 
   const tabs = useMemo(
-    () => ['stats', 'orders', 'products', 'storage', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
+    () => ['stats', 'orders', 'products', 'storage', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino', 'deposits', 'bots', 'security'] as Tab[],
     [],
   );
 
@@ -463,6 +473,32 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
         setPaymentRecords(paymentsResponse.payments);
       } else if (tabName === 'casino') {
         setCasinoConfig(await api.getAdminCasinoConfig());
+      } else if (tabName === 'deposits') {
+        setDepositsLoading(true);
+        try {
+          const response = await api.getAdminDeposits();
+          setDeposits(response.deposits);
+        } finally {
+          setDepositsLoading(false);
+        }
+      } else if (tabName === 'bots') {
+        setBotsLoading(true);
+        try {
+          const response = await api.getAdminBots();
+          setBots(response.bots);
+        } finally {
+          setBotsLoading(false);
+        }
+      } else if (tabName === 'security') {
+        const [adminsResponse, settingsResponse] = await Promise.all([
+          api.getAdminAdministrators(),
+          api.getAdminSettings(),
+        ]);
+        setAdministrators(adminsResponse.administrators);
+        setShopName(settingsResponse.shopName);
+        const pct = settingsResponse.depositCommissionPct ?? 0;
+        setDepositCommissionPct(pct);
+        setCommissionInput(String(pct));
       }
 
       const status = await api.adminStatus();
@@ -474,6 +510,9 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
         ]);
         setAdministrators(adminsResponse.administrators);
         setShopName(settingsResponse.shopName);
+        const pct = settingsResponse.depositCommissionPct ?? 0;
+        setDepositCommissionPct(pct);
+        setCommissionInput(String(pct));
       }
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to load admin data'));
@@ -1152,6 +1191,48 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
     }
   }
 
+  async function handleSaveCommission() {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    const pct = Number(commissionInput);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      setError('Commission must be between 0 and 100');
+      return;
+    }
+    try {
+      const response = await api.updateAdminSettings({ depositCommissionPct: pct });
+      const newPct = response.depositCommissionPct ?? pct;
+      setDepositCommissionPct(newPct);
+      setCommissionInput(String(newPct));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update commission'));
+    }
+  }
+
+  async function handleConfirmDeposit(id: number) {
+    setError(null);
+    try {
+      await api.confirmAdminDeposit(id, depositNote[id]);
+      const response = await api.getAdminDeposits();
+      setDeposits(response.deposits);
+      setDepositNote((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to confirm deposit'));
+    }
+  }
+
+  async function handleRejectDeposit(id: number) {
+    setError(null);
+    try {
+      await api.rejectAdminDeposit(id, depositNote[id]);
+      const response = await api.getAdminDeposits();
+      setDeposits(response.deposits);
+      setDepositNote((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to reject deposit'));
+    }
+  }
+
   async function handleChangePassword(target: 'self' | 'owner') {
     if (!currentPassword.trim() || !newPassword.trim()) return;
     setError(null);
@@ -1227,12 +1308,35 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
         ))}
       </div>
 
-      {tab === 'stats' && stats && (
-        <div className={styles.stats}>
-          <div className={styles.statCard}><span className={styles.statValue}>{stats.totalOrders}</span><span>{t('admin.totalOrders', { defaultValue: 'Total Orders' })}</span></div>
-          <div className={styles.statCard}><span className={styles.statValue}>{stats.pendingOrders}</span><span>{t('admin.pendingOrders', { defaultValue: 'Pending' })}</span></div>
-          <div className={styles.statCard}><span className={styles.statValue}>{stats.totalUsers}</span><span>{t('admin.totalUsers', { defaultValue: 'Users' })}</span></div>
-          <div className={styles.statCard}><span className={styles.statValue}>{formatCurrency(stats.totalRevenue, language)}</span><span>{t('admin.revenue', { defaultValue: 'Revenue' })}</span></div>
+      {tab === 'stats' && (
+        <div>
+          <div className={styles.filterRow}>
+            {(['all', 'today', 'week', 'month'] as const).map((p) => (
+              <button key={p} className={`${styles.filterBtn} ${statsPeriod === p ? styles.filterBtnActive : ''}`}
+                onClick={() => { setStatsPeriod(p); void api.getAdminStats(p).then(setStats); }}>
+                {p === 'all' ? 'Всё время' : p === 'today' ? 'Сегодня' : p === 'week' ? 'Неделя' : 'Месяц'}
+              </button>
+            ))}
+          </div>
+          {stats && (
+            <div className={styles.stats}>
+              <div className={styles.statCard}><span className={styles.statValue}>{formatCurrency(stats.totalRevenue, language)}</span><span>Выручка</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.paidOrders}</span><span>Оплачено</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.totalOrders}</span><span>Всего заказов</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.pendingOrders}</span><span>В ожидании</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.cancelledOrders}</span><span>Отменено</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.totalUsers}</span><span>Пользователей</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.newUsers}</span><span>Новых</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.depositCount}</span><span>Пополнений</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>${stats.depositCredited.toFixed(2)}</span><span>Зачислено USD</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>${stats.depositCommission.toFixed(2)}</span><span>Комиссия USDT</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>${stats.virtualBalance.toFixed(2)}</span><span>Виртуальный баланс</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{formatCurrency(stats.discountTotal, language)}</span><span>Скидки</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>{stats.casinoBetCount}</span><span>Ставок казино</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>${stats.casinoBetTotal.toFixed(2)}</span><span>Сумма ставок</span></div>
+              <div className={styles.statCard}><span className={styles.statValue}>${stats.casinoWinTotal.toFixed(2)}</span><span>Выигрыши казино</span></div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1719,6 +1823,21 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
                   />
                   <button className={styles.createBtn} onClick={() => void handleSaveShopName()} disabled={!shopName.trim()}>
                     Save shop name
+                  </button>
+                </div>
+                <div className={styles.formRow} style={{ marginTop: 8 }}>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="Deposit commission %"
+                    value={commissionInput}
+                    onChange={(event) => setCommissionInput(event.target.value)}
+                  />
+                  <button className={styles.createBtn} onClick={() => void handleSaveCommission()}>
+                    Save commission ({depositCommissionPct}%)
                   </button>
                 </div>
               </div>
@@ -2303,6 +2422,159 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
               Adjust credits
             </button>
           </div>
+        </div>
+      )}
+
+      {tab === 'deposits' && (
+        <div>
+          <h3 className={styles.formTitle}>Deposit Requests</h3>
+          {depositsLoading && <p className={styles.loading}>Loading...</p>}
+          {!depositsLoading && deposits.length === 0 && <p className={styles.loading}>No deposit requests.</p>}
+          {deposits.map((d) => (
+            <div key={d.id} className={styles.discountCard}>
+              <div className={styles.orderMeta}>
+                <strong>#{d.id}</strong> · User {d.userId} · {d.network} · ${Number(d.amountUsd).toFixed(2)} · Commission {d.commissionPct}%
+                → Credit ${Number(d.creditUsd).toFixed(2)}
+              </div>
+              <div className={styles.orderMeta}>TX: <code>{d.txHash ?? '—'}</code></div>
+              <div className={styles.orderMeta}>
+                Status: <span className={`${styles.refundTag} ${d.status === 'confirmed' ? styles.tagActive : d.status === 'rejected' ? styles.tagInactive : ''}`}>{d.status}</span>
+                &nbsp;· {new Date(d.createdAt).toLocaleString()}
+              </div>
+              {d.status === 'pending' && (
+                <div className={styles.replyRow}>
+                  <input
+                    className={styles.input}
+                    placeholder="Note (optional)"
+                    value={depositNote[d.id] ?? ''}
+                    onChange={(event) => setDepositNote((prev) => ({ ...prev, [d.id]: event.target.value }))}
+                    style={{ flex: 1 }}
+                  />
+                  <button className={styles.replyBtn} onClick={() => void handleConfirmDeposit(d.id)}>Confirm</button>
+                  <button className={styles.replyBtn} onClick={() => void handleRejectDeposit(d.id)}>Reject</button>
+                </div>
+              )}
+              {d.adminNote && <div className={styles.orderMeta}>Note: {d.adminNote}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === 'bots' && (
+        <div>
+          <div className={styles.filterRow}>
+            <input
+              className={styles.input}
+              placeholder="Bot token (from @BotFather)"
+              value={newBotToken}
+              onChange={(e) => setNewBotToken(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button className={styles.filterBtn} onClick={async () => {
+              if (!newBotToken.trim()) return;
+              try {
+                const res = await api.createAdminBot(newBotToken.trim());
+                setBots((prev) => [res.bot, ...prev]);
+                setNewBotToken('');
+              } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+            }}>Добавить бота</button>
+          </div>
+          {botsLoading && <p className={styles.loading}>Загрузка...</p>}
+          {bots.map((bot) => (
+            <div key={bot.id} className={styles.orderCard}>
+              <div className={styles.orderMeta}>
+                <strong>@{bot.username}</strong> — {bot.firstName}
+              </div>
+              <div className={styles.orderMeta}>Bot ID: {bot.botId} | Token: {bot.maskedToken}</div>
+              <div className={styles.orderMeta}>
+                Статус: <strong>{bot.isActive ? '✅ Активен' : '⏸ Отключён'}</strong>
+              </div>
+              {bot.webAppUrl && <div className={styles.orderMeta}>Web App: {bot.webAppUrl}</div>}
+              <div className={styles.replyRow}>
+                <input
+                  className={styles.input}
+                  placeholder="Web App URL"
+                  value={botWebAppUrl[bot.id] ?? bot.webAppUrl ?? ''}
+                  onChange={(e) => setBotWebAppUrl((prev) => ({ ...prev, [bot.id]: e.target.value }))}
+                  style={{ flex: 1 }}
+                />
+                <button className={styles.replyBtn} onClick={async () => {
+                  try {
+                    const res = await api.updateAdminBot(bot.id, { webAppUrl: botWebAppUrl[bot.id] ?? '' });
+                    setBots((prev) => prev.map((b) => b.id === bot.id ? res.bot : b));
+                  } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+                }}>Сохранить URL</button>
+                <button className={styles.replyBtn} onClick={async () => {
+                  try {
+                    const res = await api.toggleAdminBot(bot.id);
+                    setBots((prev) => prev.map((b) => b.id === bot.id ? res.bot : b));
+                  } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+                }}>{bot.isActive ? 'Выключить' : 'Включить'}</button>
+                <button className={styles.replyBtn} onClick={async () => {
+                  if (!confirm('Удалить бота?')) return;
+                  try {
+                    await api.deleteAdminBot(bot.id);
+                    setBots((prev) => prev.filter((b) => b.id !== bot.id));
+                  } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+                }}>Удалить</button>
+              </div>
+            </div>
+          ))}
+          {!botsLoading && bots.length === 0 && <p className={styles.loading}>Нет ботов. Добавьте первый бот выше.</p>}
+        </div>
+      )}
+
+      {tab === 'security' && adminRole === 'owner' && (
+        <div>
+          <div className={styles.filterRow}>
+            <input className={styles.input} placeholder="Username" value={newAdminUsername} onChange={(e) => setNewAdminUsername(e.target.value)} style={{ flex: 1 }} />
+            <button className={styles.filterBtn} onClick={async () => {
+              try {
+                const res = await api.createAdministrator({ username: newAdminUsername, role: 'admin' });
+                setAdministrators((prev) => [...prev, res.administrator]);
+                setGeneratedAdminPassword(res.generatedPassword);
+                setNewAdminUsername('');
+              } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+            }}>Добавить администратора</button>
+          </div>
+          {generatedAdminPassword && (
+            <div className={styles.orderCard} style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.3)' }}>
+              <p>✅ Администратор создан. Одноразовый пароль:</p>
+              <code style={{ fontSize: 14, wordBreak: 'break-all' }}>{generatedAdminPassword}</code>
+              <p style={{ fontSize: 12, marginTop: 4, opacity: 0.6 }}>Сохраните и передайте безопасным способом. Повторно не отображается.</p>
+              <button className={styles.replyBtn} onClick={() => setGeneratedAdminPassword(null)}>Закрыть</button>
+            </div>
+          )}
+          {administrators.map((adm) => (
+            <div key={adm.id} className={styles.orderCard}>
+              <div className={styles.orderMeta}><strong>{adm.username}</strong> — {adm.role}</div>
+              {adm.telegramId && <div className={styles.orderMeta}>Telegram ID: {adm.telegramId}</div>}
+              <div className={styles.orderMeta}>Статус: {adm.isActive ? '✅ Активен' : '⛔ Заблокирован'}</div>
+              {adm.permissions.length > 0 && <div className={styles.orderMeta}>Права: {adm.permissions.join(', ')}</div>}
+              {adm.role !== 'owner' && (
+                <div className={styles.replyRow}>
+                  <button className={styles.replyBtn} onClick={async () => {
+                    try {
+                      const res = await api.updateAdministrator(adm.id, { isActive: !adm.isActive });
+                      setAdministrators((prev) => prev.map((a) => a.id === adm.id ? res.administrator : a));
+                    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+                  }}>{adm.isActive ? 'Заблокировать' : 'Разблокировать'}</button>
+                  <button className={styles.replyBtn} onClick={async () => {
+                    try {
+                      const res = await api.resetAdministratorPassword(adm.id);
+                      setGeneratedAdminPassword(res.generatedPassword);
+                    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+                  }}>Сбросить пароль</button>
+                  <button className={styles.replyBtn} onClick={async () => {
+                    if (!confirm('Удалить администратора?')) return;
+                    try {
+                      await api.deleteAdministrator(adm.id);
+                      setAdministrators((prev) => prev.filter((a) => a.id !== adm.id));
+                    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Error'); }
+                  }}>Удалить</button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

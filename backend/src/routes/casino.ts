@@ -93,7 +93,7 @@ router.post('/spin', authRateLimiter, async (request, response) => {
         data: {
           casinoBalanceId: balance.id,
           game: 'wheel',
-          requestId: typeof request.body.requestId === 'string' ? request.body.requestId : randomUUID(),
+          requestId: `u${user.id}:${typeof request.body.requestId === 'string' ? request.body.requestId : randomUUID()}`,
           status: 'completed',
           betAmount: bet,
           targetValue: String(target),

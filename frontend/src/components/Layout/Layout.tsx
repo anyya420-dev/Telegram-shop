@@ -1,4 +1,4 @@
-import { House, LayoutGrid, ShoppingBag, UserRound, X } from 'lucide-react';
+import { House, LayoutGrid, ShoppingBag, UserRound, Wallet, X } from 'lucide-react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { CityPicker } from '../CityPicker';
@@ -29,7 +29,7 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout() {
-  const { error, loading, setError, cart } = useApp();
+  const { error, loading, setError, cart, balanceAmount, user } = useApp();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,6 +50,14 @@ export default function Layout() {
 
   return (
     <div className={styles.root}>
+      {user ? (
+        <div className={styles.topBar}>
+          <button className={styles.balanceChip} onClick={() => navigate('/balance')} type="button">
+            <Wallet size={12} strokeWidth={1.9} />
+            <span>${balanceAmount.toFixed(2)}</span>
+          </button>
+        </div>
+      ) : null}
       <main className={styles.main}>
         {error ? (
           <div className={styles.errorBanner} role="alert">

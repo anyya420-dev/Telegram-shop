@@ -10,6 +10,7 @@ import catalogRouter from './routes/catalog.js'
 import categoriesRouter from './routes/categories.js'
 import citiesRouter from './routes/cities.js'
 import deliveryRouter from './routes/delivery.js'
+import depositsRouter from './routes/deposits.js'
 import discountsRouter from './routes/discounts.js'
 import ordersRouter from './routes/orders.js'
 import operatorsRouter from './routes/operators.js'
@@ -59,6 +60,14 @@ function getAllowedOrigins() {
 export function createApp() {
   const app = express()
   const allowedOrigins = getAllowedOrigins()
+
+  app.use((_request, response, next) => {
+    response.setHeader('X-Content-Type-Options', 'nosniff')
+    response.setHeader('X-Frame-Options', 'DENY')
+    response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.setHeader('X-Permitted-Cross-Domain-Policies', 'none')
+    next()
+  })
 
   app.use((request, response, next) => {
     response.setHeader('Vary', 'Origin, Access-Control-Request-Method, Access-Control-Request-Headers')
@@ -154,6 +163,7 @@ export function createApp() {
   app.use('/api/payments', paymentsRouter)
   app.use('/api/users', usersRouter)
   app.use('/api/balance', balanceRouter)
+  app.use('/api/deposits', depositsRouter)
   app.use('/api/casino', casinoRouter)
   app.use('/api/support', supportRouter)
   app.use('/api/discounts', discountsRouter)
@@ -164,6 +174,14 @@ export function createApp() {
 
   app.get('/', (_request, response) => {
     response.json({ status: 'ok', message: 'Backend is running' })
+  })
+
+  // Global error handler — prevents stack traces leaking in production
+  app.use((err: unknown, _request: import('express').Request, response: import('express').Response, _next: import('express').NextFunction) => {
+    const isProd = process.env.NODE_ENV === 'production'
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    if (!isProd) console.error('[unhandled error]', err)
+    response.status(500).json({ code: 'internal_error', message: isProd ? 'Internal server error' : message })
   })
 
   return app

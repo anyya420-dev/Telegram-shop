@@ -11,6 +11,9 @@ export const en = {
     save: 'Save',
   },
   nav: {
+    home: 'Home',
+    catalog: 'Catalog',
+    cart: 'Cart',
     shop: 'Shop',
     casino: 'Casino',
     balance: 'Balance',

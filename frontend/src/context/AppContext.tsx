@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { api } from '../api/client'
 import i18n from '../lib/i18n'
 import { getTelegramContext } from '../lib/telegram'
-import type { Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
+import type { Balance, Cart, Category, City, Language, Order, ProductSummary, UserProfile } from '../types'
 
 type AppState = {
   loading: boolean
@@ -21,6 +21,8 @@ type AppState = {
   ordersLoading: boolean
   cityPickerOpen: boolean
   shopName: string
+  userBalance: Balance | null
+  balanceAmount: number
   openCityPicker: () => void
   closeCityPicker: () => void
   reloadCities: () => Promise<City[]>
@@ -31,9 +33,10 @@ type AppState = {
   addToCart: (productCityId: number, quantity: number) => Promise<void>
   updateCartItem: (itemId: number, quantity: number) => Promise<void>
   removeCartItem: (itemId: number) => Promise<void>
-  checkout: (options: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) => Promise<Order>
+  checkout: (options: { comment?: string; discountCode?: string; deliveryOptionId?: number; deliveryAddress?: string; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) => Promise<Order>
   fetchOrders: () => Promise<Order[]>
   setError: (value: string | null) => void
+  refreshBalance: () => Promise<void>
 }
 
 const AppContext = createContext<AppState | null>(null)
@@ -73,6 +76,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   const [shopName, setShopName] = useState('NARCOS')
+  const [userBalance, setUserBalance] = useState<Balance | null>(null)
 
   function t(key: string): string {
     return i18n.t(key)
@@ -155,13 +159,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         document.title = response.shopName || 'NARCOS'
 
         setCartLoading(true)
-        const [catalogResponse, cartResponse] = await Promise.all([
+        const [catalogResponse, cartResponse, balanceResponse] = await Promise.all([
           api.getCatalog({ cityId: response.user.selectedCityId ?? undefined }),
           api.getCart(),
+          api.getBalance().catch(() => null),
         ])
         setProducts(catalogResponse.products)
         setCart(cartResponse.cart)
         setRecommended(cartResponse.recommended)
+        if (balanceResponse) setUserBalance(balanceResponse.balance)
         setCartLoading(false)
       } catch (bootstrapError) {
         setError(translateError(bootstrapError, t, 'shop_load_failed'))
@@ -265,7 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function checkout(options: { comment?: string; discountCode?: string; deliveryOptionId?: number; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
+  async function checkout(options: { comment?: string; discountCode?: string; deliveryOptionId?: number; deliveryAddress?: string; paymentMethodId?: number; rewardId?: number; casinoCreditsToUse?: number }) {
     if (!user) {
       throw new Error('User not loaded')
     }
@@ -302,6 +308,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshBalance() {
+    try {
+      const resp = await api.getBalance()
+      setUserBalance(resp.balance)
+    } catch {
+      // silently ignore — balance chip will just stay stale
+    }
+  }
+
   const value = {
     loading,
     error,
@@ -318,6 +333,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ordersLoading,
     cityPickerOpen,
     shopName,
+    userBalance,
+    balanceAmount: userBalance?.amount ?? 0,
     openCityPicker: () => setCityPickerOpen(true),
     closeCityPicker: () => setCityPickerOpen(false),
     reloadCities,
@@ -331,6 +348,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     checkout,
     fetchOrders,
     setError,
+    refreshBalance,
   } satisfies AppState
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
