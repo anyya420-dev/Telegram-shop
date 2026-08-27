@@ -726,16 +726,19 @@ test('cart and checkout enforce quantity, delivery, stock, and cart clearing rul
       deliveryOptionId: deliveryOption.id,
       discountCode: discount.code,
       comment: 'Leave at the door',
+      deliveryAddress: 'Checkout street, 10',
     }),
   })
   assert.equal(checkout.response.status, 200)
   assert.equal(checkout.body.order.subtotal, 48)
   assert.equal(checkout.body.order.discountAmount, 4.8)
-  assert.equal(checkout.body.order.deliveryFee, 5)
-  assert.equal(checkout.body.order.total, 48.2)
+  assert.equal(checkout.body.order.deliveryFee, 0)
+  assert.equal(checkout.body.order.total, 43.2)
   assert.equal(checkout.body.order.items.length, 1)
   assert.equal(checkout.body.order.items[0].quantity, 4)
   assert.equal(checkout.body.order.comment, 'Leave at the door')
+  assert.equal(checkout.body.order.deliveryAddress, 'Checkout street, 10')
+  assert.equal(checkout.body.order.deliveryPriceConfirmed, false)
   assert.equal(checkout.body.cart.items.length, 0)
 
   const updatedProductCity = await prisma.productCity.findUniqueOrThrow({ where: { id: productCity.id } })
