@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { Markup, Telegraf } from 'telegraf'
 
 const token = process.env.TELEGRAM_BOT_TOKEN
-const webAppUrl = process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? 'https://narcos-shop.onrender.com'
+const webAppUrl = process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? 'https://telegram-shop-378j.onrender.com'
 
 if (!token) {
   console.warn('TELEGRAM_BOT_TOKEN is not set. Bot worker will stay idle until the token is provided.')
@@ -22,17 +22,17 @@ if (!token) {
 
   bot.start(async (context) => {
     await context.reply(
-      'Добро пожаловать в NARCOS. Откройте Web App, чтобы выбрать город и начать покупки.',
+      'Добро пожаловать в Telegram Shop. Откройте Web App, чтобы выбрать город и начать покупки.',
       Markup.inlineKeyboard([
-        [Markup.button.webApp('🛍 Открыть NARCOS', webAppUrl)],
+        [Markup.button.webApp('🛍 Открыть Telegram Shop', webAppUrl)],
       ]),
     )
   })
 
   bot.launch().then(() => {
-    console.log('NARCOS shop bot started')
+    console.log('Telegram Shop bot started')
   }).catch((error) => {
-    console.error('NARCOS shop bot failed to start:', error)
+    console.error('Telegram Shop bot failed to start:', error)
     process.exit(1)
   })
 
