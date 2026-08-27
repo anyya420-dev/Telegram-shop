@@ -110,12 +110,28 @@ function clearAdminCookie(response: Response) {
   })
 }
 
+// Permission keys for granular access control
+export const ALL_PERMISSIONS = [
+  'orders', 'products', 'categories', 'cities', 'users', 'balance',
+  'payments', 'deposits', 'casino', 'pickup', 'delivery', 'statistics',
+  'settings', 'bots', 'operators',
+] as const
+
+export type PermissionKey = (typeof ALL_PERMISSIONS)[number]
+
 type AdminContext = {
   id: number
   sessionId: number
   accountId: number
   role: string
   username: string
+  permissions: PermissionKey[]
+}
+
+function hasPermission(admin: AdminContext, key: PermissionKey) {
+  // Owner and admin have all permissions; operators only have what's granted
+  if (admin.role === 'owner' || admin.role === 'admin') return true
+  return admin.permissions.includes(key)
 }
 
 function getTrimmedString(value: unknown) {
@@ -286,12 +302,23 @@ async function getAdminUser(request: Request, response: Response, options?: { re
     return null
   }
 
+  function parsePermissions(raw: string | undefined | null): PermissionKey[] {
+    try {
+      const parsed = JSON.parse(raw ?? '[]')
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter((p): p is PermissionKey => (ALL_PERMISSIONS as readonly string[]).includes(p))
+    } catch {
+      return []
+    }
+  }
+
   const admin = {
     id: adminAccount.id,
     sessionId: session.id,
     accountId: adminAccount.id,
     role: adminAccount.role,
     username: adminAccount.username,
+    permissions: parsePermissions((adminAccount as { permissions?: string | null }).permissions),
   } satisfies AdminContext
 
   if (options?.requireOwner && !isOwner(admin)) {
@@ -414,16 +441,25 @@ router.post('/auth/change-password', authRateLimiter, async (request, response) 
 function sanitizeAdminAccount(account: {
   id: number
   username: string
+  telegramId?: string | null
   role: string
+  permissions?: string | null
   isActive: boolean
   deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }) {
+  let parsedPermissions: string[] = []
+  try {
+    const p = JSON.parse(account.permissions ?? '[]')
+    if (Array.isArray(p)) parsedPermissions = p.filter((x): x is string => typeof x === 'string')
+  } catch { /* empty */ }
   return {
     id: account.id,
     username: account.username,
+    telegramId: account.telegramId ?? null,
     role: account.role,
+    permissions: parsedPermissions,
     isActive: account.isActive,
     deletedAt: account.deletedAt,
     createdAt: account.createdAt,
@@ -454,6 +490,20 @@ router.post('/administrators', authRateLimiter, async (request, response) => {
     return
   }
 
+  const telegramIdInput = getTrimmedString(request.body.telegramId) || null
+  const roleInput = getTrimmedString(request.body.role)
+  const role = ['admin', 'operator'].includes(roleInput) ? roleInput : 'admin'
+
+  // Validate and normalize permissions
+  const permissionsInput: PermissionKey[] = []
+  if (Array.isArray(request.body.permissions)) {
+    for (const p of request.body.permissions) {
+      if (typeof p === 'string' && (ALL_PERMISSIONS as readonly string[]).includes(p)) {
+        permissionsInput.push(p as PermissionKey)
+      }
+    }
+  }
+
   const existing = await prisma.adminAccount.findUnique({ where: { username } })
   if (existing && !existing.deletedAt) {
     sendError(response, 409, 'admin_exists', 'Administrator username already exists')
@@ -468,7 +518,9 @@ router.post('/administrators', authRateLimiter, async (request, response) => {
       data: {
         deletedAt: null,
         isActive: true,
-        role: 'admin',
+        role,
+        telegramId: telegramIdInput,
+        permissions: JSON.stringify(permissionsInput),
       },
     })
     await rotateAdminAccountPassword(refreshed.id, password)
@@ -477,7 +529,9 @@ router.post('/administrators', authRateLimiter, async (request, response) => {
     const created = await prisma.adminAccount.create({
       data: {
         username,
-        role: 'admin',
+        role,
+        telegramId: telegramIdInput,
+        permissions: JSON.stringify(permissionsInput),
         passwordHash: '',
         passwordSalt: '',
         passwordAlgo: 'scrypt',
@@ -516,7 +570,7 @@ router.patch('/administrators/:id', authRateLimiter, async (request, response) =
 
   const usernameInput = getOptionalTrimmedString(request.body.username)
   const isActive = typeof request.body.isActive === 'boolean' ? request.body.isActive : undefined
-  const data: { username?: string; isActive?: boolean } = {}
+  const data: { username?: string; isActive?: boolean; permissions?: string; telegramId?: string | null } = {}
   if (usernameInput !== undefined && usernameInput !== null) {
     const normalized = usernameInput.toLowerCase()
     if (!/^[a-z0-9_]{3,40}$/.test(normalized)) {
@@ -526,6 +580,17 @@ router.patch('/administrators/:id', authRateLimiter, async (request, response) =
     data.username = normalized
   }
   if (isActive !== undefined) data.isActive = isActive
+  if (Array.isArray(request.body.permissions)) {
+    const validPerms = request.body.permissions.filter(
+      (p: unknown): p is PermissionKey => typeof p === 'string' && (ALL_PERMISSIONS as readonly string[]).includes(p)
+    )
+    data.permissions = JSON.stringify(validPerms)
+  }
+  if (typeof request.body.telegramId === 'string') {
+    data.telegramId = request.body.telegramId.trim() || null
+  } else if (request.body.telegramId === null) {
+    data.telegramId = null
+  }
 
   const updated = await prisma.adminAccount.update({
     where: { id: accountId },
@@ -1865,21 +1930,91 @@ router.get('/stats', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const [totalOrders, pendingOrders, totalUsers, totalRevenue] = await Promise.all([
-    prisma.order.count(),
-    prisma.order.count({ where: { status: 'pending' } }),
-    prisma.user.count(),
-    prisma.order.aggregate({
-      _sum: { total: true },
-      where: { status: { notIn: ['cancelled'] } },
-    }),
-  ])
+  // Period filter: today | week | month | all (default: all)
+  const period = typeof request.query.period === 'string' ? request.query.period : 'all'
+  const now = new Date()
+  let periodStart: Date | undefined
+  if (period === 'today') {
+    periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  } else if (period === 'week') {
+    periodStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  } else if (period === 'month') {
+    periodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  }
+  const periodFilter = periodStart ? { gte: periodStart } : undefined
+  const orderWhere = { ...(periodFilter ? { createdAt: periodFilter } : {}) }
+  const paidOrderWhere = { ...orderWhere, paymentStatus: 'paid' }
+  const cancelledOrderWhere = { ...orderWhere, status: 'cancelled' }
 
-  response.json({
+  const [
     totalOrders,
     pendingOrders,
+    paidOrders,
+    cancelledOrders,
     totalUsers,
-    totalRevenue: totalRevenue._sum.total ?? 0,
+    newUsers,
+    revenueResult,
+    depositStats,
+    casinoBetStats,
+    casinoWinStats,
+    discountStats,
+    virtualBalanceResult,
+  ] = await Promise.all([
+    prisma.order.count({ where: orderWhere }),
+    prisma.order.count({ where: { ...orderWhere, status: 'pending' } }),
+    prisma.order.count({ where: paidOrderWhere }),
+    prisma.order.count({ where: cancelledOrderWhere }),
+    prisma.user.count(),
+    prisma.user.count({ where: periodFilter ? { createdAt: periodFilter } : {} }),
+    prisma.order.aggregate({
+      _sum: { total: true },
+      where: { ...paidOrderWhere },
+    }),
+    prisma.depositRequest.aggregate({
+      _sum: { creditedAmount: true, amountUsdt: true },
+      _count: { id: true },
+      where: { status: 'confirmed', ...(periodFilter ? { confirmedAt: periodFilter } : {}) },
+    }),
+    prisma.casinoRound.aggregate({
+      _sum: { betAmount: true },
+      _count: { id: true },
+      where: periodFilter ? { createdAt: periodFilter } : {},
+    }),
+    prisma.casinoRound.aggregate({
+      _sum: { payoutAmount: true },
+      where: { ...(periodFilter ? { createdAt: periodFilter } : {}), payoutAmount: { gt: 0 } },
+    }),
+    prisma.order.aggregate({
+      _sum: { discountAmount: true },
+      where: { ...orderWhere, discountAmount: { gt: 0 } },
+    }),
+    prisma.balance.aggregate({ _sum: { amount: true } }),
+  ])
+
+  const totalRevenue = revenueResult._sum.total ?? 0
+  const depositCredited = depositStats._sum.creditedAmount ?? 0
+  const depositUSDT = depositStats._sum.amountUsdt ?? 0
+  const depositCommission = depositUSDT - depositCredited
+  const depositCount = depositStats._count.id
+
+  response.json({
+    period,
+    totalOrders,
+    pendingOrders,
+    paidOrders,
+    cancelledOrders,
+    totalUsers,
+    newUsers,
+    totalRevenue,
+    depositCount,
+    depositUSDT,
+    depositCredited,
+    depositCommission,
+    casinoBetCount: casinoBetStats._count.id,
+    casinoBetTotal: casinoBetStats._sum.betAmount ?? 0,
+    casinoWinTotal: casinoWinStats._sum.payoutAmount ?? 0,
+    discountTotal: discountStats._sum.discountAmount ?? 0,
+    virtualBalance: virtualBalanceResult._sum.amount ?? 0,
   })
 })
 

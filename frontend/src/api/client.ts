@@ -6,6 +6,7 @@ import type {
   AdminOrder,
   AdminProduct,
   AdminStats,
+  AdminTelegramBot,
   Balance,
   CasinoState,
   BootstrapResponse,
@@ -257,10 +258,10 @@ export const api = {
   getAdminAdministrators() {
     return adminRequest<{ administrators: Administrator[] }>('/admin/administrators')
   },
-  createAdministrator(data: { username?: string }) {
+  createAdministrator(data: { username?: string; telegramId?: string; role?: string; permissions?: string[] }) {
     return adminRequest<{ administrator: Administrator; generatedPassword: string }>('/admin/administrators', { method: 'POST', body: JSON.stringify(data) })
   },
-  updateAdministrator(id: number, data: { username?: string; isActive?: boolean }) {
+  updateAdministrator(id: number, data: { username?: string; isActive?: boolean; permissions?: string[]; telegramId?: string | null }) {
     return adminRequest<{ administrator: Administrator }>(`/admin/administrators/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
   resetAdministratorPassword(id: number) {
@@ -275,8 +276,9 @@ export const api = {
   updateAdminSettings(data: { shopName?: string; depositCommissionPct?: number }) {
     return adminRequest<{ shopName: string; depositCommissionPct: number }>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
   },
-  getAdminStats() {
-    return adminRequest<AdminStats>('/admin/stats')
+  getAdminStats(period?: 'today' | 'week' | 'month' | 'all') {
+    const params = period ? `?period=${period}` : ''
+    return adminRequest<AdminStats>(`/admin/stats${params}`)
   },
   getAdminOrders(page = 1, status?: string) {
     const params = new URLSearchParams({ page: String(page) })
@@ -468,5 +470,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ note }),
     })
+  },
+  // Bots
+  getAdminBots() {
+    return adminRequest<{ bots: AdminTelegramBot[] }>('/admin/bots')
+  },
+  createAdminBot(token: string) {
+    return adminRequest<{ bot: AdminTelegramBot }>('/admin/bots', { method: 'POST', body: JSON.stringify({ token }) })
+  },
+  updateAdminBot(id: number, data: { webAppUrl?: string; menuText?: string }) {
+    return adminRequest<{ bot: AdminTelegramBot }>(`/admin/bots/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+  toggleAdminBot(id: number) {
+    return adminRequest<{ bot: AdminTelegramBot }>(`/admin/bots/${id}/toggle`, { method: 'PATCH' })
+  },
+  deleteAdminBot(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/bots/${id}`, { method: 'DELETE' })
   },
 }

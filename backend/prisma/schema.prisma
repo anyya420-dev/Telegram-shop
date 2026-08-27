@@ -560,7 +560,9 @@ model AdminSession {
 model AdminAccount {
   id           Int      @id @default(autoincrement())
   username     String   @unique
-  role         String   @default("admin")
+  telegramId   String?  @unique @map("telegram_id")
+  role         String   @default("admin") // owner | admin | operator
+  permissions  String   @default("[]") @map("permissions") // JSON array of permission keys
   passwordHash String   @map("password_hash")
   passwordSalt String   @map("password_salt")
   passwordAlgo String   @default("scrypt") @map("password_algo")

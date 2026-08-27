@@ -340,18 +340,46 @@ export type Discount = {
 }
 
 export type AdminStats = {
+  period: string
   totalOrders: number
   pendingOrders: number
+  paidOrders: number
+  cancelledOrders: number
   totalUsers: number
+  newUsers: number
   totalRevenue: number
+  depositCount: number
+  depositUSDT: number
+  depositCredited: number
+  depositCommission: number
+  casinoBetCount: number
+  casinoBetTotal: number
+  casinoWinTotal: number
+  discountTotal: number
+  virtualBalance: number
 }
 
 export type Administrator = {
   id: number
   username: string
+  telegramId: string | null
   role: string
+  permissions: string[]
   isActive: boolean
   deletedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AdminTelegramBot = {
+  id: number
+  botId: string
+  username: string
+  firstName: string
+  isActive: boolean
+  webAppUrl: string | null
+  menuText: string | null
+  maskedToken: string
   createdAt: string
   updatedAt: string
 }
