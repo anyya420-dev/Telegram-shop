@@ -82,10 +82,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return i18n.t(key)
   }
 
-  function setLanguage(lang: Language) {
-    void i18n.changeLanguage(lang)
-  }
-
   async function reloadCities() {
     try {
       setCitiesLoading(true)
@@ -178,7 +174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     void bootstrap()
-  }, [])  // no dependency on setLanguage needed
+  }, [])
 
   async function selectCity(cityId: number) {
     if (!user) {
