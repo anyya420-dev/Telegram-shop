@@ -176,6 +176,14 @@ export function createApp() {
     response.json({ status: 'ok', message: 'Backend is running' })
   })
 
+  // Global error handler — prevents stack traces leaking in production
+  app.use((err: unknown, _request: import('express').Request, response: import('express').Response, _next: import('express').NextFunction) => {
+    const isProd = process.env.NODE_ENV === 'production'
+    const message = err instanceof Error ? err.message : 'Internal server error'
+    if (!isProd) console.error('[unhandled error]', err)
+    response.status(500).json({ code: 'internal_error', message: isProd ? 'Internal server error' : message })
+  })
+
   return app
 }
 

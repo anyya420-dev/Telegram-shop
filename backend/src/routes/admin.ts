@@ -3398,28 +3398,32 @@ router.post('/deposits/:id/confirm', authRateLimiter, async (request, response) 
     return
   }
 
-  const deposit = await prisma.depositRequest.findUnique({ where: { id: depositId } })
-  if (!deposit) {
+  const depositCheck = await prisma.depositRequest.findUnique({ where: { id: depositId } })
+  if (!depositCheck) {
     sendError(response, 404, 'not_found', 'Deposit request not found')
     return
   }
 
-  if (deposit.status !== 'pending') {
+  if (depositCheck.status !== 'pending') {
     sendError(response, 400, 'already_processed', 'This deposit has already been processed')
     return
   }
 
-  const creditedAmount = deposit.creditedAmount ?? deposit.amountUsdt
-
   await prisma.$transaction(async (tx) => {
-    await tx.depositRequest.update({
-      where: { id: depositId },
+    // Atomic: only update if still pending — prevents race condition double-credit
+    const updateResult = await tx.depositRequest.updateMany({
+      where: { id: depositId, status: 'pending' },
       data: {
         status: 'confirmed',
         confirmedAt: new Date(),
         adminNote: typeof request.body.note === 'string' ? request.body.note.trim() || null : null,
       },
     })
+    if (updateResult.count !== 1) {
+      throw Object.assign(new Error('Deposit already processed'), { status: 400, code: 'already_processed' })
+    }
+    const deposit = await tx.depositRequest.findUniqueOrThrow({ where: { id: depositId } })
+    const creditedAmount = deposit.creditedAmount ?? deposit.amountUsdt
 
     const balance = await tx.balance.upsert({
       where: { userId: deposit.userId },
