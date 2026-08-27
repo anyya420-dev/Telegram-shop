@@ -12,7 +12,7 @@ async function getOrCreateBalance(userId: number) {
       transactions: {
         where: { type: { notIn: ['casino_win', 'casino_loss', 'casino_migration_applied'] } },
         orderBy: { createdAt: 'desc' },
-        take: 30,
+        take: 50,
       },
     },
   })

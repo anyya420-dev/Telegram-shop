@@ -184,3 +184,40 @@
   background: var(--accent-glow);
   color: var(--accent);
 }
+
+.balanceCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--surface, rgba(255,255,255,0.05));
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.balanceRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.balanceAmount {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.topupBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: var(--accent, #7c6dfa);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}

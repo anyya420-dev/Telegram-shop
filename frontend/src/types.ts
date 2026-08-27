@@ -215,6 +215,10 @@ export type BalanceTransaction = {
   id: number
   type: string
   amount: number
+  status: string
+  source: string | null
+  adminId: number | null
+  referenceId: number | null
   comment: string | null
   createdAt: string
 }

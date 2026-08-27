@@ -1074,8 +1074,11 @@ router.patch('/orders/:id/refund', authRateLimiter, async (request, response) =>
       await tx.balanceTransaction.create({
         data: {
           balanceId: balance.id,
-          type: 'refund',
+          type: 'REFUND',
           amount: order.total,
+          status: 'completed',
+          source: 'order',
+          referenceId: orderId,
           comment: `Refund for order #${orderId}`,
         },
       })
@@ -2682,6 +2685,61 @@ router.post('/casino/credits/adjust', authRateLimiter, async (request, response)
   }
 })
 
+// POST /api/admin/balance/adjust - Admin USD balance adjustment
+router.post('/balance/adjust', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const userId = parsePositiveInt(request.body.userId)
+  const amount = Number(request.body.amount)
+  const reason = getTrimmedString(request.body.reason)
+  if (!userId || !Number.isFinite(amount) || amount === 0 || !reason) {
+    sendError(response, 400, 'invalid_adjustment', 'userId, amount, and reason are required')
+    return
+  }
+
+  try {
+    const balance = await prisma.$transaction(async (tx) => {
+      const current = await tx.balance.upsert({
+        where: { userId },
+        create: { userId, amount: 0 },
+        update: {},
+      })
+      if (amount < 0 && current.amount + amount < 0) {
+        throw new Error('Balance cannot become negative')
+      }
+      const updated = await tx.balance.update({
+        where: { id: current.id },
+        data: { amount: { increment: amount } },
+      })
+      await tx.balanceTransaction.create({
+        data: {
+          balanceId: current.id,
+          type: 'ADMIN_ADJUSTMENT',
+          amount,
+          status: 'completed',
+          source: 'admin',
+          adminId: admin.id,
+          comment: reason,
+        },
+      })
+      await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: 'balance_adjusted',
+          entity: 'balance',
+          entityId: current.id,
+          meta: JSON.stringify({ userId, previousValue: current.amount, newValue: updated.amount, reason }),
+        },
+      })
+      return updated
+    })
+    response.json({ balance })
+  } catch (error) {
+    sendError(response, 400, 'invalid_adjustment', error instanceof Error ? error.message : 'Invalid adjustment')
+  }
+})
+
 router.get('/operators', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
@@ -3242,8 +3300,12 @@ router.post('/deposits/:id/confirm', authRateLimiter, async (request, response) 
     await tx.balanceTransaction.create({
       data: {
         balanceId: balance.id,
-        type: 'topup',
+        type: 'DEPOSIT',
         amount: creditedAmount,
+        status: 'completed',
+        source: 'deposit_request',
+        referenceId: depositId,
+        adminId: admin.id,
         comment: `USDT deposit (${deposit.network}) confirmed by admin`,
       },
     })

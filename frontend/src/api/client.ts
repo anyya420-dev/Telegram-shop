@@ -418,6 +418,9 @@ export const api = {
   adjustAdminCasinoCredits(data: { userId: number; amount: number; reason: string }) {
     return adminRequest<{ balance: unknown }>('/admin/casino/credits/adjust', { method: 'POST', body: JSON.stringify(data) })
   },
+  adjustAdminBalance(data: { userId: number; amount: number; reason: string }) {
+    return adminRequest<{ balance: unknown }>('/admin/balance/adjust', { method: 'POST', body: JSON.stringify(data) })
+  },
   getAdminCategories() {
     return adminRequest<{ categories: AdminCategory[] }>('/admin/categories')
   },

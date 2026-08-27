@@ -430,12 +430,16 @@ model CasinoCreditTransaction {
 }
 
 model BalanceTransaction {
-  id        Int      @id @default(autoincrement())
-  balanceId Int      @map("balance_id")
-  type      String   // topup | spend | refund | casino_win | casino_loss
-  amount    Float
-  comment   String?
-  createdAt DateTime @default(now()) @map("created_at")
+  id          Int      @id @default(autoincrement())
+  balanceId   Int      @map("balance_id")
+  type        String   // DEPOSIT | CASINO_BET | CASINO_WIN | ORDER_PAYMENT | REFUND | DISCOUNT | ADMIN_ADJUSTMENT | topup | spend | refund | casino_win | casino_loss
+  amount      Float
+  status      String   @default("completed") // completed | pending | failed
+  source      String?  // deposit_request | order | casino | admin
+  adminId     Int?     @map("admin_id")
+  referenceId Int?     @map("reference_id")
+  comment     String?
+  createdAt   DateTime @default(now()) @map("created_at")
 
   balance Balance @relation(fields: [balanceId], references: [id], onDelete: Cascade)
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertCircle, ChevronRight, Coins, Gift, Heart, Languages, MapPin, RefreshCw, ShieldCheck, ShoppingBag, UserRound } from 'lucide-react'
+import { AlertCircle, ChevronRight, Coins, Gift, Heart, Languages, MapPin, Plus, RefreshCw, ShieldCheck, ShoppingBag, UserRound, Wallet } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { api } from '../api/client'
 import { getErrorMessage } from '../lib/errors'
@@ -12,7 +12,7 @@ import { getLocalizedCityName } from '../lib/localized'
 import type { Language, UserProfile } from '../types'
 
 export default function ProfilePage() {
-  const { user: bootstrapUser, loading: bootstrapLoading, telegramEnvironment, openCityPicker, updateLanguagePreference } = useApp()
+  const { user: bootstrapUser, loading: bootstrapLoading, telegramEnvironment, openCityPicker, updateLanguagePreference, balanceAmount } = useApp()
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -139,6 +139,20 @@ export default function ProfilePage() {
         <div className={styles.userInfo}>
           <p className={styles.displayName}>{displayName}</p>
           {profile.username ? <p className={styles.username}>@{profile.username}</p> : null}
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>{t('profile.balance', 'Баланс')}</h2>
+        <div className={styles.balanceCard}>
+          <div className={styles.balanceRow}>
+            <Wallet size={18} strokeWidth={1.7} />
+            <span className={styles.balanceAmount}>${balanceAmount.toFixed(2)}</span>
+          </div>
+          <button className={styles.topupBtn} onClick={() => navigate('/balance')} type="button">
+            <Plus size={14} strokeWidth={2} />
+            {t('balance.topup', 'Пополнить')}
+          </button>
         </div>
       </div>
 
