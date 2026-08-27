@@ -28,6 +28,9 @@ import type {
   AdminPaymentRecord,
   Administrator,
   AdminPickupStorage,
+  DepositRequest,
+  DepositWallet,
+  AdminDepositRequest,
 } from '../types'
 
 function normalizeApiBase(value: string) {
@@ -267,10 +270,10 @@ export const api = {
     return adminRequest<{ ok: boolean }>(`/admin/administrators/${id}`, { method: 'DELETE' })
   },
   getAdminSettings() {
-    return adminRequest<{ shopName: string }>('/admin/settings')
+    return adminRequest<{ shopName: string; depositCommissionPct: number }>('/admin/settings')
   },
-  updateAdminSettings(data: { shopName: string }) {
-    return adminRequest<{ shopName: string }>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
+  updateAdminSettings(data: { shopName?: string; depositCommissionPct?: number }) {
+    return adminRequest<{ shopName: string; depositCommissionPct: number }>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
   },
   getAdminStats() {
     return adminRequest<AdminStats>('/admin/stats')
@@ -423,5 +426,44 @@ export const api = {
   },
   updateAdminCategory(id: number, data: { name?: string; nameEn?: string; isActive?: boolean; sortOrder?: number }) {
     return adminRequest<{ category: AdminCategory }>(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+  },
+
+  // ── Deposits ──────────────────────────────────────────────────────────────
+  getDepositWallets() {
+    return publicRequest<{ wallets: DepositWallet[]; commissionPct: number }>('/deposits/wallets')
+  },
+  getMyDeposits() {
+    return publicRequest<{ deposits: DepositRequest[]; commissionPct: number }>('/deposits')
+  },
+  createDepositRequest(walletId: number, amountUsdt: number) {
+    return publicRequest<{ deposit: DepositRequest }>('/deposits', {
+      method: 'POST',
+      body: JSON.stringify({ walletId, amountUsdt }),
+    })
+  },
+  submitDepositTxHash(depositId: number, txHash: string) {
+    return publicRequest<{ deposit: DepositRequest }>(`/deposits/${depositId}/txhash`, {
+      method: 'PATCH',
+      body: JSON.stringify({ txHash }),
+    })
+  },
+
+  // ── Admin Deposits ────────────────────────────────────────────────────────
+  getAdminDeposits(page = 1, status?: string) {
+    const params = new URLSearchParams({ page: String(page) })
+    if (status) params.set('status', status)
+    return adminRequest<{ deposits: AdminDepositRequest[]; total: number; page: number; pages: number }>(`/admin/deposits?${params}`)
+  },
+  confirmAdminDeposit(id: number, note?: string) {
+    return adminRequest<{ deposit: AdminDepositRequest }>(`/admin/deposits/${id}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    })
+  },
+  rejectAdminDeposit(id: number, note?: string) {
+    return adminRequest<{ deposit: AdminDepositRequest }>(`/admin/deposits/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    })
   },
 }

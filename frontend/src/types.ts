@@ -478,3 +478,39 @@ export type AdminPaymentRecord = Payment & {
     }
   }
 }
+
+export type DepositWallet = {
+  id: number
+  title: string
+  asset: string | null
+  network: string | null
+  walletAddress: string | null
+  displayName: string | null
+  instructions: string | null
+  isTonConnectEnabled: boolean
+}
+
+export type DepositRequest = {
+  id: number
+  amountUsdt: number
+  network: string
+  asset: string
+  walletAddress: string
+  txHash: string | null
+  status: 'pending' | 'confirmed' | 'rejected'
+  creditedAmount: number | null
+  commissionPct: number | null
+  adminNote: string | null
+  confirmedAt: string | null
+  createdAt: string
+}
+
+export type AdminDepositRequest = DepositRequest & {
+  userId: number
+  user: {
+    id: number
+    telegramId: string
+    firstName: string
+    username: string | null
+  }
+}

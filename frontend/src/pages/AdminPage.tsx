@@ -5,10 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatCurrency } from '../lib/format';
 import i18n from '../lib/i18n';
-import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminOrder, AdminPaymentRecord, AdminPickupStorage, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
+import type { AdminCasinoConfig, AdminCategory, AdminCity, AdminDeliveryOption, Administrator, AdminDepositRequest, AdminOrder, AdminPaymentRecord, AdminPickupStorage, AdminProduct, AdminStats, Discount, Language, PaymentMethod, SupportTicket, UserProfile } from '../types';
 import styles from './AdminPage.module.css';
 
-type Tab = 'stats' | 'orders' | 'products' | 'storage' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino';
+type Tab = 'stats' | 'orders' | 'products' | 'storage' | 'users' | 'cities' | 'categories' | 'discounts' | 'delivery' | 'support' | 'audit' | 'payments' | 'casino' | 'deposits';
 
 type ProductCityDraft = {
   cityId: string;
@@ -323,11 +323,16 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
   const [newAdminUsername, setNewAdminUsername] = useState('');
   const [generatedAdminPassword, setGeneratedAdminPassword] = useState<string | null>(null);
   const [shopName, setShopName] = useState('NARCOS');
+  const [depositCommissionPct, setDepositCommissionPct] = useState(0);
+  const [commissionInput, setCommissionInput] = useState('0');
+  const [deposits, setDeposits] = useState<AdminDepositRequest[]>([]);
+  const [depositsLoading, setDepositsLoading] = useState(false);
+  const [depositNote, setDepositNote] = useState<Record<number, string>>({});
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
   const tabs = useMemo(
-    () => ['stats', 'orders', 'products', 'storage', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino'] as Tab[],
+    () => ['stats', 'orders', 'products', 'storage', 'users', 'cities', 'categories', 'discounts', 'delivery', 'support', 'audit', 'payments', 'casino', 'deposits'] as Tab[],
     [],
   );
 
@@ -463,6 +468,14 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
         setPaymentRecords(paymentsResponse.payments);
       } else if (tabName === 'casino') {
         setCasinoConfig(await api.getAdminCasinoConfig());
+      } else if (tabName === 'deposits') {
+        setDepositsLoading(true);
+        try {
+          const response = await api.getAdminDeposits();
+          setDeposits(response.deposits);
+        } finally {
+          setDepositsLoading(false);
+        }
       }
 
       const status = await api.adminStatus();
@@ -474,6 +487,9 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
         ]);
         setAdministrators(adminsResponse.administrators);
         setShopName(settingsResponse.shopName);
+        const pct = settingsResponse.depositCommissionPct ?? 0;
+        setDepositCommissionPct(pct);
+        setCommissionInput(String(pct));
       }
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to load admin data'));
@@ -1152,6 +1168,48 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
     }
   }
 
+  async function handleSaveCommission() {
+    if (adminRole !== 'owner') return;
+    setError(null);
+    const pct = Number(commissionInput);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      setError('Commission must be between 0 and 100');
+      return;
+    }
+    try {
+      const response = await api.updateAdminSettings({ depositCommissionPct: pct });
+      const newPct = response.depositCommissionPct ?? pct;
+      setDepositCommissionPct(newPct);
+      setCommissionInput(String(newPct));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update commission'));
+    }
+  }
+
+  async function handleConfirmDeposit(id: number) {
+    setError(null);
+    try {
+      await api.confirmAdminDeposit(id, depositNote[id]);
+      const response = await api.getAdminDeposits();
+      setDeposits(response.deposits);
+      setDepositNote((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to confirm deposit'));
+    }
+  }
+
+  async function handleRejectDeposit(id: number) {
+    setError(null);
+    try {
+      await api.rejectAdminDeposit(id, depositNote[id]);
+      const response = await api.getAdminDeposits();
+      setDeposits(response.deposits);
+      setDepositNote((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to reject deposit'));
+    }
+  }
+
   async function handleChangePassword(target: 'self' | 'owner') {
     if (!currentPassword.trim() || !newPassword.trim()) return;
     setError(null);
@@ -1719,6 +1777,21 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
                   />
                   <button className={styles.createBtn} onClick={() => void handleSaveShopName()} disabled={!shopName.trim()}>
                     Save shop name
+                  </button>
+                </div>
+                <div className={styles.formRow} style={{ marginTop: 8 }}>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="Deposit commission %"
+                    value={commissionInput}
+                    onChange={(event) => setCommissionInput(event.target.value)}
+                  />
+                  <button className={styles.createBtn} onClick={() => void handleSaveCommission()}>
+                    Save commission ({depositCommissionPct}%)
                   </button>
                 </div>
               </div>
@@ -2303,6 +2376,41 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
               Adjust credits
             </button>
           </div>
+        </div>
+      )}
+
+      {tab === 'deposits' && (
+        <div>
+          <h3 className={styles.formTitle}>Deposit Requests</h3>
+          {depositsLoading && <p className={styles.loading}>Loading...</p>}
+          {!depositsLoading && deposits.length === 0 && <p className={styles.loading}>No deposit requests.</p>}
+          {deposits.map((d) => (
+            <div key={d.id} className={styles.discountCard}>
+              <div className={styles.orderMeta}>
+                <strong>#{d.id}</strong> · User {d.userId} · {d.network} · ${Number(d.amountUsd).toFixed(2)} · Commission {d.commissionPct}%
+                → Credit ${Number(d.creditUsd).toFixed(2)}
+              </div>
+              <div className={styles.orderMeta}>TX: <code>{d.txHash ?? '—'}</code></div>
+              <div className={styles.orderMeta}>
+                Status: <span className={`${styles.refundTag} ${d.status === 'confirmed' ? styles.tagActive : d.status === 'rejected' ? styles.tagInactive : ''}`}>{d.status}</span>
+                &nbsp;· {new Date(d.createdAt).toLocaleString()}
+              </div>
+              {d.status === 'pending' && (
+                <div className={styles.replyRow}>
+                  <input
+                    className={styles.input}
+                    placeholder="Note (optional)"
+                    value={depositNote[d.id] ?? ''}
+                    onChange={(event) => setDepositNote((prev) => ({ ...prev, [d.id]: event.target.value }))}
+                    style={{ flex: 1 }}
+                  />
+                  <button className={styles.replyBtn} onClick={() => void handleConfirmDeposit(d.id)}>Confirm</button>
+                  <button className={styles.replyBtn} onClick={() => void handleRejectDeposit(d.id)}>Reject</button>
+                </div>
+              )}
+              {d.adminNote && <div className={styles.orderMeta}>Note: {d.adminNote}</div>}
+            </div>
+          ))}
         </div>
       )}
     </div>

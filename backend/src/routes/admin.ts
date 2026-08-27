@@ -1884,31 +1884,79 @@ router.get('/settings', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const shopNameSetting = await prisma.appSetting.findUnique({ where: { key: 'shop_name' } })
-  response.json({ shopName: shopNameSetting?.value || 'NARCOS' })
+  const [shopNameSetting, commissionSetting] = await Promise.all([
+    prisma.appSetting.findUnique({ where: { key: 'shop_name' } }),
+    prisma.appSetting.findUnique({ where: { key: 'deposit_commission_pct' } }),
+  ])
+  const commissionPct = commissionSetting ? Number(commissionSetting.value) : 0
+  response.json({
+    shopName: shopNameSetting?.value || 'NARCOS',
+    depositCommissionPct: Number.isFinite(commissionPct) ? commissionPct : 0,
+  })
 })
 
 router.patch('/settings', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const shopName = getTrimmedString(request.body.shopName)
-  if (!shopName) {
+  const shopName = request.body.shopName !== undefined ? getTrimmedString(request.body.shopName) : undefined
+  const depositCommissionPct = request.body.depositCommissionPct !== undefined ? Number(request.body.depositCommissionPct) : undefined
+
+  if (shopName === '') {
     sendError(response, 400, 'shop_name_required', 'Shop name is required')
     return
   }
-  if (shopName.length > 80) {
+
+  if (shopName !== undefined && shopName.length > 80) {
     sendError(response, 400, 'shop_name_too_long', 'Shop name must be 80 characters or fewer')
     return
   }
 
-  const setting = await prisma.appSetting.upsert({
-    where: { key: 'shop_name' },
-    create: { key: 'shop_name', value: shopName },
-    update: { value: shopName },
-  })
+  if (depositCommissionPct !== undefined && (!Number.isFinite(depositCommissionPct) || depositCommissionPct < 0 || depositCommissionPct > 100)) {
+    sendError(response, 400, 'invalid_commission', 'Commission must be between 0 and 100')
+    return
+  }
 
-  response.json({ shopName: setting.value })
+  const updates: Array<Promise<unknown>> = []
+
+  if (shopName !== undefined) {
+    updates.push(prisma.appSetting.upsert({
+      where: { key: 'shop_name' },
+      create: { key: 'shop_name', value: shopName },
+      update: { value: shopName },
+    }))
+  }
+
+  if (depositCommissionPct !== undefined) {
+    updates.push(prisma.appSetting.upsert({
+      where: { key: 'deposit_commission_pct' },
+      create: { key: 'deposit_commission_pct', value: String(depositCommissionPct) },
+      update: { value: String(depositCommissionPct) },
+    }))
+  }
+
+  await Promise.all(updates)
+
+  if (updates.length > 0) {
+    await prisma.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'settings_updated',
+        entity: 'app_setting',
+        meta: JSON.stringify({ shopName, depositCommissionPct }),
+      },
+    })
+  }
+
+  const [updatedShopName, updatedCommission] = await Promise.all([
+    prisma.appSetting.findUnique({ where: { key: 'shop_name' } }),
+    prisma.appSetting.findUnique({ where: { key: 'deposit_commission_pct' } }),
+  ])
+
+  response.json({
+    shopName: updatedShopName?.value || 'NARCOS',
+    depositCommissionPct: updatedCommission ? Number(updatedCommission.value) : 0,
+  })
 })
 
 // POST /api/admin/products - create a new product
@@ -3110,6 +3158,174 @@ router.delete('/bots/:id', authRateLimiter, async (request, response) => {
   })
 
   response.json({ ok: true })
+})
+
+// ──── Deposit Requests ────────────────────────────────────────────────────────
+
+// GET /api/admin/deposits
+router.get('/deposits', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const page = Math.max(1, Number(request.query.page) || 1)
+  const status = typeof request.query.status === 'string' ? request.query.status : undefined
+  const limit = 50
+
+  const where = status && ['pending', 'confirmed', 'rejected'].includes(status) ? { status } : {}
+
+  const [deposits, total] = await Promise.all([
+    prisma.depositRequest.findMany({
+      where,
+      include: {
+        user: { select: { id: true, telegramId: true, firstName: true, username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.depositRequest.count({ where }),
+  ])
+
+  response.json({
+    deposits,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+  })
+})
+
+// POST /api/admin/deposits/:id/confirm
+router.post('/deposits/:id/confirm', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const depositId = parsePositiveInt(request.params.id)
+  if (!depositId) {
+    sendError(response, 400, 'invalid_id', 'Invalid deposit id')
+    return
+  }
+
+  const deposit = await prisma.depositRequest.findUnique({ where: { id: depositId } })
+  if (!deposit) {
+    sendError(response, 404, 'not_found', 'Deposit request not found')
+    return
+  }
+
+  if (deposit.status !== 'pending') {
+    sendError(response, 400, 'already_processed', 'This deposit has already been processed')
+    return
+  }
+
+  const creditedAmount = deposit.creditedAmount ?? deposit.amountUsdt
+
+  await prisma.$transaction(async (tx) => {
+    await tx.depositRequest.update({
+      where: { id: depositId },
+      data: {
+        status: 'confirmed',
+        confirmedAt: new Date(),
+        adminNote: typeof request.body.note === 'string' ? request.body.note.trim() || null : null,
+      },
+    })
+
+    const balance = await tx.balance.upsert({
+      where: { userId: deposit.userId },
+      create: { userId: deposit.userId, amount: 0 },
+      update: {},
+    })
+
+    await tx.balance.update({
+      where: { id: balance.id },
+      data: { amount: { increment: creditedAmount } },
+    })
+
+    await tx.balanceTransaction.create({
+      data: {
+        balanceId: balance.id,
+        type: 'topup',
+        amount: creditedAmount,
+        comment: `USDT deposit (${deposit.network}) confirmed by admin`,
+      },
+    })
+
+    await tx.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'deposit_confirmed',
+        entity: 'deposit_request',
+        entityId: depositId,
+        meta: JSON.stringify({
+          userId: deposit.userId,
+          amountUsdt: deposit.amountUsdt,
+          creditedAmount,
+          network: deposit.network,
+          txHash: deposit.txHash,
+        }),
+      },
+    })
+  })
+
+  const updated = await prisma.depositRequest.findUniqueOrThrow({
+    where: { id: depositId },
+    include: { user: { select: { id: true, telegramId: true, firstName: true, username: true } } },
+  })
+
+  response.json({ deposit: updated })
+})
+
+// POST /api/admin/deposits/:id/reject
+router.post('/deposits/:id/reject', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const depositId = parsePositiveInt(request.params.id)
+  if (!depositId) {
+    sendError(response, 400, 'invalid_id', 'Invalid deposit id')
+    return
+  }
+
+  const deposit = await prisma.depositRequest.findUnique({ where: { id: depositId } })
+  if (!deposit) {
+    sendError(response, 404, 'not_found', 'Deposit request not found')
+    return
+  }
+
+  if (deposit.status !== 'pending') {
+    sendError(response, 400, 'already_processed', 'This deposit has already been processed')
+    return
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.depositRequest.update({
+      where: { id: depositId },
+      data: {
+        status: 'rejected',
+        adminNote: typeof request.body.note === 'string' ? request.body.note.trim() || null : null,
+      },
+    })
+
+    await tx.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: 'deposit_rejected',
+        entity: 'deposit_request',
+        entityId: depositId,
+        meta: JSON.stringify({
+          userId: deposit.userId,
+          amountUsdt: deposit.amountUsdt,
+          network: deposit.network,
+          txHash: deposit.txHash,
+        }),
+      },
+    })
+  })
+
+  const updated = await prisma.depositRequest.findUniqueOrThrow({
+    where: { id: depositId },
+    include: { user: { select: { id: true, telegramId: true, firstName: true, username: true } } },
+  })
+
+  response.json({ deposit: updated })
 })
 
 export default router

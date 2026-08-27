@@ -10,6 +10,7 @@ import catalogRouter from './routes/catalog.js'
 import categoriesRouter from './routes/categories.js'
 import citiesRouter from './routes/cities.js'
 import deliveryRouter from './routes/delivery.js'
+import depositsRouter from './routes/deposits.js'
 import discountsRouter from './routes/discounts.js'
 import ordersRouter from './routes/orders.js'
 import operatorsRouter from './routes/operators.js'
@@ -162,6 +163,7 @@ export function createApp() {
   app.use('/api/payments', paymentsRouter)
   app.use('/api/users', usersRouter)
   app.use('/api/balance', balanceRouter)
+  app.use('/api/deposits', depositsRouter)
   app.use('/api/casino', casinoRouter)
   app.use('/api/support', supportRouter)
   app.use('/api/discounts', discountsRouter)
