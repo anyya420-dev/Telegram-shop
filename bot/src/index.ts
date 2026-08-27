@@ -29,15 +29,6 @@ if (!token) {
     )
   })
 
-  bot.command('shop', async (context) => {
-    await context.reply(
-      'Откройте NARCOS через кнопку ниже.',
-      Markup.inlineKeyboard([
-        [Markup.button.webApp('🛍 NARCOS', webAppUrl)],
-      ]),
-    )
-  })
-
   bot.launch().then(() => {
     console.log('NARCOS shop bot started')
   }).catch((error) => {

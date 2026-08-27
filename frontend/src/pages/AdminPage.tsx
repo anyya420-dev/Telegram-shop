@@ -121,24 +121,24 @@ function parsePositiveInteger(value: string, label: string) {
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(label);
   }
-
-  function parsePositiveNumber(value: string, label: string) {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      throw new Error(label);
-    }
-    return Number(parsed.toFixed(3));
-  }
-
-  function normalizeUnitInput(value: string) {
-    const normalized = value.trim().toLowerCase();
-    if (['шт', 'шт.', 'pcs', 'pc', 'piece'].includes(normalized)) return 'шт';
-    if (['кг', 'kg'].includes(normalized)) return 'кг';
-    if (['г', 'g'].includes(normalized)) return 'г';
-    if (normalized === 'oz') return 'oz';
-    return '';
-  }
   return parsed;
+}
+
+function parsePositiveNumber(value: string, label: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(label);
+  }
+  return Number(parsed.toFixed(3));
+}
+
+function normalizeUnitInput(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (['шт', 'шт.', 'pcs', 'pc', 'piece'].includes(normalized)) return 'шт';
+  if (['кг', 'kg'].includes(normalized)) return 'кг';
+  if (['г', 'g'].includes(normalized)) return 'г';
+  if (normalized === 'oz') return 'oz';
+  return '';
 }
 
 function buildProductCityPayload(draft: ProductCityDraft) {
@@ -396,6 +396,29 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
       }
     })();
   }, [authenticated]);
+
+  useEffect(() => {
+    if (!products.length) return;
+    if (!newStorageProductId) {
+      setNewStorageProductId(String(products[0].id));
+    }
+  }, [products, newStorageProductId]);
+
+  useEffect(() => {
+    if (!products.length) return;
+    const selectedProduct = products.find((product) => String(product.id) === newStorageProductId) ?? products[0];
+    if (!selectedProduct) return;
+    if (selectedProduct.id !== Number(newStorageProductId)) {
+      setNewStorageProductId(String(selectedProduct.id));
+    }
+    const defaultCity = selectedProduct.productCities[0];
+    if (!defaultCity) return;
+    const hasCurrentCity = selectedProduct.productCities.some((entry) => String(entry.id) === newStorageProductCityId);
+    if (!newStorageProductCityId || !hasCurrentCity) {
+      setNewStorageProductCityId(String(defaultCity.id));
+      setNewStorageUnit((normalizeUnitInput(defaultCity.unit) || 'шт') as 'шт' | 'кг' | 'г' | 'oz');
+    }
+  }, [products, newStorageProductId, newStorageProductCityId]);
 
   async function loadTab(tabName: Tab) {
     setError(null);
@@ -721,10 +744,16 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
       const payload: Parameters<typeof api.updateProductCity>[1] = {};
       if (typeof edits.stock === 'string' && edits.stock !== '') payload.stock = parseNonNegativeNumber(edits.stock, 'Stock must be zero or greater');
       if (typeof edits.isAvailable === 'boolean') payload.isAvailable = edits.isAvailable;
-      if (typeof edits.minimumQuantity === 'string' && edits.minimumQuantity !== '') payload.minimumQuantity = parsePositiveInteger(edits.minimumQuantity, 'Minimum quantity must be a positive integer');
-      if (typeof edits.quantityStep === 'string' && edits.quantityStep !== '') payload.quantityStep = parsePositiveInteger(edits.quantityStep, 'Quantity step must be a positive integer');
-      if (typeof edits.maximumQuantity === 'string' && edits.maximumQuantity !== '') payload.maximumQuantity = parsePositiveInteger(edits.maximumQuantity, 'Maximum quantity must be a positive integer');
-      if (typeof edits.unit === 'string') payload.unit = edits.unit;
+      if (typeof edits.minimumQuantity === 'string' && edits.minimumQuantity !== '') payload.minimumQuantity = parsePositiveNumber(edits.minimumQuantity, 'Minimum quantity must be a positive number');
+      if (typeof edits.quantityStep === 'string' && edits.quantityStep !== '') payload.quantityStep = parsePositiveNumber(edits.quantityStep, 'Quantity step must be a positive number');
+      if (typeof edits.maximumQuantity === 'string' && edits.maximumQuantity !== '') payload.maximumQuantity = parsePositiveNumber(edits.maximumQuantity, 'Maximum quantity must be a positive number');
+      if (typeof edits.unit === 'string') {
+        const normalizedUnit = normalizeUnitInput(edits.unit);
+        if (!normalizedUnit) {
+          throw new Error('Unit must be one of: шт, кг, г, oz');
+        }
+        payload.unit = normalizedUnit;
+      }
       await api.updateProductCity(productCityId, payload);
       setEditingProductCity(null);
       await refreshProducts();
@@ -749,6 +778,83 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
       await refreshProducts();
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to add city availability'));
+    }
+  }
+
+  async function handleCreatePickupStorage() {
+    if (creatingStorage) return;
+    setError(null);
+    setCreatingStorage(true);
+    try {
+      const productId = parsePositiveInteger(newStorageProductId, 'Select a product');
+      const productCityId = parsePositiveInteger(newStorageProductCityId, 'Select product city');
+      const quantity = parsePositiveNumber(newStorageQuantity, 'Quantity must be a positive number');
+      const address = newStorageAddress.trim();
+      if (!address) {
+        throw new Error('Pickup address is required');
+      }
+
+      const response = await api.createAdminPickupStorage({
+        productId,
+        productCityId,
+        variantKey: newStorageVariantKey.trim() || null,
+        quantity,
+        unit: newStorageUnit,
+        photoUrl: newStoragePhotoUrl.trim() || null,
+        address,
+        instructions: newStorageInstructions.trim() || null,
+        isActive: newStorageActive,
+      });
+      setPickupStorages((current) => [response.storage, ...current.filter((item) => item.id !== response.storage.id)]);
+      setNewStorageVariantKey('');
+      setNewStorageQuantity('');
+      setNewStoragePhotoUrl('');
+      setNewStorageAddress('');
+      setNewStorageInstructions('');
+      setNewStorageActive(true);
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to create pickup storage'));
+    } finally {
+      setCreatingStorage(false);
+    }
+  }
+
+  async function handleSavePickupStorage(storageId: number) {
+    const edits = storageEdits[storageId];
+    if (!edits) return;
+    setError(null);
+    try {
+      const payload: Parameters<typeof api.updateAdminPickupStorage>[1] = {};
+      if (typeof edits.productId === 'string' && edits.productId !== '') payload.productId = parsePositiveInteger(edits.productId, 'Invalid product');
+      if (typeof edits.productCityId === 'string' && edits.productCityId !== '') payload.productCityId = parsePositiveInteger(edits.productCityId, 'Invalid product city');
+      if (typeof edits.variantKey === 'string') payload.variantKey = edits.variantKey.trim() || null;
+      if (typeof edits.quantity === 'string' && edits.quantity !== '') payload.quantity = parsePositiveNumber(edits.quantity, 'Quantity must be a positive number');
+      if (typeof edits.unit === 'string') {
+        const normalizedUnit = normalizeUnitInput(edits.unit);
+        if (!normalizedUnit) {
+          throw new Error('Unit must be one of: шт, кг, г, oz');
+        }
+        payload.unit = normalizedUnit;
+      }
+      if (typeof edits.photoUrl === 'string') payload.photoUrl = edits.photoUrl.trim() || null;
+      if (typeof edits.address === 'string') {
+        const address = edits.address.trim();
+        if (!address) throw new Error('Pickup address is required');
+        payload.address = address;
+      }
+      if (typeof edits.instructions === 'string') payload.instructions = edits.instructions.trim() || null;
+      if (typeof edits.isActive === 'boolean') payload.isActive = edits.isActive;
+
+      const response = await api.updateAdminPickupStorage(storageId, payload);
+      setPickupStorages((current) => current.map((storage) => (storage.id === storageId ? response.storage : storage)));
+      setEditingStorage(null);
+      setStorageEdits((current) => {
+        const next = { ...current };
+        delete next[storageId];
+        return next;
+      });
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to update pickup storage'));
     }
   }
 
@@ -1288,7 +1394,9 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
                             <input className={styles.inputSmall} type="number" placeholder="Min" value={entry.minimumQuantity} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], minimumQuantity: event.target.value } }))} />
                             <input className={styles.inputSmall} type="number" placeholder="Step" value={entry.quantityStep} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], quantityStep: event.target.value } }))} />
                             <input className={styles.inputSmall} type="number" placeholder="Max" value={entry.maximumQuantity} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], maximumQuantity: event.target.value } }))} />
-                            <input className={styles.inputSmall} placeholder="Unit" value={entry.unit} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], unit: event.target.value } }))} />
+                            <select className={styles.select} value={entry.unit} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], unit: event.target.value } }))}>
+                              {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                            </select>
                             <label className={styles.checkLabel}>
                               <input type="checkbox" checked={entry.isAvailable} onChange={(event) => setNewProdCities((current) => ({ ...current, [city.id]: { ...current[city.id], isAvailable: event.target.checked } }))} />
                               {t('admin.available', { defaultValue: 'Available' })}
@@ -1386,7 +1494,9 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
                               <input className={styles.inputSmall} type="number" placeholder="Min" value={productCityEdits[productCity.id]?.minimumQuantity ?? String(productCity.minimumQuantity)} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], minimumQuantity: event.target.value } }))} />
                               <input className={styles.inputSmall} type="number" placeholder="Step" value={productCityEdits[productCity.id]?.quantityStep ?? String(productCity.quantityStep)} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], quantityStep: event.target.value } }))} />
                               <input className={styles.inputSmall} type="number" placeholder="Max" value={productCityEdits[productCity.id]?.maximumQuantity ?? String(productCity.maximumQuantity)} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], maximumQuantity: event.target.value } }))} />
-                              <input className={styles.inputSmall} placeholder="Unit" value={productCityEdits[productCity.id]?.unit ?? productCity.unit} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], unit: event.target.value } }))} />
+                              <select className={styles.select} value={productCityEdits[productCity.id]?.unit ?? productCity.unit} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], unit: event.target.value } }))}>
+                                {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                              </select>
                               <label className={styles.checkLabel}>
                                 <input type="checkbox" checked={productCityEdits[productCity.id]?.isAvailable ?? productCity.isAvailable} onChange={(event) => setProductCityEdits((current) => ({ ...current, [productCity.id]: { ...current[productCity.id], isAvailable: event.target.checked } }))} />
                                 {t('admin.available', { defaultValue: 'Available' })}
@@ -1425,7 +1535,9 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
                         <input className={styles.inputSmall} type="number" placeholder="Min" value={addCityDraft.minimumQuantity} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, minimumQuantity: event.target.value } }))} />
                         <input className={styles.inputSmall} type="number" placeholder="Step" value={addCityDraft.quantityStep} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, quantityStep: event.target.value } }))} />
                         <input className={styles.inputSmall} type="number" placeholder="Max" value={addCityDraft.maximumQuantity} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, maximumQuantity: event.target.value } }))} />
-                        <input className={styles.inputSmall} placeholder="Unit" value={addCityDraft.unit} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, unit: event.target.value } }))} />
+                        <select className={styles.select} value={addCityDraft.unit} onChange={(event) => setNewProductCityDrafts((current) => ({ ...current, [product.id]: { ...addCityDraft, unit: event.target.value } }))}>
+                          {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                        </select>
                       </div>
                       <div className={styles.replyRow}>
                         <label className={styles.checkLabel}>
@@ -1442,6 +1554,130 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
               );
             })}
             {products.length === 0 && <p className={styles.loading}>{t('admin.noProducts', { defaultValue: 'No products found.' })}</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'storage' && (
+        <div>
+          <div className={styles.filterRow}>
+            <button className={styles.filterBtn} onClick={() => void loadTab('storage')}>
+              {t('admin.refresh', { defaultValue: 'Refresh' })}
+            </button>
+          </div>
+          <div className={styles.form}>
+            <h3 className={styles.formTitle}>Pickup storage records</h3>
+            <div className={styles.formRow}>
+              <select
+                className={styles.select}
+                value={newStorageProductId}
+                onChange={(event) => {
+                  const nextProductId = event.target.value;
+                  setNewStorageProductId(nextProductId);
+                  const selectedProduct = products.find((product) => String(product.id) === nextProductId);
+                  if (selectedProduct?.productCities[0]) {
+                    setNewStorageProductCityId(String(selectedProduct.productCities[0].id));
+                    setNewStorageUnit((normalizeUnitInput(selectedProduct.productCities[0].unit) || 'шт') as 'шт' | 'кг' | 'г' | 'oz');
+                  }
+                }}
+              >
+                {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              </select>
+              <select
+                className={styles.select}
+                value={newStorageProductCityId}
+                onChange={(event) => {
+                  const nextProductCityId = event.target.value;
+                  setNewStorageProductCityId(nextProductCityId);
+                  const selectedProduct = products.find((product) => String(product.id) === newStorageProductId);
+                  const selectedCity = selectedProduct?.productCities.find((productCity) => String(productCity.id) === nextProductCityId);
+                  if (selectedCity) {
+                    setNewStorageUnit((normalizeUnitInput(selectedCity.unit) || 'шт') as 'шт' | 'кг' | 'г' | 'oz');
+                  }
+                }}
+              >
+                {(products.find((product) => String(product.id) === newStorageProductId)?.productCities ?? []).map((productCity) => (
+                  <option key={productCity.id} value={productCity.id}>
+                    {productCity.city.name} · unit {productCity.unit}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Variant / options (optional)" value={newStorageVariantKey} onChange={(event) => setNewStorageVariantKey(event.target.value)} />
+              <input className={styles.input} type="number" step="0.001" placeholder="Quantity" value={newStorageQuantity} onChange={(event) => setNewStorageQuantity(event.target.value)} />
+              <select className={styles.select} value={newStorageUnit} onChange={(event) => setNewStorageUnit(event.target.value as 'шт' | 'кг' | 'г' | 'oz')}>
+                {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+              </select>
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Address" value={newStorageAddress} onChange={(event) => setNewStorageAddress(event.target.value)} />
+              <input className={styles.input} placeholder="Photo URL (optional)" value={newStoragePhotoUrl} onChange={(event) => setNewStoragePhotoUrl(event.target.value)} />
+            </div>
+            <div className={styles.formRow}>
+              <input className={styles.input} placeholder="Instructions (optional)" value={newStorageInstructions} onChange={(event) => setNewStorageInstructions(event.target.value)} />
+              <label className={styles.checkLabel}>
+                <input type="checkbox" checked={newStorageActive} onChange={(event) => setNewStorageActive(event.target.checked)} />
+                {t('admin.active', { defaultValue: 'Active' })}
+              </label>
+            </div>
+            <button className={styles.createBtn} onClick={() => void handleCreatePickupStorage()} disabled={creatingStorage || !newStorageProductId || !newStorageProductCityId || !newStorageQuantity || !newStorageAddress.trim()}>
+              {creatingStorage ? t('common.loading', { defaultValue: 'Loading...' }) : 'Create storage record'}
+            </button>
+          </div>
+
+          <div className={styles.orderList}>
+            {pickupStorages.map((storage) => (
+              <div key={storage.id} className={styles.orderCard}>
+                <div className={styles.orderHeader}>
+                  <span className={styles.orderId}>#{storage.id} {storage.product.name}</span>
+                  <span className={`${styles.refundTag} ${storage.status === 'assigned' ? styles.tagInactive : styles.tagActive}`}>
+                    {storage.status}
+                  </span>
+                </div>
+                <p className={styles.orderMeta}>
+                  {storage.productCity.city.name} • {storage.quantity} {storage.unit}
+                  {storage.variantKey ? ` • ${storage.variantKey}` : ''}
+                </p>
+                <p className={styles.orderMeta}>{storage.address}</p>
+                {storage.instructions ? <p className={styles.orderMeta}>{storage.instructions}</p> : null}
+                {storage.assignedOrder ? <p className={styles.orderMeta}>Assigned to order #{storage.assignedOrder.id}</p> : null}
+
+                {editingStorage === storage.id ? (
+                  <div className={styles.form}>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Variant / options" value={storageEdits[storage.id]?.variantKey ?? (storage.variantKey ?? '')} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], variantKey: event.target.value } }))} />
+                      <input className={styles.input} type="number" step="0.001" placeholder="Quantity" value={storageEdits[storage.id]?.quantity ?? String(storage.quantity)} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], quantity: event.target.value } }))} />
+                      <select className={styles.select} value={storageEdits[storage.id]?.unit ?? storage.unit} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], unit: event.target.value } }))}>
+                        {UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                      </select>
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Address" value={storageEdits[storage.id]?.address ?? storage.address} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], address: event.target.value } }))} />
+                      <input className={styles.input} placeholder="Photo URL" value={storageEdits[storage.id]?.photoUrl ?? (storage.photoUrl ?? '')} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], photoUrl: event.target.value } }))} />
+                    </div>
+                    <div className={styles.formRow}>
+                      <input className={styles.input} placeholder="Instructions" value={storageEdits[storage.id]?.instructions ?? (storage.instructions ?? '')} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], instructions: event.target.value } }))} />
+                      <label className={styles.checkLabel}>
+                        <input type="checkbox" checked={storageEdits[storage.id]?.isActive ?? storage.isActive} onChange={(event) => setStorageEdits((current) => ({ ...current, [storage.id]: { ...current[storage.id], isActive: event.target.checked } }))} />
+                        {t('admin.active', { defaultValue: 'Active' })}
+                      </label>
+                    </div>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => void handleSavePickupStorage(storage.id)}>{t('common.save', { defaultValue: 'Save' })}</button>
+                      <button className={styles.replyBtn} onClick={() => setEditingStorage(null)}>{t('common.cancel', { defaultValue: 'Cancel' })}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.replyRow}>
+                    <button className={styles.replyBtn} onClick={() => { setEditingStorage(storage.id); setStorageEdits((current) => ({ ...current, [storage.id]: {} })); }}>
+                      {t('admin.edit', { defaultValue: 'Edit' })}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {pickupStorages.length === 0 && <p className={styles.loading}>No pickup storage records yet.</p>}
           </div>
         </div>
       )}

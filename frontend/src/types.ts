@@ -379,48 +379,48 @@ export type AdminProductCity = {
     id?: number
     name: string
   }
+}
 
-  export type AdminPickupStorage = {
+export type AdminPickupStorage = {
+  id: number
+  productId: number
+  productCityId: number
+  variantKey: string | null
+  quantity: number
+  unit: string
+  photoUrl: string | null
+  address: string
+  instructions: string | null
+  isActive: boolean
+  status: string
+  assignedAt: string | null
+  createdAt: string
+  updatedAt: string
+  product: {
     id: number
-    productId: number
-    productCityId: number
-    variantKey: string | null
-    quantity: number
-    unit: string
-    photoUrl: string | null
-    address: string
-    instructions: string | null
-    isActive: boolean
-    status: string
-    assignedAt: string | null
-    createdAt: string
-    updatedAt: string
-    product: {
+    name: string
+    nameEn: string | null
+  }
+  productCity: {
+    id: number
+    city: {
       id: number
       name: string
       nameEn: string | null
     }
-    productCity: {
-      id: number
-      city: {
-        id: number
-        name: string
-        nameEn: string | null
-      }
-    }
-    assignedOrder: {
-      id: number
-      userId: number
-      paymentStatus: string | null
-      status: string
-    } | null
-    assignedOrderItem: {
-      id: number
-      productName: string
-      quantity: number
-      unit: string
-    } | null
   }
+  assignedOrder: {
+    id: number
+    userId: number
+    paymentStatus: string | null
+    status: string
+  } | null
+  assignedOrderItem: {
+    id: number
+    productName: string
+    quantity: number
+    unit: string
+  } | null
 }
 
 export type AdminProduct = {

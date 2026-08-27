@@ -63,6 +63,10 @@ type PickupStorageInput = {
   isActive: boolean
 }
 
+type PickupStorageValidationResult =
+  | { value: PickupStorageInput }
+  | { error: { code: string; message: string } }
+
 function isOrderStatus(value: string): value is (typeof ORDER_STATUSES)[number] {
   return ORDER_STATUSES.includes(value as (typeof ORDER_STATUSES)[number])
 }
@@ -177,51 +181,6 @@ function validateProductCityPayload(input: unknown): ProductCityValidationResult
   if (!cityId) {
     return { error: { code: 'city_required', message: 'Valid city id is required' } } as const
   }
-
-  function parsePickupStoragePayload(input: Record<string, unknown>, defaults?: Partial<PickupStorageInput>) {
-    const productId = parsePositiveInt(String(input.productId ?? defaults?.productId ?? ''))
-    const productCityId = parsePositiveInt(String(input.productCityId ?? defaults?.productCityId ?? ''))
-    const quantity = getPositiveQuantity(input.quantity ?? defaults?.quantity)
-    const unit = normalizeSupportedUnit(input.unit ?? defaults?.unit)
-    const addressInput = input.address ?? defaults?.address
-    const address = typeof addressInput === 'string' ? addressInput.trim() : ''
-
-    if (!productId) {
-      return { error: { code: 'product_required', message: 'Valid product id is required' } } as const
-    }
-    if (!productCityId) {
-      return { error: { code: 'product_city_required', message: 'Valid product city id is required' } } as const
-    }
-    if (quantity == null) {
-      return { error: { code: 'quantity_invalid', message: 'Quantity must be a positive number' } } as const
-    }
-    if (!unit) {
-      return { error: { code: 'unit_invalid', message: 'Unit must be one of: шт, кг, г, oz' } } as const
-    }
-    if (!address) {
-      return { error: { code: 'address_required', message: 'Pickup address is required' } } as const
-    }
-
-    return {
-      value: {
-        productId,
-        productCityId,
-        quantity,
-        unit,
-        address,
-        variantKey: typeof input.variantKey === 'string'
-          ? (input.variantKey.trim() || null)
-          : (defaults?.variantKey ?? null),
-        photoUrl: typeof input.photoUrl === 'string'
-          ? (input.photoUrl.trim() || null)
-          : (defaults?.photoUrl ?? null),
-        instructions: typeof input.instructions === 'string'
-          ? (input.instructions.trim() || null)
-          : (defaults?.instructions ?? null),
-        isActive: typeof input.isActive === 'boolean' ? input.isActive : (defaults?.isActive ?? true),
-      } satisfies PickupStorageInput,
-    } as const
-  }
   if (maximumQuantity < minimumQuantity) {
     return { error: { code: 'quantity_invalid', message: 'Maximum quantity must be greater than or equal to minimum quantity' } } as const
   }
@@ -245,6 +204,51 @@ function validateProductCityPayload(input: unknown): ProductCityValidationResult
       maximumQuantity,
       unit,
     } satisfies ProductCityInput,
+  } as const
+}
+
+function parsePickupStoragePayload(input: Record<string, unknown>, defaults?: Partial<PickupStorageInput>): PickupStorageValidationResult {
+  const productId = parsePositiveInt(String(input.productId ?? defaults?.productId ?? ''))
+  const productCityId = parsePositiveInt(String(input.productCityId ?? defaults?.productCityId ?? ''))
+  const quantity = getPositiveQuantity(input.quantity ?? defaults?.quantity)
+  const unit = normalizeSupportedUnit(input.unit ?? defaults?.unit)
+  const addressInput = input.address ?? defaults?.address
+  const address = typeof addressInput === 'string' ? addressInput.trim() : ''
+
+  if (!productId) {
+    return { error: { code: 'product_required', message: 'Valid product id is required' } } as const
+  }
+  if (!productCityId) {
+    return { error: { code: 'product_city_required', message: 'Valid product city id is required' } } as const
+  }
+  if (quantity == null) {
+    return { error: { code: 'quantity_invalid', message: 'Quantity must be a positive number' } } as const
+  }
+  if (!unit) {
+    return { error: { code: 'unit_invalid', message: 'Unit must be one of: шт, кг, г, oz' } } as const
+  }
+  if (!address) {
+    return { error: { code: 'address_required', message: 'Pickup address is required' } } as const
+  }
+
+  return {
+    value: {
+      productId,
+      productCityId,
+      quantity,
+      unit,
+      address,
+      variantKey: typeof input.variantKey === 'string'
+        ? (input.variantKey.trim() || null)
+        : (defaults?.variantKey ?? null),
+      photoUrl: typeof input.photoUrl === 'string'
+        ? (input.photoUrl.trim() || null)
+        : (defaults?.photoUrl ?? null),
+      instructions: typeof input.instructions === 'string'
+        ? (input.instructions.trim() || null)
+        : (defaults?.instructions ?? null),
+      isActive: typeof input.isActive === 'boolean' ? input.isActive : (defaults?.isActive ?? true),
+    } satisfies PickupStorageInput,
   } as const
 }
 
@@ -1000,6 +1004,10 @@ router.patch('/payments/:id/status', authRateLimiter, async (request, response) 
       },
     })
 
+    if (status === 'paid') {
+      await assignPickupStoragesForPaidOrder(tx, payment.orderId)
+    }
+
     await tx.orderStatusHistory.create({
       data: {
         orderId: payment.orderId,
@@ -1362,7 +1370,7 @@ router.post('/pickup-storages', authRateLimiter, async (request, response) => {
   const admin = await getAdminUser(request, response)
   if (!admin) return
 
-  const parsed = parsePickupStoragePayload(request.body as Record<string, unknown>)
+  const parsed = parsePickupStoragePayload((request.body ?? {}) as Record<string, unknown>)
   if ('error' in parsed) {
     sendError(response, 400, parsed.error.code, parsed.error.message)
     return
@@ -1438,7 +1446,7 @@ router.patch('/pickup-storages/:id', authRateLimiter, async (request, response) 
   }
 
   const parsed = parsePickupStoragePayload(
-    request.body as Record<string, unknown>,
+    (request.body ?? {}) as Record<string, unknown>,
     {
       productId: existing.productId,
       productCityId: existing.productCityId,

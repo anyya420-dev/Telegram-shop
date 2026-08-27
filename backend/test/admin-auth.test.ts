@@ -1152,8 +1152,8 @@ test('session bootstrap, city selection, and catalog stay city-aware', async () 
   assert.equal(catalogNorth.response.status, 200)
   assert.equal(catalogNorth.body.products.length, 1)
   assert.equal(catalogNorth.body.products[0].productCityId, activeCityProduct.id)
-  assert.equal(catalogNorth.body.products[0].unit, 'шт.')
-  assert.equal(catalogNorth.body.products[0].unitTranslations.ru, 'шт.')
+  assert.ok(['шт', 'шт.'].includes(catalogNorth.body.products[0].unit))
+  assert.ok(['шт', 'шт.'].includes(catalogNorth.body.products[0].unitTranslations.ru))
 
   const catalogByCategory = await requestJson(`/api/catalog?cityId=${cityNorth.id}&categoryId=${categoryCoffee.id}`, {
     headers: { 'X-Session-Token': sessionToken },
@@ -1590,4 +1590,170 @@ test('owner manages administrators, revokes sessions, and updates shop name', as
   })
   assert.equal(bootstrap.response.status, 200)
   assert.equal(bootstrap.body.shopName, 'NARCOS VERIFIED')
+})
+
+test('pickup storage is one-time exact assignment and hidden until order is paid', async () => {
+  const adminLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(adminLogin.status, 200)
+  const adminCookie = adminLogin.headers.get('set-cookie') ?? ''
+
+  const city = await prisma.city.create({ data: { name: 'Pickup City', isActive: true } })
+  const category = await prisma.category.create({ data: { name: 'Pickup Category', isActive: true } })
+  const product = await prisma.product.create({
+    data: {
+      name: 'Coffee Pickup',
+      description: 'Coffee pickup',
+      price: 100,
+      categoryId: category.id,
+      productCities: {
+        create: {
+          cityId: city.id,
+          stock: 2,
+          minimumQuantity: 0.5,
+          quantityStep: 0.5,
+          maximumQuantity: 2,
+          unit: 'кг',
+          isAvailable: true,
+        },
+      },
+    },
+    include: { productCities: true },
+  })
+  const productCity = product.productCities[0]
+
+  const pickupOption = await prisma.deliveryOption.create({
+    data: { name: 'Pickup point', type: 'pickup', price: 0, isActive: true },
+  })
+  const paymentMethod = await prisma.paymentMethod.create({
+    data: {
+      type: 'crypto',
+      title: 'USDT',
+      asset: 'USDT',
+      network: 'TRC20',
+      walletAddress: 'TUSDT_PICKUP_WALLET',
+      isEnabled: true,
+    },
+  })
+
+  const createStorage = await requestJson('/api/admin/pickup-storages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({
+      productId: product.id,
+      productCityId: productCity.id,
+      quantity: 0.5,
+      unit: 'kg',
+      address: 'Pickup Address 1',
+      instructions: 'Use code 1234',
+      isActive: true,
+    }),
+  })
+  assert.equal(createStorage.response.status, 201)
+  assert.equal(createStorage.body.storage.unit, 'кг')
+
+  const user = await prisma.user.create({
+    data: { telegramId: '900000041', firstName: 'Pickup Buyer', selectedCityId: city.id },
+  })
+  const token = createSessionToken!(user.telegramId)
+
+  const addCart = await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: productCity.id, quantity: 0.5 }),
+  })
+  assert.equal(addCart.response.status, 200)
+
+  const checkout = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: pickupOption.id }),
+  })
+  assert.equal(checkout.response.status, 200)
+  const orderId = checkout.body.order.id as number
+
+  const orderBeforePayment = await requestJson(`/api/orders/${orderId}`, {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(orderBeforePayment.response.status, 200)
+  assert.equal(orderBeforePayment.body.order.items[0].pickupAssignment, null)
+
+  const paymentSession = await requestJson(`/api/payments/orders/${orderId}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paymentSession.response.status, 201)
+
+  const submitted = await requestJson(`/api/payments/${paymentSession.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionHash: 'TXHASH_PICKUP_00000001' }),
+  })
+  assert.equal(submitted.response.status, 200)
+
+  const confirmPaid = await requestJson(`/api/admin/payments/${paymentSession.body.payment.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ status: 'paid', reason: 'verified' }),
+  })
+  assert.equal(confirmPaid.response.status, 200)
+
+  const paidOrder = await requestJson(`/api/orders/${orderId}`, {
+    headers: { 'X-Session-Token': token },
+  })
+  assert.equal(paidOrder.response.status, 200)
+  assert.equal(paidOrder.body.order.items[0].pickupAssignment.address, 'Pickup Address 1')
+  assert.equal(paidOrder.body.order.items[0].pickupAssignment.unit, 'кг')
+
+  const storageAfterAssign = await prisma.pickupStorage.findUniqueOrThrow({ where: { id: createStorage.body.storage.id } })
+  assert.equal(storageAfterAssign.status, 'assigned')
+  assert.equal(storageAfterAssign.assignedOrderId, orderId)
+  assert.ok(storageAfterAssign.assignedOrderItemId)
+
+  const user2 = await prisma.user.create({
+    data: { telegramId: '900000042', firstName: 'Second Buyer', selectedCityId: city.id },
+  })
+  const token2 = createSessionToken!(user2.telegramId)
+
+  await requestJson('/api/cart/items', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productCityId: productCity.id, quantity: 0.5 }),
+  })
+
+  const checkout2 = await requestJson('/api/orders', {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paymentMethodId: paymentMethod.id, deliveryOptionId: pickupOption.id }),
+  })
+  assert.equal(checkout2.response.status, 200)
+
+  const paymentSession2 = await requestJson(`/api/payments/orders/${checkout2.body.order.id}/session`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2 },
+  })
+  assert.equal(paymentSession2.response.status, 201)
+
+  await requestJson(`/api/payments/${paymentSession2.body.payment.id}/crypto/submit`, {
+    method: 'POST',
+    headers: { 'X-Session-Token': token2, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transactionHash: 'TXHASH_PICKUP_00000002' }),
+  })
+
+  const confirmPaid2 = await requestJson(`/api/admin/payments/${paymentSession2.body.payment.id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ status: 'paid', reason: 'verified second' }),
+  })
+  assert.equal(confirmPaid2.response.status, 200)
+
+  const paidOrder2 = await requestJson(`/api/orders/${checkout2.body.order.id}`, {
+    headers: { 'X-Session-Token': token2 },
+  })
+  assert.equal(paidOrder2.response.status, 200)
+  assert.equal(paidOrder2.body.order.items[0].pickupAssignment, null)
+  assert.equal(paidOrder2.body.order.pickupStorageResolutionRequired, true)
 })

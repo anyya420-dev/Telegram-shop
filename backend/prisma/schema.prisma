@@ -233,6 +233,7 @@ model OrderItem {
 
   order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productCity ProductCity @relation(fields: [productCityId], references: [id])
+  assignedStorage PickupStorage? @relation("PickupStorageAssignedItem")
   pickupAssignment PickupStorageAssignment?
 
   @@map("order_items")
@@ -259,7 +260,7 @@ model PickupStorage {
   product      Product   @relation(fields: [productId], references: [id])
   productCity  ProductCity @relation(fields: [productCityId], references: [id])
   assignedOrder Order?   @relation("PickupStorageOrder", fields: [assignedOrderId], references: [id])
-  assignedOrderItem OrderItem? @relation(fields: [assignedOrderItemId], references: [id])
+  assignedOrderItem OrderItem? @relation("PickupStorageAssignedItem", fields: [assignedOrderItemId], references: [id])
   assignment  PickupStorageAssignment?
 
   @@index([productCityId, variantKey, quantity, unit, isActive, status])
