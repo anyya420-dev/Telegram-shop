@@ -214,7 +214,14 @@ function getExpirationDate() {
 }
 
 function getBaseAppUrl() {
-  return (process.env.WEB_APP_URL || process.env.FRONTEND_URL || 'https://telegram-shop-378j.onrender.com').replace(/\/+$/, '')
+  const configuredUrl = (process.env.WEB_APP_URL || process.env.FRONTEND_URL || '').trim()
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, '')
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new PaymentConfigError('WEB_APP_URL or FRONTEND_URL must be configured')
+  }
+  return 'http://localhost:5173'
 }
 
 async function createStripeCheckoutSession(method: PaymentMethod, order: Order, payment: Payment) {

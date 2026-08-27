@@ -75,7 +75,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
-  const [shopName, setShopName] = useState('NARCOS')
+  const [shopName, setShopName] = useState('Telegram Shop')
   const [userBalance, setUserBalance] = useState<Balance | null>(null)
 
   function t(key: string): string {
@@ -151,8 +151,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCities(response.cities)
         setCitiesLoading(false)
         setCategories(response.categories)
-        setShopName(response.shopName || 'NARCOS')
-        document.title = response.shopName || 'NARCOS'
+        setShopName(response.shopName || 'Telegram Shop')
+        document.title = response.shopName || 'Telegram Shop'
 
         setCartLoading(true)
         const [catalogResponse, cartResponse, balanceResponse] = await Promise.all([

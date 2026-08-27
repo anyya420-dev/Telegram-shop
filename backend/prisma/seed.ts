@@ -245,6 +245,11 @@ async function main() {
 
 // Upsert delivery options and sample discount (run separately, not resetting existing data)
 async function seedExtras() {
+  await prisma.appSetting.upsert({
+    where: { key: 'shop_name' },
+    update: { value: 'Telegram Shop' },
+    create: { key: 'shop_name', value: 'Telegram Shop' },
+  })
   await prisma.deliveryOption.upsert({
     where: { id: 1 },
     update: {},

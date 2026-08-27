@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { Markup, Telegraf } from 'telegraf'
 
 const token = process.env.TELEGRAM_BOT_TOKEN
-const webAppUrl = process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? 'https://telegram-shop-378j.onrender.com'
+const webAppUrl = (process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? '').trim()
 
 if (!token) {
   console.warn('TELEGRAM_BOT_TOKEN is not set. Bot worker will stay idle until the token is provided.')
@@ -18,6 +18,11 @@ if (!token) {
     process.exit(0)
   })
 } else {
+  if (!webAppUrl) {
+    console.error('WEB_APP_URL or FRONTEND_URL must be configured when TELEGRAM_BOT_TOKEN is set.')
+    process.exit(1)
+  }
+
   const bot = new Telegraf(token)
 
   bot.start(async (context) => {

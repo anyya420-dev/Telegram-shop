@@ -23,10 +23,6 @@ import usersRouter from './routes/users.js'
 import wishlistRouter from './routes/wishlist.js'
 import { prisma } from './lib.js'
 
-const fallbackProductionOrigins = [
-  'https://telegram-shop-378j.onrender.com',
-]
-
 function normalizeOrigin(value: string) {
   try {
     return new URL(value).origin
@@ -48,10 +44,10 @@ function getAllowedOrigins() {
   const configuredOrigins = readConfiguredOrigins()
 
   if (process.env.NODE_ENV === 'production') {
-    return new Set([...fallbackProductionOrigins, ...configuredOrigins])
+    return new Set(configuredOrigins)
   }
 
-  return new Set([...fallbackProductionOrigins, 'http://localhost:5173', 'http://localhost:4173', ...configuredOrigins])
+  return new Set(['http://localhost:5173', 'http://localhost:4173', ...configuredOrigins])
 }
 
 export function createApp() {

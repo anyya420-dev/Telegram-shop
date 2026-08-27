@@ -92,9 +92,9 @@ test('resolveApiUrl normalizes Render API env values', () => {
   assert.equal(resolveApiUrl({ VITE_API_URL: 'telegram-shop-backend.onrender.com/api' }), 'https://telegram-shop-backend.onrender.com/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '/api/' }), '/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '   ' }), '/api')
-  assert.equal(resolveApiUrl({ VITE_API_URL: '   ', PROD: true }), 'https://telegram-shop-backend.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: '   ', PROD: true }), '/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '   ', PROD: true, VITE_DEFAULT_API_URL: 'https://shop-api.example.com' }), 'https://shop-api.example.com/api')
-  assert.equal(resolveApiUrl({ VITE_API_URL: '   ', MODE: 'production' }), 'https://telegram-shop-backend.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: '   ', MODE: 'production' }), '/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '   ', MODE: 'development' }), '/api')
 })
 
