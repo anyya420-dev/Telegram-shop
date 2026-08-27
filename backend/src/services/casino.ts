@@ -218,8 +218,13 @@ type PlayInput = {
 
 export async function playCasinoGame(tx: Prisma.TransactionClient, input: PlayInput) {
   await ensureCasinoDefaults(tx)
-  const requestId = (typeof input.requestId === 'string' && input.requestId.trim()) || randomUUID()
-  const existingRound = await tx.casinoRound.findUnique({ where: { requestId } })
+  // Namespace requestId by userId to prevent cross-user DB unique constraint collisions
+  const clientRequestId = (typeof input.requestId === 'string' && input.requestId.trim()) || randomUUID()
+  const requestId = `u${input.userId}:${clientRequestId}`
+  // Scope idempotency check to the current user's balance to prevent cross-user collision
+  const existingRound = await tx.casinoRound.findFirst({
+    where: { requestId, casinoBalance: { userId: input.userId } },
+  })
   if (existingRound) {
     throw Object.assign(new Error('Duplicate round request'), { status: 409, code: 'duplicate_round' })
   }
