@@ -52,6 +52,7 @@ function getAllowedOrigins() {
 
 export function createApp() {
   const app = express()
+  app.set('trust proxy', 1)
   const allowedOrigins = getAllowedOrigins()
 
   app.use((_request, response, next) => {
