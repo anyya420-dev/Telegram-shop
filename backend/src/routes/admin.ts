@@ -2028,7 +2028,7 @@ router.get('/settings', authRateLimiter, async (request, response) => {
   ])
   const commissionPct = commissionSetting ? Number(commissionSetting.value) : 0
   response.json({
-    shopName: shopNameSetting?.value || 'NARCOS',
+    shopName: shopNameSetting?.value || 'Telegram Shop',
     depositCommissionPct: Number.isFinite(commissionPct) ? commissionPct : 0,
   })
 })
@@ -2092,7 +2092,7 @@ router.patch('/settings', authRateLimiter, async (request, response) => {
   ])
 
   response.json({
-    shopName: updatedShopName?.value || 'NARCOS',
+    shopName: updatedShopName?.value || 'Telegram Shop',
     depositCommissionPct: updatedCommission ? Number(updatedCommission.value) : 0,
   })
 })

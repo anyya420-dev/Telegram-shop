@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 const PRODUCTION = {
-  frontendUrl: process.env.SMOKE_FRONTEND_URL?.trim() || 'https://telegram-shop.onrender.com',
-  backendUrl: process.env.SMOKE_BACKEND_URL?.trim() || 'https://narcos-shop.onrender.com',
+  frontendUrl: process.env.SMOKE_FRONTEND_URL?.trim() || 'https://telegram-shop-378j.onrender.com',
+  backendUrl: process.env.SMOKE_BACKEND_URL?.trim() || 'https://telegram-shop-backend.onrender.com',
 }
 PRODUCTION.apiBaseUrl = `${PRODUCTION.backendUrl}/api`
 
@@ -10,7 +10,11 @@ const LOCAL_API_PATTERNS = [
   /https?:\/\/localhost(?::\d+)?\/api/i,
   /https?:\/\/127\.0\.0\.1(?::\d+)?\/api/i,
 ]
-const RETIRED_API_PATTERNS = [/https?:\/\/78j\.onrender\.com/i]
+const RETIRED_API_PATTERNS = [
+  /https?:\/\/telegram-shop\.onrender\.com(?:\/api)?/i,
+  /https?:\/\/telegram-shop-3781\.onrender\.com(?:\/api)?/i,
+  /https?:\/\/narcos-shop(?:-3781)?\.onrender\.com(?:\/api)?/i,
+]
 
 const checks = []
 let cachedFrontendBundleText = null

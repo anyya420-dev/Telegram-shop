@@ -74,7 +74,7 @@ router.post('/bootstrap', authRateLimiter, async (request, response) => {
     user: mapUser(user),
     cities: cities.map(mapCity),
     categories: categories.map(mapCategory),
-    shopName: shopNameSetting?.value || 'NARCOS',
+    shopName: shopNameSetting?.value || 'Telegram Shop',
   })
 })
 

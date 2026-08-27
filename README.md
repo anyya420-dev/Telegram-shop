@@ -11,7 +11,7 @@ Telegram Web App магазин с каталогом по городам, ги�
 | Frontend | React + Vite + TypeScript |
 | Backend | Node.js + Express + TypeScript |
 | ORM | Prisma |
-| Database | SQLite |
+| Database | PostgreSQL |
 | Bot | Telegraf |
 
 ## Структура проекта
@@ -20,7 +20,7 @@ Telegram Web App магазин с каталогом по городам, ги�
 /frontend    — React Web App
 /backend     — REST API + Prisma schema/seed
 /bot         — Telegram Bot
-/admin       — административная часть (будет позже)
+/admin       — документация по административной части
 ```
 
 ## Установка
@@ -56,7 +56,7 @@ npm run build
 
 Скопируйте `.env.example` в `.env` и заполните значения локально.
 
-- `DATABASE_URL` — путь к SQLite базе данных
+- `DATABASE_URL` — строка подключения к PostgreSQL базе данных
 - `PORT` — порт backend сервера
 - `FRONTEND_URL` — origin frontend для CORS
 - `ALLOW_DEMO_MODE` — локальный demo-режим вне Telegram
