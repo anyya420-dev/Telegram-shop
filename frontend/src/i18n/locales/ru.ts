@@ -11,6 +11,9 @@ export const ru = {
     save: 'Сохранить',
   },
   nav: {
+    home: 'Главная',
+    catalog: 'Каталог',
+    cart: 'Корзина',
     shop: 'Магазин',
     casino: 'Казино',
     balance: 'Баланс',
