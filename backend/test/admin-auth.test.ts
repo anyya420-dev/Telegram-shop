@@ -1157,6 +1157,137 @@ test('customer can cancel payment pending order', async () => {
   assert.equal(refreshedProductCity.stock, 2)
 })
 
+test('operator delivery price update preserves prior checkout discounts and casino credit effects', async () => {
+  const previousAllowDemoMode = process.env.ALLOW_DEMO_MODE
+  const previousTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
+  process.env.ALLOW_DEMO_MODE = 'false'
+  process.env.TELEGRAM_BOT_TOKEN = '111111111:env-operator-delivery-token'
+
+  try {
+    const managedBotToken = '333333333:managed-operator-delivery-token'
+    await prisma.telegramBot.create({
+      data: {
+        token: managedBotToken,
+        botId: 'managed-operator-delivery-bot',
+        username: 'managed_operator_delivery_bot',
+        firstName: 'Managed Operator Delivery Bot',
+        isActive: true,
+      },
+    })
+
+    const user = await prisma.user.create({
+      data: { telegramId: '900000077', firstName: 'Delivery', username: 'delivery_user', language: 'ru' },
+    })
+    const token = createSessionToken!(user.telegramId)
+
+    const city = await prisma.city.create({ data: { name: 'Delivery City', nameEn: 'Delivery City', isActive: true } })
+    const category = await prisma.category.create({ data: { name: 'Delivery Category', nameEn: 'Delivery Category', isActive: true } })
+    const product = await prisma.product.create({
+      data: {
+        name: 'Delivery Product',
+        description: 'Delivery product',
+        price: 10,
+        categoryId: category.id,
+        isActive: true,
+        creditsEnabled: true,
+        creditsPrice: 100,
+      },
+    })
+    const productCity = await prisma.productCity.create({
+      data: {
+        productId: product.id,
+        cityId: city.id,
+        stock: 10,
+        minimumQuantity: 1,
+        quantityStep: 1,
+        maximumQuantity: 10,
+        unit: 'шт',
+        isAvailable: true,
+      },
+    })
+    const deliveryOption = await prisma.deliveryOption.create({
+      data: { name: 'Courier', type: 'delivery', price: 0, isActive: true },
+    })
+    const paymentMethod = await prisma.paymentMethod.create({
+      data: {
+        type: 'crypto',
+        title: 'USDT TRC20',
+        asset: 'USDT',
+        network: 'TRC20',
+        walletAddress: 'TDELIVERYWALLET',
+        isEnabled: true,
+      },
+    })
+
+    await prisma.user.update({ where: { id: user.id }, data: { selectedCityId: city.id } })
+    const cart = await prisma.cart.create({ data: { userId: user.id } })
+    await prisma.cartItem.create({ data: { cartId: cart.id, productCityId: productCity.id, quantity: 2 } })
+
+    const checkout = await requestJson('/api/orders', {
+      method: 'POST',
+      headers: { 'X-Session-Token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deliveryOptionId: deliveryOption.id,
+        deliveryAddress: 'Main street 7',
+        paymentMethodId: paymentMethod.id,
+        casinoCreditsToUse: 100,
+      }),
+    })
+    assert.equal(checkout.response.status, 200)
+    assert.equal(checkout.body.order.total, 10)
+    assert.equal(checkout.body.order.paymentStatus, 'awaiting_delivery_price')
+    assert.equal(checkout.body.order.deliveryFee, 0)
+
+    const operatorTelegramId = '700000099'
+    await prisma.operator.create({
+      data: {
+        telegramId: operatorTelegramId,
+        firstName: 'Courier',
+        username: 'courier_operator',
+        isActive: true,
+      },
+    })
+
+    const operatorInitData = createTelegramInitData(
+      { id: Number(operatorTelegramId), first_name: 'Courier', username: 'courier_operator' },
+      managedBotToken,
+    )
+
+    const accept = await requestJson(`/api/operators/orders/${checkout.body.order.id}/accept`, {
+      method: 'POST',
+      headers: {
+        'X-Telegram-Init-Data': operatorInitData,
+      },
+    })
+    assert.equal(accept.response.status, 200)
+
+    const updatePrice = await requestJson(`/api/operators/orders/${checkout.body.order.id}/delivery-price`, {
+      method: 'PATCH',
+      headers: {
+        'X-Telegram-Init-Data': operatorInitData,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ deliveryPrice: 3 }),
+    })
+    assert.equal(updatePrice.response.status, 200)
+    assert.equal(updatePrice.body.order.deliveryFee, 3)
+    assert.equal(updatePrice.body.order.total, 13)
+    assert.equal(updatePrice.body.order.paymentStatus, 'pending')
+  } finally {
+    if (previousAllowDemoMode === undefined) {
+      delete process.env.ALLOW_DEMO_MODE
+    } else {
+      process.env.ALLOW_DEMO_MODE = previousAllowDemoMode
+    }
+
+    if (previousTelegramBotToken === undefined) {
+      delete process.env.TELEGRAM_BOT_TOKEN
+    } else {
+      process.env.TELEGRAM_BOT_TOKEN = previousTelegramBotToken
+    }
+  }
+})
+
 test('session bootstrap, city selection, and catalog stay city-aware', async () => {
   process.env.TELEGRAM_BOT_TOKEN = 'bootstrap-secret'
   process.env.ALLOW_DEMO_MODE = 'true'
@@ -1737,6 +1868,53 @@ test('owner manages administrators, revokes sessions, and updates shop name', as
   })
   assert.equal(bootstrap.response.status, 200)
   assert.equal(bootstrap.body.shopName, 'NARCOS VERIFIED')
+})
+
+test('operator admin account is limited by explicit permissions', async () => {
+  const ownerLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret', mode: 'owner' }),
+  })
+  assert.equal(ownerLogin.status, 200)
+  const ownerCookie = ownerLogin.headers.get('set-cookie') ?? ''
+  assert.ok(ownerCookie)
+
+  const createOperator = await requestJson('/api/admin/administrators', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: ownerCookie },
+    body: JSON.stringify({ username: 'ops_limited', role: 'operator', permissions: ['orders'] }),
+  })
+  assert.equal(createOperator.response.status, 201)
+  assert.equal(createOperator.body.administrator.role, 'operator')
+  assert.deepEqual(createOperator.body.administrator.permissions, ['orders'])
+
+  const operatorPassword = String(createOperator.body.generatedPassword ?? '')
+  assert.ok(operatorPassword.length >= 16)
+
+  const operatorLogin = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: operatorPassword }),
+  })
+  assert.equal(operatorLogin.status, 200)
+  const operatorCookie = operatorLogin.headers.get('set-cookie') ?? ''
+  assert.ok(operatorCookie)
+
+  const allowedOrders = await request('/api/admin/orders', {
+    headers: { cookie: operatorCookie },
+  })
+  assert.equal(allowedOrders.status, 200)
+
+  const blockedPayments = await request('/api/admin/payments', {
+    headers: { cookie: operatorCookie },
+  })
+  assert.equal(blockedPayments.status, 403)
+
+  const blockedSettings = await request('/api/admin/settings', {
+    headers: { cookie: operatorCookie },
+  })
+  assert.equal(blockedSettings.status, 403)
 })
 
 test('pickup storage is one-time exact assignment and hidden until order is paid', async () => {

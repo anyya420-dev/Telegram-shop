@@ -147,6 +147,32 @@ function hasPermission(admin: AdminContext, key: PermissionKey) {
   return admin.permissions.includes(key)
 }
 
+function resolveAdminRoutePermission(path: string): PermissionKey | null {
+  if (path.startsWith('/auth/')) return null
+  if (path.startsWith('/administrators')) return null
+  if (path.startsWith('/payment-settings') || path.startsWith('/payments')) return 'payments'
+  if (path === '/orders' || path.startsWith('/orders/')) {
+    if (path.endsWith('/assign-operator')) return 'operators'
+    return 'orders'
+  }
+  if (path.startsWith('/products') || path.startsWith('/product-cities')) return 'products'
+  if (path.startsWith('/pickup-storages')) return 'pickup'
+  if (path.startsWith('/users')) return 'users'
+  if (path.startsWith('/discounts')) return 'settings'
+  if (path.startsWith('/delivery-options')) return 'delivery'
+  if (path.startsWith('/support')) return 'orders'
+  if (path.startsWith('/audit-logs') || path.startsWith('/stats')) return 'statistics'
+  if (path.startsWith('/settings')) return 'settings'
+  if (path.startsWith('/cities')) return 'cities'
+  if (path.startsWith('/categories')) return 'categories'
+  if (path.startsWith('/casino')) return 'casino'
+  if (path.startsWith('/balance')) return 'balance'
+  if (path.startsWith('/operators')) return 'operators'
+  if (path.startsWith('/bots')) return 'bots'
+  if (path.startsWith('/deposits')) return 'deposits'
+  return null
+}
+
 function getTrimmedString(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -336,6 +362,12 @@ async function getAdminUser(request: Request, response: Response, options?: { re
 
   if (options?.requireOwner && !isOwner(admin)) {
     sendError(response, 403, 'owner_access_required', 'Owner access required')
+    return null
+  }
+
+  const requiredPermission = resolveAdminRoutePermission(request.path)
+  if (requiredPermission && !hasPermission(admin, requiredPermission)) {
+    sendError(response, 403, 'permission_denied', 'Insufficient permissions for this action')
     return null
   }
 
