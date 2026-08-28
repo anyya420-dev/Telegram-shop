@@ -4,6 +4,8 @@ import { useApp } from '../../context/AppContext';
 import { CityPicker } from '../CityPicker';
 import styles from './Layout.module.css';
 import { useTranslation } from 'react-i18next';
+import { useEffect } from 'react';
+import { safeNavigateBack, useInAppHistoryTracker } from '../../lib/navigation';
 
 function IconHome({ active }: { active: boolean }) {
   return <House size={22} strokeWidth={1.75} color={active ? 'var(--accent)' : 'var(--text-muted)'} />;
@@ -33,6 +35,28 @@ export default function Layout() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  useInAppHistoryTracker();
+
+  useEffect(() => {
+    const webApp = window.Telegram?.WebApp;
+    const backButton = webApp?.BackButton;
+    if (!backButton) return;
+
+    const rootRoutes = new Set(['/home', '/catalog', '/shop/cart', '/profile']);
+    const shouldShowBack = !rootRoutes.has(location.pathname);
+    const backHandler = () => safeNavigateBack(navigate, `${location.pathname}${location.search}`, '/home');
+
+    if (shouldShowBack) {
+      backButton.show();
+      backButton.onClick(backHandler);
+    } else {
+      backButton.hide();
+    }
+
+    return () => {
+      backButton.offClick(backHandler);
+    };
+  }, [location.pathname, location.search, navigate]);
 
   if (loading) {
     return (

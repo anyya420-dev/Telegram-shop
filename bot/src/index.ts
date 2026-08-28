@@ -3,6 +3,7 @@ import { Markup, Telegraf } from 'telegraf'
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 const webAppUrl = (process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? '').trim()
+const adminPanelWebAppUrl = (process.env.ADMIN_WEB_APP_URL ?? `${webAppUrl.replace(/\/+$/, '')}/#/admin`).trim()
 
 if (!token) {
   console.warn('TELEGRAM_BOT_TOKEN is not set. Bot worker will stay idle until the token is provided.')
@@ -30,6 +31,15 @@ if (!token) {
       'Добро пожаловать в Telegram Shop. Откройте Web App, чтобы выбрать город и начать покупки.',
       Markup.inlineKeyboard([
         [Markup.button.webApp('🛍 Открыть Telegram Shop', webAppUrl)],
+      ]),
+    )
+  })
+
+  bot.command('adminpanel420', async (context) => {
+    await context.reply(
+      'Войти в Web App Admin Panel',
+      Markup.inlineKeyboard([
+        [Markup.button.webApp('🔐 Войти в Web App Admin Panel', adminPanelWebAppUrl)],
       ]),
     )
   })
