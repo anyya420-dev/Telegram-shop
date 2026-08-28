@@ -26,11 +26,11 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
       - key: FRONTEND_URL
-        value: https://telegram-shop-378j.onrender.com
+        value: https://telegram-shop-frontend-w1zw.onrender.com
       - key: WEB_APP_URL
-        value: https://telegram-shop-378j.onrender.com
+        value: https://telegram-shop-frontend-w1zw.onrender.com
       - key: CORS_ALLOWED_ORIGINS
-        value: https://telegram-shop-378j.onrender.com
+        value: https://telegram-shop-frontend-w1zw.onrender.com
       - key: ALLOW_DEMO_MODE
         value: "false"
 
