@@ -61,5 +61,9 @@ services:
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: BOT_TOKEN
+        sync: false
       - key: WEB_APP_URL
         value: https://telegram-shop-frontend-w1zw.onrender.com
+      - key: ADMIN_WEB_APP_URL
+        value: https://telegram-shop-frontend-w1zw.onrender.com/#/admin
