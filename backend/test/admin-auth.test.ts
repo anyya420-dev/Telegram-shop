@@ -870,6 +870,46 @@ test('session bootstrap accepts initData signed by active managed bot token', as
   }
 })
 
+test('session bootstrap rejects stale Telegram initData', async () => {
+  const previousAllowDemoMode = process.env.ALLOW_DEMO_MODE
+  const previousTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN
+  process.env.ALLOW_DEMO_MODE = 'false'
+  process.env.TELEGRAM_BOT_TOKEN = '111111111:env-bootstrap-token'
+
+  try {
+    const staleTimestamp = Math.floor(Date.now() / 1000) - 90_000
+    const initData = createTelegramInitData(
+      { id: 700000022, first_name: 'Stale', username: 'stale_user' },
+      process.env.TELEGRAM_BOT_TOKEN,
+      staleTimestamp,
+    )
+
+    const bootstrap = await requestJson('/api/session/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        initData,
+        isTelegramEnvironment: true,
+      }),
+    })
+
+    assert.equal(bootstrap.response.status, 401)
+    assert.equal(bootstrap.body.code, 'telegram_verification_failed')
+  } finally {
+    if (previousAllowDemoMode === undefined) {
+      delete process.env.ALLOW_DEMO_MODE
+    } else {
+      process.env.ALLOW_DEMO_MODE = previousAllowDemoMode
+    }
+
+    if (previousTelegramBotToken === undefined) {
+      delete process.env.TELEGRAM_BOT_TOKEN
+    } else {
+      process.env.TELEGRAM_BOT_TOKEN = previousTelegramBotToken
+    }
+  }
+})
+
 test('operators auth requires verified Telegram init data and rejects spoofed headers', async () => {
   const previousAllowDemoMode = process.env.ALLOW_DEMO_MODE
   const previousTelegramBotToken = process.env.TELEGRAM_BOT_TOKEN

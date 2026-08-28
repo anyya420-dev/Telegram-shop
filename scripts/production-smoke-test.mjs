@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 const PRODUCTION = {
-  frontendUrl: process.env.SMOKE_FRONTEND_URL?.trim() || 'https://telegram-shop-378j.onrender.com',
-  backendUrl: process.env.SMOKE_BACKEND_URL?.trim() || 'https://telegram-shop-backend.onrender.com',
+  frontendUrl: process.env.SMOKE_FRONTEND_URL?.trim() || 'https://telegram-shop-frontend-w1zw.onrender.com',
+  backendUrl: process.env.SMOKE_BACKEND_URL?.trim() || 'https://telegram-shop-backend-zfer.onrender.com',
 }
 PRODUCTION.apiBaseUrl = `${PRODUCTION.backendUrl}/api`
 
@@ -11,6 +11,8 @@ const LOCAL_API_PATTERNS = [
   /https?:\/\/127\.0\.0\.1(?::\d+)?\/api/i,
 ]
 const RETIRED_API_PATTERNS = [
+  /https?:\/\/telegram-shop-backend\.onrender\.com(?:\/api)?/i,
+  /https?:\/\/telegram-shop-378j\.onrender\.com(?:\/api)?/i,
   /https?:\/\/telegram-shop\.onrender\.com(?:\/api)?/i,
   /https?:\/\/telegram-shop-3781\.onrender\.com(?:\/api)?/i,
   /https?:\/\/narcos-shop(?:-3781)?\.onrender\.com(?:\/api)?/i,
@@ -184,7 +186,7 @@ await runCheck('frontend does not reference localhost API', async () => {
 await runCheck('frontend does not reference old Render API host', async () => {
   const combined = await getFrontendBundleText()
   const retiredMatch = RETIRED_API_PATTERNS.find((pattern) => pattern.test(combined))
-  ensure(!retiredMatch, 'frontend bundle contains https://78j.onrender.com/api')
+  ensure(!retiredMatch, 'frontend bundle contains retired Render host references')
   return 'no retired host references'
 })
 
