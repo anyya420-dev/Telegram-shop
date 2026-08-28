@@ -305,6 +305,9 @@ export const api = {
   updateAdminCity(id: number, data: { name?: string; nameEn?: string | null; isActive?: boolean; sortOrder?: number }) {
     return adminRequest<{ city: AdminCity }>(`/admin/cities/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
   },
+  deleteAdminCity(id: number) {
+    return adminRequest<{ ok: boolean }>(`/admin/cities/${id}`, { method: 'DELETE' })
+  },
   getAdminProducts() {
     return adminRequest<{ products: AdminProduct[] }>('/admin/products')
   },

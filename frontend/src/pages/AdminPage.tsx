@@ -185,10 +185,8 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
   const { t } = useTranslation();
   const navigate = useNavigate();
   const language = i18n.language as Language;
-  const panelTitle = panelMode === 'owner' ? 'Owner Panel' : 'Admin Panel';
-  const loginTitle = panelMode === 'owner'
-    ? t('admin.ownerLogin', { defaultValue: 'Owner login' })
-    : t('admin.login', { defaultValue: 'Admin login' });
+  const panelTitle = 'Admin Panel';
+  const loginTitle = t('admin.login', { defaultValue: 'Вход в Admin Panel' });
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [adminRole, setAdminRole] = useState<string>('admin');
@@ -647,6 +645,17 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
       setEditingCity(null);
     } catch (e: unknown) {
       setError(getAdminErrorMessage(e, 'Failed to update city'));
+    }
+  }
+
+  async function handleDeleteCity(cityId: number, cityName: string) {
+    if (!window.confirm(t('admin.confirmDeleteCity', { defaultValue: `Delete city "${cityName}"? This cannot be undone.` }))) return;
+    setError(null);
+    try {
+      await api.deleteAdminCity(cityId);
+      setCities((current) => current.filter((city) => city.id !== cityId));
+    } catch (e: unknown) {
+      setError(getAdminErrorMessage(e, 'Failed to delete city'));
     }
   }
 
@@ -1257,20 +1266,26 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
   if (!authenticated) {
     return (
       <div className={styles.page}>
-        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button className={`${styles.filterBtn} ${language === 'ru' ? styles.active : ''}`} onClick={() => void i18n.changeLanguage('ru')} type="button">RU</button>
+            <button className={`${styles.filterBtn} ${language === 'en' ? styles.active : ''}`} onClick={() => void i18n.changeLanguage('en')} type="button">EN</button>
+          </div>
+        </div>
         {error && <p className={styles.error}>{error}</p>}
         <div className={styles.form}>
           <h3 className={styles.formTitle}>{loginTitle}</h3>
           <input
             className={styles.input}
             type="password"
-            placeholder={t('admin.password', { defaultValue: 'Password' })}
+            placeholder={t('admin.password', { defaultValue: 'Пароль' })}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && void handleLogin()}
           />
           <button className={styles.createBtn} onClick={() => void handleLogin()} disabled={authLoading || !password}>
-            {authLoading ? t('common.loading', { defaultValue: 'Loading...' }) : t('common.login', { defaultValue: 'Login' })}
+            {authLoading ? t('common.loading', { defaultValue: 'Загрузка...' }) : t('common.login', { defaultValue: 'Войти' })}
           </button>
         </div>
       </div>
@@ -1279,13 +1294,19 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 className={styles.title}><Settings size={18} strokeWidth={1.5} style={{ verticalAlign: 'middle', marginRight: 8 }} />{panelTitle}</h1>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button className={`${styles.filterBtn} ${language === 'ru' ? styles.active : ''}`} onClick={() => void i18n.changeLanguage('ru')} type="button">RU</button>
+          <button className={`${styles.filterBtn} ${language === 'en' ? styles.active : ''}`} onClick={() => void i18n.changeLanguage('en')} type="button">EN</button>
+        </div>
+      </div>
       <div className={styles.filterRow}>
-        <button className={styles.filterBtn} onClick={() => navigate('/shop')} type="button">
-          Вернуться в магазин
+        <button className={styles.filterBtn} onClick={() => navigate('/home')} type="button">
+          {t('admin.backToShop', { defaultValue: 'Вернуться в магазин' })}
         </button>
         <button className={styles.filterBtn} onClick={() => void handleLogout()}>
-          {t('common.logout', { defaultValue: 'Logout' })}
+          {t('common.logout', { defaultValue: 'Выйти' })}
         </button>
       </div>
 
@@ -1935,7 +1956,10 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
                       <span className={styles.orderMeta}> • {t('admin.sortOrder', { defaultValue: 'Sort' })}: {city.sortOrder}</span>
                       {city._count ? <span className={styles.orderMeta}> • {city._count.users} users • {city._count.productCities} product cities • {city._count.orders} orders</span> : null}
                     </div>
-                    <button className={styles.replyBtn} onClick={() => { setEditingCity(city.id); setCityEdits((current) => ({ ...current, [city.id]: {} })); }}>{t('common.edit', { defaultValue: 'Edit' })}</button>
+                    <div className={styles.replyRow}>
+                      <button className={styles.replyBtn} onClick={() => { setEditingCity(city.id); setCityEdits((current) => ({ ...current, [city.id]: {} })); }}>{t('common.edit', { defaultValue: 'Edit' })}</button>
+                      <button className={styles.replyBtn} onClick={() => void handleDeleteCity(city.id, city.name)} style={{ color: 'var(--error, #ef4444)' }}>{t('common.delete', { defaultValue: 'Delete' })}</button>
+                    </div>
                   </>
                 )}
               </div>

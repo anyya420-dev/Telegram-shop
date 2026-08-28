@@ -84,7 +84,7 @@ export default function App() {
             <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="admin" element={<AdminPage />} />
-            <Route path="owner" element={<AdminPage panelMode="owner" />} />
+            <Route path="owner" element={<Navigate to="/admin" replace />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>
