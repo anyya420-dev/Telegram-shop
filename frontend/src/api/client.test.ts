@@ -87,9 +87,9 @@ test('payment and admin payment endpoints use correct paths and transports', asy
 })
 
 test('resolveApiUrl normalizes Render API env values', () => {
-  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://telegram-shop-backend.onrender.com' }), 'https://telegram-shop-backend.onrender.com/api')
-  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://telegram-shop-backend.onrender.com/api/' }), 'https://telegram-shop-backend.onrender.com/api')
-  assert.equal(resolveApiUrl({ VITE_API_URL: 'telegram-shop-backend.onrender.com/api' }), 'https://telegram-shop-backend.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://telegram-shop-backend-zfer.onrender.com' }), 'https://telegram-shop-backend-zfer.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: 'https://telegram-shop-backend-zfer.onrender.com/api/' }), 'https://telegram-shop-backend-zfer.onrender.com/api')
+  assert.equal(resolveApiUrl({ VITE_API_URL: 'telegram-shop-backend-zfer.onrender.com/api' }), 'https://telegram-shop-backend-zfer.onrender.com/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '/api/' }), '/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '   ' }), '/api')
   assert.equal(resolveApiUrl({ VITE_API_URL: '   ', PROD: true }), '/api')

@@ -2,15 +2,52 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-async function main() {
-  await prisma.cartItem.deleteMany()
-  await prisma.cart.deleteMany()
-  await prisma.productCity.deleteMany()
-  await prisma.product.deleteMany()
-  await prisma.category.deleteMany()
-  await prisma.city.deleteMany()
-  await prisma.user.deleteMany()
+async function upsertProductByName(input: {
+  name: string
+  nameEn: string
+  description: string
+  descriptionEn: string
+  price: number
+  image: string
+  categoryId: number
+  isRecommended: boolean
+}) {
+  const existing = await prisma.product.findFirst({
+    where: { name: input.name },
+    select: { id: true },
+  })
 
+  if (existing) {
+    return prisma.product.update({
+      where: { id: existing.id },
+      data: {
+        nameEn: input.nameEn,
+        descriptionEn: input.descriptionEn,
+        price: input.price,
+        image: input.image,
+        categoryId: input.categoryId,
+        isActive: true,
+        isRecommended: input.isRecommended,
+      },
+    })
+  }
+
+  return prisma.product.create({
+    data: {
+      name: input.name,
+      nameEn: input.nameEn,
+      description: input.description,
+      descriptionEn: input.descriptionEn,
+      price: input.price,
+      image: input.image,
+      categoryId: input.categoryId,
+      isActive: true,
+      isRecommended: input.isRecommended,
+    },
+  })
+}
+
+async function main() {
   const warsaw = await prisma.city.upsert({
     where: { name: 'Варшава' },
     update: { nameEn: 'Warsaw', isActive: true, sortOrder: 1 },
@@ -48,99 +85,59 @@ async function main() {
     create: { name: 'Аксессуары', nameEn: 'Accessories', isActive: true, sortOrder: 4 },
   })
 
-  const coffee = await prisma.product.upsert({
-    where: { id: 1 },
-    update: {
-      nameEn: 'Premium Coffee',
-      descriptionEn: 'Selected whole-bean coffee with a rich taste and aroma.',
-    },
-    create: {
-      name: 'Кофе Premium',
-      nameEn: 'Premium Coffee',
-      description: 'Отборный зерновой кофе высшего качества. Насыщенный вкус и аромат.',
-      descriptionEn: 'Selected whole-bean coffee with a rich taste and aroma.',
-      price: 20,
-      image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600',
-      categoryId: home.id,
-      isActive: true,
-      isRecommended: true,
-    },
+  const coffee = await upsertProductByName({
+    name: 'Кофе Premium',
+    nameEn: 'Premium Coffee',
+    description: 'Отборный зерновой кофе высшего качества. Насыщенный вкус и аромат.',
+    descriptionEn: 'Selected whole-bean coffee with a rich taste and aroma.',
+    price: 20,
+    image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600',
+    categoryId: home.id,
+    isRecommended: true,
   })
 
-  const headphones = await prisma.product.upsert({
-    where: { id: 2 },
-    update: {
-      nameEn: 'Wireless Headphones',
-      descriptionEn: 'Wireless headphones with noise cancellation and 30 hours of battery life.',
-    },
-    create: {
-      name: 'Наушники Wireless',
-      nameEn: 'Wireless Headphones',
-      description: 'Беспроводные наушники с шумоподавлением. 30 часов работы.',
-      descriptionEn: 'Wireless headphones with noise cancellation and 30 hours of battery life.',
-      price: 150,
-      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
-      categoryId: electronics.id,
-      isActive: true,
-      isRecommended: true,
-    },
+  const headphones = await upsertProductByName({
+    name: 'Наушники Wireless',
+    nameEn: 'Wireless Headphones',
+    description: 'Беспроводные наушники с шумоподавлением. 30 часов работы.',
+    descriptionEn: 'Wireless headphones with noise cancellation and 30 hours of battery life.',
+    price: 150,
+    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
+    categoryId: electronics.id,
+    isRecommended: true,
   })
 
-  const tshirt = await prisma.product.upsert({
-    where: { id: 3 },
-    update: {
-      nameEn: 'Classic T-shirt',
-      descriptionEn: 'A minimalist T-shirt made from premium cotton with a clean fit.',
-    },
-    create: {
-      name: 'Футболка Classic',
-      nameEn: 'Classic T-shirt',
-      description: 'Минималистичная футболка из premium-хлопка. Идеальный крой.',
-      descriptionEn: 'A minimalist T-shirt made from premium cotton with a clean fit.',
-      price: 35,
-      image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600',
-      categoryId: clothing.id,
-      isActive: true,
-      isRecommended: false,
-    },
+  const tshirt = await upsertProductByName({
+    name: 'Футболка Classic',
+    nameEn: 'Classic T-shirt',
+    description: 'Минималистичная футболка из premium-хлопка. Идеальный крой.',
+    descriptionEn: 'A minimalist T-shirt made from premium cotton with a clean fit.',
+    price: 35,
+    image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=600',
+    categoryId: clothing.id,
+    isRecommended: false,
   })
 
-  const charger = await prisma.product.upsert({
-    where: { id: 4 },
-    update: {
-      nameEn: 'USB-C Charger 65W',
-      descriptionEn: 'A fast charger for laptops and phones with a compact design.',
-    },
-    create: {
-      name: 'Зарядка USB-C 65W',
-      nameEn: 'USB-C Charger 65W',
-      description: 'Быстрая зарядка для ноутбуков и телефонов. Компактный дизайн.',
-      descriptionEn: 'A fast charger for laptops and phones with a compact design.',
-      price: 45,
-      image: 'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=600',
-      categoryId: electronics.id,
-      isActive: true,
-      isRecommended: false,
-    },
+  const charger = await upsertProductByName({
+    name: 'Зарядка USB-C 65W',
+    nameEn: 'USB-C Charger 65W',
+    description: 'Быстрая зарядка для ноутбуков и телефонов. Компактный дизайн.',
+    descriptionEn: 'A fast charger for laptops and phones with a compact design.',
+    price: 45,
+    image: 'https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=600',
+    categoryId: electronics.id,
+    isRecommended: false,
   })
 
-  const lamp = await prisma.product.upsert({
-    where: { id: 5 },
-    update: {
-      nameEn: 'Desk Lamp',
-      descriptionEn: 'A modern LED lamp with adjustable brightness and USB charging.',
-    },
-    create: {
-      name: 'Лампа настольная',
-      nameEn: 'Desk Lamp',
-      description: 'Современная LED лампа с регулировкой яркости. Заряжается от USB.',
-      descriptionEn: 'A modern LED lamp with adjustable brightness and USB charging.',
-      price: 60,
-      image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600',
-      categoryId: home.id,
-      isActive: true,
-      isRecommended: false,
-    },
+  const lamp = await upsertProductByName({
+    name: 'Лампа настольная',
+    nameEn: 'Desk Lamp',
+    description: 'Современная LED лампа с регулировкой яркости. Заряжается от USB.',
+    descriptionEn: 'A modern LED lamp with adjustable brightness and USB charging.',
+    price: 60,
+    image: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600',
+    categoryId: home.id,
+    isRecommended: false,
   })
 
   await prisma.productCity.upsert({
@@ -243,22 +240,52 @@ async function main() {
   console.log('Seed completed successfully')
 }
 
-// Upsert delivery options and sample discount (run separately, not resetting existing data)
+async function createDeliveryOptionIfMissing(input: {
+  name: string
+  nameEn: string
+  type: string
+  price: number
+  sortOrder: number
+}) {
+  const existing = await prisma.deliveryOption.findFirst({
+    where: { name: input.name, type: input.type },
+    select: { id: true },
+  })
+  if (existing) {
+    return
+  }
+  await prisma.deliveryOption.create({
+    data: {
+      name: input.name,
+      nameEn: input.nameEn,
+      type: input.type,
+      price: input.price,
+      isActive: true,
+      sortOrder: input.sortOrder,
+    },
+  })
+}
+
+// Upsert delivery options and sample discount without deleting or re-keying existing data
 async function seedExtras() {
   await prisma.appSetting.upsert({
     where: { key: 'shop_name' },
     update: { value: 'Telegram Shop' },
     create: { key: 'shop_name', value: 'Telegram Shop' },
   })
-  await prisma.deliveryOption.upsert({
-    where: { id: 1 },
-    update: {},
-    create: { id: 1, name: 'Самовывоз', nameEn: 'Pickup', type: 'pickup', price: 0, isActive: true, sortOrder: 1 },
+  await createDeliveryOptionIfMissing({
+    name: 'Самовывоз',
+    nameEn: 'Pickup',
+    type: 'pickup',
+    price: 0,
+    sortOrder: 1,
   })
-  await prisma.deliveryOption.upsert({
-    where: { id: 2 },
-    update: {},
-    create: { id: 2, name: 'Доставка курьером', nameEn: 'Courier delivery', type: 'delivery', price: 250, isActive: true, sortOrder: 2 },
+  await createDeliveryOptionIfMissing({
+    name: 'Доставка курьером',
+    nameEn: 'Courier delivery',
+    type: 'delivery',
+    price: 250,
+    sortOrder: 2,
   })
   await prisma.discount.upsert({
     where: { code: 'WELCOME10' },
