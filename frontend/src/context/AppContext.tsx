@@ -7,6 +7,7 @@ import type { Balance, Cart, Category, City, Language, Order, ProductSummary, Us
 
 type AppState = {
   loading: boolean
+  slowLoad: boolean
   error: string | null
   citiesLoading: boolean
   cartLoading: boolean
@@ -37,6 +38,7 @@ type AppState = {
   fetchOrders: () => Promise<Order[]>
   setError: (value: string | null) => void
   refreshBalance: () => Promise<void>
+  retryBootstrap: () => void
 }
 
 const AppContext = createContext<AppState | null>(null)
@@ -62,6 +64,8 @@ function translateError(error: unknown, t: (key: string) => string, fallbackKey:
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
+  const [slowLoad, setSlowLoad] = useState(false)
+  const [bootstrapKey, setBootstrapKey] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [citiesLoading, setCitiesLoading] = useState(false)
   const [cartLoading, setCartLoading] = useState(false)
@@ -132,10 +136,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    let cancelled = false
+
     async function bootstrap() {
       try {
         setLoading(true)
+        setSlowLoad(false)
         setError(null)
+
+        // After 15 seconds of loading, show a "taking longer than usual" hint
+        const slowTimer = window.setTimeout(() => {
+          if (!cancelled) setSlowLoad(true)
+        }, 15_000)
+
         const telegram = getTelegramContext()
         api.setSessionToken(null)
         const response = await api.bootstrap({
@@ -143,6 +156,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           telegramUser: telegram.user,
           isTelegramEnvironment: telegram.isTelegramEnvironment,
         })
+
+        window.clearTimeout(slowTimer)
 
         api.setSessionToken(response.sessionToken)
         setTelegramEnvironment(response.telegramEnvironment)
@@ -155,26 +170,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         document.title = response.shopName || 'Telegram Shop'
 
         setCartLoading(true)
-        const [catalogResponse, cartResponse, balanceResponse] = await Promise.all([
+        const [catalogResponse, cartResult, balanceResponse] = await Promise.all([
           api.getCatalog({ cityId: response.user.selectedCityId ?? undefined }),
-          api.getCart(),
+          api.getCart().catch(() => null),
           api.getBalance().catch(() => null),
         ])
         setProducts(catalogResponse.products)
-        setCart(cartResponse.cart)
-        setRecommended(cartResponse.recommended)
+        if (cartResult) {
+          setCart(cartResult.cart)
+          setRecommended(cartResult.recommended)
+        }
         if (balanceResponse) setUserBalance(balanceResponse.balance)
         setCartLoading(false)
       } catch (bootstrapError) {
         setError(translateError(bootstrapError, t, 'shop_load_failed'))
       } finally {
         setCartLoading(false)
-        setLoading(false)
+        setSlowLoad(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     void bootstrap()
-  }, [])
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrapKey])
 
   async function selectCity(cityId: number) {
     if (!user) {
@@ -315,6 +335,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = {
     loading,
+    slowLoad,
     error,
     citiesLoading,
     cartLoading,
@@ -345,6 +366,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     fetchOrders,
     setError,
     refreshBalance,
+    retryBootstrap: () => {
+      setError(null)
+      setBootstrapKey((k) => k + 1)
+    },
   } satisfies AppState
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

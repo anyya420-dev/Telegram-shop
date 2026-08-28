@@ -28,6 +28,7 @@ import {
   sanitizePayment,
   sanitizePaymentMethod,
 } from '../services/payments.js'
+import { verifyTelegramInitDataWithAnyBotToken } from '../lib.js'
 import { assignPickupStoragesForPaidOrder } from '../services/pickupStorage.js'
 import { ensureCasinoDefaults, getOrCreateCasinoBalance, serializeReward } from '../services/casino.js'
 
@@ -404,13 +405,25 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
   await ensureAdminPasswordFromEnv()
 
   const password = typeof request.body.password === 'string' ? request.body.password : ''
-  const mode = request.body?.mode === 'owner' ? 'owner' : 'admin'
+  const initData = typeof request.body.initData === 'string' ? request.body.initData.trim() : ''
   if (!password) {
     sendError(response, 400, 'invalid_credentials', 'Administrator password is required')
     return
   }
 
-  const result = await verifyAdminPassword(password, mode)
+  // When Telegram initData is provided (opened via bot WebApp button), verify it.
+  // If initData is absent (direct browser access), skip Telegram verification.
+  if (initData) {
+    const botTokens = [process.env.BOT_TOKEN, process.env.TELEGRAM_BOT_TOKEN].filter((t): t is string => Boolean(t))
+    const telegramUser = verifyTelegramInitDataWithAnyBotToken(initData, botTokens)
+    if (!telegramUser) {
+      sendError(response, 401, 'invalid_credentials', 'Telegram identity could not be verified')
+      return
+    }
+  }
+
+  // Try all roles — role is auto-detected from the password, not from the request.
+  const result = await verifyAdminPassword(password)
   if (!result.valid) {
     if (result.reason === 'configuration_error') {
       sendError(response, 503, 'configuration_error', 'Admin password is not configured on the server')
@@ -2446,6 +2459,40 @@ router.patch('/cities/:id', authRateLimiter, async (request, response) => {
   })
 
   response.json({ city: mapCity(updatedCity) })
+})
+
+// DELETE /api/admin/cities/:id
+router.delete('/cities/:id', authRateLimiter, async (request, response) => {
+  const admin = await getAdminUser(request, response)
+  if (!admin) return
+
+  const id = parsePositiveInt(request.params.id)
+  if (!id) {
+    sendError(response, 400, 'invalid_id', 'Invalid city id')
+    return
+  }
+
+  const city = await prisma.city.findUnique({
+    where: { id },
+    include: { _count: { select: { users: true, productCities: true, orders: true } } },
+  })
+  if (!city) {
+    sendError(response, 404, 'city_not_found', 'City not found')
+    return
+  }
+
+  if ((city._count?.users ?? 0) > 0 || (city._count?.orders ?? 0) > 0) {
+    sendError(response, 409, 'city_in_use', 'City has users or orders and cannot be deleted. Deactivate it instead.')
+    return
+  }
+
+  await prisma.city.delete({ where: { id } })
+
+  await prisma.auditLog.create({
+    data: { userId: admin.id, action: 'city_deleted', entity: 'city', entityId: id, meta: JSON.stringify({ name: city.name }) },
+  })
+
+  response.json({ ok: true })
 })
 
 // ──── Categories ────────────────────────────────────────────────────────────

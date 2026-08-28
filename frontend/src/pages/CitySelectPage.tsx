@@ -10,7 +10,7 @@ import type { Language } from '../types'
 
 export default function CitySelectPage() {
   const { t, i18n } = useTranslation()
-  const { loading, cities, citiesLoading, reloadCities, selectCity, user } = useApp()
+  const { loading, cities, citiesLoading, reloadCities, selectCity, user, error: bootstrapError, retryBootstrap } = useApp()
   const navigate = useNavigate()
   const [selecting, setSelecting] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -76,6 +76,13 @@ export default function CitySelectPage() {
           </button>
           <button className={styles.retryBtn} onClick={() => void handleReloadCities()} type="button">
             {t('city.reload', { defaultValue: 'Обновить список' })}
+          </button>
+        </div>
+      ) : cities.length === 0 && bootstrapError ? (
+        <div className={styles.stateCard}>
+          <p>{bootstrapError}</p>
+          <button className={styles.retryBtn} onClick={retryBootstrap} type="button">
+            {t('common.retry', { defaultValue: 'Повторить' })}
           </button>
         </div>
       ) : cities.length === 0 ? (

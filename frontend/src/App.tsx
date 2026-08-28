@@ -40,9 +40,50 @@ function LoadingGate() {
 }
 
 function ShopLayoutGate() {
-  const { loading } = useApp();
+  const { loading, slowLoad, error, user, retryBootstrap } = useApp();
 
-  if (loading) return <LoadingGate />;
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#080810', padding: '24px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div
+            aria-hidden="true"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              border: '3px solid rgba(255,255,255,0.2)',
+              borderTopColor: '#34d399',
+              animation: 'spin 0.7s linear infinite',
+              margin: '0 auto 16px',
+            }}
+          />
+          {slowLoad ? (
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, margin: 0 }}>
+              Сервер запускается, подождите…
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !user) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#080810', padding: '24px' }}>
+        <div style={{ textAlign: 'center', maxWidth: 320 }}>
+          <p style={{ color: '#ef4444', marginBottom: 16, fontSize: 14 }}>{error}</p>
+          <button
+            onClick={retryBootstrap}
+            style={{ background: '#34d399', color: '#000', border: 'none', borderRadius: 10, padding: '10px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Повторить
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return <Layout />;
 }
 
@@ -84,7 +125,7 @@ export default function App() {
             <Route path="orders/:id" element={<OrderDetailPage />} />
             <Route path="wishlist" element={<WishlistPage />} />
             <Route path="admin" element={<AdminPage />} />
-            <Route path="owner" element={<AdminPage panelMode="owner" />} />
+            <Route path="owner" element={<Navigate to="/admin" replace />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>
