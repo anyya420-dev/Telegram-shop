@@ -1,30 +1,47 @@
 import 'dotenv/config'
 import { Markup, Telegraf } from 'telegraf'
 
-const token = process.env.TELEGRAM_BOT_TOKEN
-const webAppUrl = (process.env.WEB_APP_URL ?? process.env.FRONTEND_URL ?? '').trim()
-const adminPanelWebAppUrl = (process.env.ADMIN_WEB_APP_URL ?? `${webAppUrl.replace(/\/+$/, '')}/#/admin`).trim()
+const isProduction = process.env.NODE_ENV === 'production'
+const localUrlPattern = /^https?:\/\/(?:localhost|127(?:\.\d{1,3}){3})(?::\d+)?(?:\/|$)/i
 
-if (!token) {
-  console.warn('TELEGRAM_BOT_TOKEN is not set. Bot worker will stay idle until the token is provided.')
-  const idleInterval = setInterval(() => {
-    // keep worker process alive to avoid restart loops when token is intentionally unset
-  }, 60_000)
-  process.once('SIGINT', () => {
-    clearInterval(idleInterval)
-    process.exit(0)
-  })
-  process.once('SIGTERM', () => {
-    clearInterval(idleInterval)
-    process.exit(0)
-  })
-} else {
-  if (!webAppUrl) {
-    console.error('WEB_APP_URL or FRONTEND_URL must be configured when TELEGRAM_BOT_TOKEN is set.')
-    process.exit(1)
+const normalizeUrl = (value: string | undefined) => value?.trim().replace(/\/+$/, '') ?? ''
+
+function ensurePublicWebAppUrl(variableName: string, value: string) {
+  if (!value) {
+    throw new Error(`${variableName} must be configured with a public Web App URL.`)
   }
 
+  if (isProduction && localUrlPattern.test(value)) {
+    throw new Error(`${variableName} cannot point to localhost in production.`)
+  }
+}
+
+function resolveBotToken() {
+  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN?.trim()
+  if (telegramBotToken) return telegramBotToken
+
+  const legacyBotToken = process.env.BOT_TOKEN?.trim()
+  if (legacyBotToken) {
+    console.warn('BOT_TOKEN is deprecated. Set TELEGRAM_BOT_TOKEN in production.')
+    return legacyBotToken
+  }
+
+  throw new Error('TELEGRAM_BOT_TOKEN is required for bot startup.')
+}
+
+async function startBot() {
+  const token = resolveBotToken()
+  const webAppUrl = normalizeUrl(process.env.WEB_APP_URL ?? process.env.FRONTEND_URL)
+  ensurePublicWebAppUrl('WEB_APP_URL', webAppUrl)
+
+  const adminPanelWebAppUrl = normalizeUrl(process.env.ADMIN_WEB_APP_URL ?? `${webAppUrl}/#/admin`)
+  ensurePublicWebAppUrl('ADMIN_WEB_APP_URL', adminPanelWebAppUrl)
+
   const bot = new Telegraf(token)
+
+  bot.catch((error) => {
+    console.error('Telegram Shop bot runtime error:', error)
+  })
 
   bot.start(async (context) => {
     await context.reply(
@@ -44,13 +61,15 @@ if (!token) {
     )
   })
 
-  bot.launch().then(() => {
-    console.log('Telegram Shop bot started')
-  }).catch((error) => {
-    console.error('Telegram Shop bot failed to start:', error)
-    process.exit(1)
-  })
+  await bot.telegram.getMe()
+  await bot.launch({ dropPendingUpdates: true })
+  console.log('Telegram Shop bot started')
 
   process.once('SIGINT', () => bot.stop('SIGINT'))
   process.once('SIGTERM', () => bot.stop('SIGTERM'))
 }
+
+startBot().catch((error) => {
+  console.error('Telegram Shop bot failed to start:', error)
+  process.exit(1)
+})
