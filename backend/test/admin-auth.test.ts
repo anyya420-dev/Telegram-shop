@@ -41,8 +41,8 @@ before(async () => {
   process.env.ADMIN_PASSWORD = 'admin-secret'
   process.env.DATABASE_URL = databaseUrl
   process.env.AUTH_RATE_LIMIT_MAX = '500'
-  process.env.FRONTEND_URL = 'https://telegram-shop-378j.onrender.com/'
-  process.env.WEB_APP_URL = 'https://telegram-shop-378j.onrender.com/miniapp'
+  process.env.FRONTEND_URL = 'https://telegram-shop-frontend-w1zw.onrender.com/'
+  process.env.WEB_APP_URL = 'https://telegram-shop-frontend-w1zw.onrender.com/miniapp'
   delete process.env.CORS_ALLOWED_ORIGINS
 
   run('npm', ['run', 'db:generate'])
@@ -200,22 +200,22 @@ test('cors allows only production frontend origin and handles preflight', async 
   const preflight = await request('/api/admin/auth/status', {
     method: 'OPTIONS',
     headers: {
-      Origin: 'https://telegram-shop-378j.onrender.com',
+      Origin: 'https://telegram-shop-frontend-w1zw.onrender.com',
       'Access-Control-Request-Method': 'GET',
       'Access-Control-Request-Headers': 'Content-Type',
     },
   })
   assert.equal(preflight.status, 204)
-  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://telegram-shop-378j.onrender.com')
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://telegram-shop-frontend-w1zw.onrender.com')
   assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true')
 
   const configuredWebAppOrigin = await request('/api/health', {
     headers: {
-      Origin: 'https://telegram-shop-378j.onrender.com',
+      Origin: 'https://telegram-shop-frontend-w1zw.onrender.com',
     },
   })
   assert.equal(configuredWebAppOrigin.status, 200)
-  assert.equal(configuredWebAppOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-378j.onrender.com')
+  assert.equal(configuredWebAppOrigin.headers.get('access-control-allow-origin'), 'https://telegram-shop-frontend-w1zw.onrender.com')
 
   const narcosOrigin = await request('/api/health', {
     headers: {
