@@ -1,7 +1,7 @@
 import { AlertCircle, ArrowLeft, Heart, MapPin, Minus, Package, Plus, Star } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
 import ProductCard from '../components/ProductCard/ProductCard'
 import { useApp } from '../context/AppContext'
@@ -11,12 +11,14 @@ import { clampProductQuantity, getProductQuantityBounds } from '../lib/storefron
 import i18n from '../lib/i18n'
 import styles from './ProductPage.module.css'
 import type { Language, ProductDetail, Review } from '../types'
+import { safeNavigateBack } from '../lib/navigation'
 
 const STARS = [1, 2, 3, 4, 5]
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useTranslation()
   const language = i18n.language as Language
   const { user, loading: bootstrapLoading, addToCart, cart, products, openCityPicker } = useApp()
@@ -155,6 +157,10 @@ export default function ProductPage() {
     }
   }
 
+  function handleBack() {
+    safeNavigateBack(navigate, `${location.pathname}${location.search}`, '/catalog')
+  }
+
   if (loading) {
     return (
       <div className={styles.loading}>
@@ -167,7 +173,7 @@ export default function ProductPage() {
     return (
       <div className={styles.error}>
         <p>{pageError ?? t('product.notFound')}</p>
-        <button className={styles.viewCartBtn} onClick={() => navigate(-1)} type="button">
+        <button className={styles.viewCartBtn} onClick={handleBack} type="button">
           {t('common.back')}
         </button>
       </div>
@@ -176,7 +182,7 @@ export default function ProductPage() {
 
   return (
     <div className={styles.page}>
-      <button className={styles.back} onClick={() => navigate(-1)} type="button">
+      <button className={styles.back} onClick={handleBack} type="button">
         <ArrowLeft size={16} strokeWidth={1.8} style={{ marginRight: 8, verticalAlign: 'middle' }} />
         {t('common.back')}
       </button>

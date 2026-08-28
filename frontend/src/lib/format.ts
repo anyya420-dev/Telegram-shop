@@ -13,6 +13,14 @@ export function formatCurrency(value: number, language: Language) {
   }).format(value)
 }
 
+export function formatUsdCurrency(value: number, language: Language) {
+  return new Intl.NumberFormat(locales[language], {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
 export function formatQuantity(value: number, language: Language) {
   const formatter = new Intl.NumberFormat(locales[language], {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 1,

@@ -213,7 +213,7 @@ export default function ProfilePage() {
                 <span className={styles.cardLabel}>{t('profile.balance')}</span>
               </div>
               <div className={styles.cardRight}>
-                <span className={styles.cardValue}>{profile.balance.toFixed(2)}</span>
+                <span className={styles.cardValue}>${profile.balance.toFixed(2)}</span>
                 <ChevronRight size={16} strokeWidth={1.8} />
               </div>
             </button>
@@ -283,26 +283,6 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      <div className={styles.section}>
-        <button className={styles.linkCard} onClick={() => navigate('/admin')} type="button">
-          <div className={styles.cardLeft}>
-            <ShieldCheck size={16} strokeWidth={1.7} />
-            <span>Админ</span>
-          </div>
-          <div className={styles.cardRight}>
-            <ChevronRight size={16} strokeWidth={1.8} />
-          </div>
-        </button>
-        <button className={styles.linkCard} onClick={() => navigate('/owner')} type="button">
-          <div className={styles.cardLeft}>
-            <ShieldCheck size={16} strokeWidth={1.7} />
-            <span>Owner Panel</span>
-          </div>
-          <div className={styles.cardRight}>
-            <ChevronRight size={16} strokeWidth={1.8} />
-          </div>
-        </button>
-      </div>
     </div>
   )
 }

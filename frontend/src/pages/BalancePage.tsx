@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import { useApp } from '../context/AppContext'
 import { getErrorMessage } from '../lib/errors'
 import type { Balance, DepositRequest, DepositWallet } from '../types'
-import { formatCurrency } from '../lib/format'
+import { formatUsdCurrency } from '../lib/format'
 import i18n from '../lib/i18n'
 import type { Language } from '../types'
 import styles from './BalancePage.module.css'
@@ -380,7 +380,7 @@ export default function BalancePage() {
 
       <div className={styles.card}>
         <span className={styles.cardLabel}>{t('balance.current', { defaultValue: 'Virtual balance' })}</span>
-        <span className={styles.amount}>{formatCurrency(balance.amount, language)}</span>
+        <span className={styles.amount}>{formatUsdCurrency(balance.amount, language)}</span>
         <button className={styles.topupBtn} onClick={() => void openTopup()} type="button">
           {t('balance.topup', { defaultValue: 'Top up' })}
         </button>
@@ -427,7 +427,7 @@ export default function BalancePage() {
                   {tx.comment ? <span className={styles.txComment}> — {tx.comment}</span> : null}
                 </div>
                 <span className={styles.txAmount}>
-                  {tx.amount >= 0 ? '+' : ''}{formatCurrency(tx.amount, language)}
+                  {tx.amount >= 0 ? '+' : ''}{formatUsdCurrency(tx.amount, language)}
                 </span>
               </div>
             ))}

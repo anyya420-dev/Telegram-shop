@@ -195,7 +195,18 @@ router.patch('/orders/:id/delivery-price', async (request, response) => {
   }
 
   const normalizedDeliveryPrice = normalizeQuantity(deliveryPrice)
-  const total = normalizeQuantity(Math.max(0, order.subtotal - order.discountAmount + normalizedDeliveryPrice))
+  if (order.deliveryOption?.type !== 'delivery') {
+    sendError(response, 400, 'invalid_delivery_option', 'Delivery price can only be set for delivery orders')
+    return
+  }
+
+  if (order.paymentStatus !== 'awaiting_delivery_price') {
+    sendError(response, 400, 'delivery_price_already_set', 'Delivery price has already been confirmed for this order')
+    return
+  }
+
+  const baseTotalWithoutDelivery = normalizeQuantity(Math.max(0, order.total - order.deliveryFee))
+  const total = normalizeQuantity(Math.max(0, baseTotalWithoutDelivery + normalizedDeliveryPrice))
 
   const updated = await prisma.order.update({
     where: { id: orderId },

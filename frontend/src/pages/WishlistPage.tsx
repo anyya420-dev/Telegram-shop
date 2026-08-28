@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, ArrowLeft, Heart, Package, RefreshCw } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { getErrorMessage } from '../lib/errors'
@@ -9,10 +9,12 @@ import { formatCurrency } from '../lib/format'
 import i18n from '../lib/i18n'
 import type { Language } from '../types'
 import styles from './WishlistPage.module.css'
+import { safeNavigateBack } from '../lib/navigation'
 
 export default function WishlistPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const language = i18n.language as Language
   const [items, setItems] = useState<WishlistItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,6 +55,10 @@ export default function WishlistPage() {
     }
   }
 
+  function handleBack() {
+    safeNavigateBack(navigate, `${location.pathname}${location.search}`, '/profile')
+  }
+
   if (loading) {
     return <div className={styles.loading}><div className={styles.spinner} /></div>
   }
@@ -60,7 +66,7 @@ export default function WishlistPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button className={styles.back} onClick={() => navigate(-1)} type="button">
+        <button className={styles.back} onClick={handleBack} type="button">
           <ArrowLeft size={16} strokeWidth={1.8} />
           {t('common.back')}
         </button>

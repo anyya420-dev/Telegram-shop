@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, MapPin, Minus, Package, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import styles from './CartPage.module.css';
@@ -9,10 +9,12 @@ import { getErrorMessage } from '../lib/errors';
 import { getLocalizedCityName, getLocalizedProductName, getLocalizedUnit } from '../lib/localized';
 import i18n from '../lib/i18n';
 import type { Language } from '../types';
+import { safeNavigateBack } from '../lib/navigation';
 
 export default function CartPage() {
   const { cart, cartLoading, recommended, user, updateCartItem, removeCartItem, openCityPicker } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const language = i18n.language as Language;
   const [pendingItemId, setPendingItemId] = useState<number | null>(null);
@@ -28,6 +30,10 @@ export default function CartPage() {
     } finally {
       setPendingItemId(null);
     }
+  }
+
+  function handleBack() {
+    safeNavigateBack(navigate, `${location.pathname}${location.search}`, '/shop');
   }
 
   if (!cart || cart.items.length === 0) {
@@ -54,7 +60,7 @@ export default function CartPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button className={styles.back} onClick={() => navigate(-1)} type="button">
+        <button className={styles.back} onClick={handleBack} type="button">
           <ArrowLeft size={16} strokeWidth={1.8} />
           {t('common.back')}
         </button>

@@ -3,12 +3,19 @@ import type { TelegramIdentity } from '../types'
 type TelegramWebApp = {
   ready: () => void
   expand: () => void
+  close?: () => void
   initData: string
   initDataUnsafe?: {
-    user?: TelegramIdentity
+    user?: TelegramIdentity & { photo_url?: string }
   }
   setHeaderColor?: (color: string) => void
   setBackgroundColor?: (color: string) => void
+  BackButton?: {
+    show: () => void
+    hide: () => void
+    onClick: (handler: () => void) => void
+    offClick: (handler: () => void) => void
+  }
 }
 
 declare global {
