@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { Prisma } from '@prisma/client'
 import {
   authRateLimiter,
   mapCity,
@@ -36,6 +37,18 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const PAYMENT_TYPES = ['card', 'crypto'] as const
 const ORDER_STATUSES = ['pending', 'payment_pending', 'confirmed', 'processing', 'ready', 'delivered', 'cancelled'] as const
 const DELIVERY_TYPES = ['delivery', 'pickup'] as const
+
+class DepositModerationError extends Error {
+  status: number
+  code: string
+
+  constructor(status: number, code: string, message: string) {
+    super(message)
+    this.name = 'DepositModerationError'
+    this.status = status
+    this.code = code
+  }
+}
 
 type ProductCityInput = {
   cityId: number
@@ -3409,62 +3422,84 @@ router.post('/deposits/:id/confirm', authRateLimiter, async (request, response) 
     return
   }
 
-  await prisma.$transaction(async (tx) => {
-    // Atomic: only update if still pending — prevents race condition double-credit
-    const updateResult = await tx.depositRequest.updateMany({
-      where: { id: depositId, status: 'pending' },
-      data: {
-        status: 'confirmed',
-        confirmedAt: new Date(),
-        adminNote: typeof request.body.note === 'string' ? request.body.note.trim() || null : null,
-      },
+  if (!depositCheck.txHash?.trim()) {
+    sendError(response, 400, 'tx_hash_required', 'Transaction hash must be submitted before confirmation')
+    return
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Atomic: only update if still pending and tx hash exists — prevents race condition double-credit
+      const updateResult = await tx.depositRequest.updateMany({
+        where: { id: depositId, status: 'pending', txHash: { not: null } },
+        data: {
+          status: 'confirmed',
+          confirmedAt: new Date(),
+          adminNote: typeof request.body.note === 'string' ? request.body.note.trim() || null : null,
+        },
+      })
+      if (updateResult.count !== 1) {
+        throw new DepositModerationError(400, 'already_processed', 'This deposit has already been processed')
+      }
+      const deposit = await tx.depositRequest.findUniqueOrThrow({ where: { id: depositId } })
+      if (!deposit.txHash?.trim()) {
+        throw new DepositModerationError(400, 'tx_hash_required', 'Transaction hash must be submitted before confirmation')
+      }
+      const creditedAmount = deposit.creditedAmount ?? deposit.amountUsdt
+
+      const balance = await tx.balance.upsert({
+        where: { userId: deposit.userId },
+        create: { userId: deposit.userId, amount: 0 },
+        update: {},
+      })
+
+      await tx.balance.update({
+        where: { id: balance.id },
+        data: { amount: { increment: creditedAmount } },
+      })
+
+      await tx.balanceTransaction.create({
+        data: {
+          balanceId: balance.id,
+          type: 'DEPOSIT',
+          amount: creditedAmount,
+          status: 'completed',
+          source: 'deposit_request',
+          referenceId: depositId,
+          adminId: admin.id,
+          comment: `USDT deposit (${deposit.network}) confirmed by admin`,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: 'deposit_confirmed',
+          entity: 'deposit_request',
+          entityId: depositId,
+          meta: JSON.stringify({
+            userId: deposit.userId,
+            amountUsdt: deposit.amountUsdt,
+            creditedAmount,
+            network: deposit.network,
+            txHash: deposit.txHash,
+          }),
+        },
+      })
     })
-    if (updateResult.count !== 1) {
-      throw Object.assign(new Error('Deposit already processed'), { status: 400, code: 'already_processed' })
+  } catch (error) {
+    if (error instanceof DepositModerationError) {
+      sendError(response, error.status, error.code, error.message)
+      return
     }
-    const deposit = await tx.depositRequest.findUniqueOrThrow({ where: { id: depositId } })
-    const creditedAmount = deposit.creditedAmount ?? deposit.amountUsdt
 
-    const balance = await tx.balance.upsert({
-      where: { userId: deposit.userId },
-      create: { userId: deposit.userId, amount: 0 },
-      update: {},
-    })
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      sendError(response, 409, 'deposit_processing_conflict', 'Deposit is being processed, please retry')
+      return
+    }
 
-    await tx.balance.update({
-      where: { id: balance.id },
-      data: { amount: { increment: creditedAmount } },
-    })
-
-    await tx.balanceTransaction.create({
-      data: {
-        balanceId: balance.id,
-        type: 'DEPOSIT',
-        amount: creditedAmount,
-        status: 'completed',
-        source: 'deposit_request',
-        referenceId: depositId,
-        adminId: admin.id,
-        comment: `USDT deposit (${deposit.network}) confirmed by admin`,
-      },
-    })
-
-    await tx.auditLog.create({
-      data: {
-        userId: admin.id,
-        action: 'deposit_confirmed',
-        entity: 'deposit_request',
-        entityId: depositId,
-        meta: JSON.stringify({
-          userId: deposit.userId,
-          amountUsdt: deposit.amountUsdt,
-          creditedAmount,
-          network: deposit.network,
-          txHash: deposit.txHash,
-        }),
-      },
-    })
-  })
+    throw error
+  }
 
   const updated = await prisma.depositRequest.findUniqueOrThrow({
     where: { id: depositId },
@@ -3496,30 +3531,47 @@ router.post('/deposits/:id/reject', authRateLimiter, async (request, response) =
     return
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.depositRequest.update({
-      where: { id: depositId },
-      data: {
-        status: 'rejected',
-        adminNote: typeof request.body.note === 'string' ? request.body.note.trim() || null : null,
-      },
-    })
+  try {
+    await prisma.$transaction(async (tx) => {
+      const updateResult = await tx.depositRequest.updateMany({
+        where: { id: depositId, status: 'pending' },
+        data: {
+          status: 'rejected',
+          adminNote: typeof request.body.note === 'string' ? request.body.note.trim() || null : null,
+        },
+      })
+      if (updateResult.count !== 1) {
+        throw new DepositModerationError(400, 'already_processed', 'This deposit has already been processed')
+      }
 
-    await tx.auditLog.create({
-      data: {
-        userId: admin.id,
-        action: 'deposit_rejected',
-        entity: 'deposit_request',
-        entityId: depositId,
-        meta: JSON.stringify({
-          userId: deposit.userId,
-          amountUsdt: deposit.amountUsdt,
-          network: deposit.network,
-          txHash: deposit.txHash,
-        }),
-      },
+      await tx.auditLog.create({
+        data: {
+          userId: admin.id,
+          action: 'deposit_rejected',
+          entity: 'deposit_request',
+          entityId: depositId,
+          meta: JSON.stringify({
+            userId: deposit.userId,
+            amountUsdt: deposit.amountUsdt,
+            network: deposit.network,
+            txHash: deposit.txHash,
+          }),
+        },
+      })
     })
-  })
+  } catch (error) {
+    if (error instanceof DepositModerationError) {
+      sendError(response, error.status, error.code, error.message)
+      return
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      sendError(response, 409, 'deposit_processing_conflict', 'Deposit is being processed, please retry')
+      return
+    }
+
+    throw error
+  }
 
   const updated = await prisma.depositRequest.findUniqueOrThrow({
     where: { id: depositId },

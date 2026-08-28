@@ -532,6 +532,117 @@ test('stripe webhook verifies signature, marks payment paid, and ignores duplica
   assert.equal(duplicateBody.duplicated, true)
 })
 
+test('admin deposit moderation requires tx hash and stays idempotent under repeated requests', async () => {
+  const login = await request('/api/admin/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'admin-secret' }),
+  })
+  assert.equal(login.status, 200)
+  const adminCookie = login.headers.get('set-cookie')!
+  assert.ok(adminCookie)
+
+  const user = await prisma.user.create({
+    data: { telegramId: '900000099', firstName: 'Deposit', username: 'deposit_user', language: 'ru' },
+  })
+
+  const noHashDeposit = await prisma.depositRequest.create({
+    data: {
+      userId: user.id,
+      amountUsdt: 25,
+      network: 'TRC20',
+      asset: 'USDT',
+      walletAddress: 'TNOHASHWALLET',
+      status: 'pending',
+      commissionPct: 0,
+      creditedAmount: 25,
+    },
+  })
+
+  const missingHashConfirm = await requestJson(`/api/admin/deposits/${noHashDeposit.id}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ note: 'try without hash' }),
+  })
+  assert.equal(missingHashConfirm.response.status, 400)
+  assert.equal(missingHashConfirm.body.code, 'tx_hash_required')
+
+  const confirmedCandidate = await prisma.depositRequest.create({
+    data: {
+      userId: user.id,
+      amountUsdt: 40,
+      network: 'TON',
+      asset: 'USDT',
+      walletAddress: 'TCONFIRMWALLET',
+      txHash: 'TX_HASH_CONFIRM_1234567890',
+      status: 'pending',
+      commissionPct: 5,
+      creditedAmount: 38,
+    },
+  })
+
+  const firstConfirm = await requestJson(`/api/admin/deposits/${confirmedCandidate.id}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ note: 'approve once' }),
+  })
+  assert.equal(firstConfirm.response.status, 200)
+  assert.equal(firstConfirm.body.deposit.status, 'confirmed')
+
+  const secondConfirm = await requestJson(`/api/admin/deposits/${confirmedCandidate.id}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ note: 'approve twice' }),
+  })
+  assert.equal(secondConfirm.response.status, 400)
+  assert.equal(secondConfirm.body.code, 'already_processed')
+
+  const balance = await prisma.balance.findUniqueOrThrow({ where: { userId: user.id } })
+  assert.equal(balance.amount, 38)
+  const depositTransactions = await prisma.balanceTransaction.findMany({
+    where: { balanceId: balance.id, source: 'deposit_request', referenceId: confirmedCandidate.id },
+  })
+  assert.equal(depositTransactions.length, 1)
+  assert.equal(depositTransactions[0].type, 'DEPOSIT')
+
+  const rejectCandidate = await prisma.depositRequest.create({
+    data: {
+      userId: user.id,
+      amountUsdt: 15,
+      network: 'TRC20',
+      asset: 'USDT',
+      walletAddress: 'TREJECTWALLET',
+      txHash: 'TX_HASH_REJECT_1234567890',
+      status: 'pending',
+      commissionPct: 0,
+      creditedAmount: 15,
+    },
+  })
+
+  const [rejectA, rejectB] = await Promise.all([
+    requestJson(`/api/admin/deposits/${rejectCandidate.id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ note: 'reject a' }),
+    }),
+    requestJson(`/api/admin/deposits/${rejectCandidate.id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+      body: JSON.stringify({ note: 'reject b' }),
+    }),
+  ])
+
+  const statuses = [rejectA.response.status, rejectB.response.status].sort((a, b) => a - b)
+  assert.deepEqual(statuses, [200, 400])
+
+  const updatedRejected = await prisma.depositRequest.findUniqueOrThrow({ where: { id: rejectCandidate.id } })
+  assert.equal(updatedRejected.status, 'rejected')
+  const rejectLogs = await prisma.auditLog.findMany({
+    where: { entity: 'deposit_request', entityId: rejectCandidate.id, action: 'deposit_rejected' },
+  })
+  assert.equal(rejectLogs.length, 1)
+})
+
 test('casino credits stay separate from shop balance and direct top-ups are blocked', async () => {
   const telegramId = '900000012'
   const user = await prisma.user.create({

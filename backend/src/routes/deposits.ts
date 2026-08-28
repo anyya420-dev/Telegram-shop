@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { Prisma } from '@prisma/client'
 import { authRateLimiter, getAuthorizedUser, parsePositiveInt, prisma, sendError } from '../lib.js'
 
 const router = Router()
@@ -178,10 +179,19 @@ router.patch('/:id/txhash', authRateLimiter, async (request, response) => {
     return
   }
 
-  const updated = await prisma.depositRequest.update({
-    where: { id: depositId },
-    data: { txHash },
-  })
+  let updated
+  try {
+    updated = await prisma.depositRequest.update({
+      where: { id: depositId },
+      data: { txHash },
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      sendError(response, 409, 'tx_hash_already_used', 'This transaction hash has already been submitted')
+      return
+    }
+    throw error
+  }
 
   response.json({ deposit: sanitizeDeposit(updated) })
 })
