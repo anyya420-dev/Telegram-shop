@@ -14,6 +14,8 @@ export const DEMO_TELEGRAM_USER = {
 }
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-session-secret'
+const TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = Number(process.env.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS ?? '86400')
+const TELEGRAM_INIT_DATA_CLOCK_SKEW_SECONDS = Number(process.env.TELEGRAM_INIT_DATA_CLOCK_SKEW_SECONDS ?? '30')
 
 export type AppLanguage = 'ru' | 'en'
 
@@ -117,8 +119,23 @@ export function verifySessionToken(token: string | undefined) {
 export function verifyTelegramInitData(initData: string, botToken: string) {
   const params = new URLSearchParams(initData)
   const hash = params.get('hash')
+  const authDateRaw = params.get('auth_date')
 
-  if (!hash) {
+  if (!hash || !/^[a-f0-9]{64}$/i.test(hash) || !authDateRaw) {
+    return null
+  }
+
+  const authDate = Number.parseInt(authDateRaw, 10)
+  if (!Number.isFinite(authDate) || authDate <= 0) {
+    return null
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  if (authDate > now + TELEGRAM_INIT_DATA_CLOCK_SKEW_SECONDS) {
+    return null
+  }
+
+  if (TELEGRAM_INIT_DATA_MAX_AGE_SECONDS > 0 && now - authDate > TELEGRAM_INIT_DATA_MAX_AGE_SECONDS) {
     return null
   }
 
