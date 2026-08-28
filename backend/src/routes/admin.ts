@@ -28,6 +28,7 @@ import {
   sanitizePayment,
   sanitizePaymentMethod,
 } from '../services/payments.js'
+import { verifyTelegramInitDataWithAnyBotToken } from '../lib.js'
 import { assignPickupStoragesForPaidOrder } from '../services/pickupStorage.js'
 import { ensureCasinoDefaults, getOrCreateCasinoBalance, serializeReward } from '../services/casino.js'
 
@@ -405,9 +406,21 @@ router.post('/auth/login', authRateLimiter, async (request, response) => {
 
   const password = typeof request.body.password === 'string' ? request.body.password : ''
   const mode = request.body?.mode === 'owner' ? 'owner' : 'admin'
+  const initData = typeof request.body.initData === 'string' ? request.body.initData.trim() : ''
   if (!password) {
     sendError(response, 400, 'invalid_credentials', 'Administrator password is required')
     return
+  }
+
+  // When Telegram initData is provided (opened via bot WebApp button), verify it.
+  // If initData is absent (direct browser access), skip Telegram verification.
+  if (initData) {
+    const botTokens = [process.env.BOT_TOKEN, process.env.TELEGRAM_BOT_TOKEN].filter((t): t is string => Boolean(t))
+    const telegramUser = verifyTelegramInitDataWithAnyBotToken(initData, botTokens)
+    if (!telegramUser) {
+      sendError(response, 401, 'invalid_credentials', 'Telegram identity could not be verified')
+      return
+    }
   }
 
   const result = await verifyAdminPassword(password, mode)

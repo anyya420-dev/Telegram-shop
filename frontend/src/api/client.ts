@@ -236,7 +236,7 @@ export const api = {
     return publicRequest<{ payment: Payment }>(`/payments/${paymentId}/crypto/submit`, { method: 'POST', body: JSON.stringify(payload) })
   },
 
-  adminLogin(data: { password: string; mode?: 'admin' | 'owner' }) {
+  adminLogin(data: { password: string; mode?: 'admin' | 'owner'; initData?: string }) {
     return adminRequest<{ ok: boolean; role?: string; username?: string | null }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),

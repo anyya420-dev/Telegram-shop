@@ -1105,7 +1105,8 @@ export default function AdminPage({ panelMode = 'admin' }: { panelMode?: 'admin'
     setAuthLoading(true);
 
     try {
-      const response = await api.adminLogin({ password, mode: panelMode });
+      const initData = window.Telegram?.WebApp?.initData ?? ''
+      const response = await api.adminLogin({ password, mode: panelMode, initData: initData || undefined });
       setAuthenticated(true);
       setAdminRole(response.role ?? 'admin');
       setPassword('');
