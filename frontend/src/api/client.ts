@@ -83,15 +83,24 @@ function createApiClient(defaults: { credentials: RequestCredentials; includeSes
       headers.set('Authorization', 'Bearer' + ' ' + sessionToken)
     }
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 60_000)
+
     let response: Response
     try {
       response = await fetch(`${API_URL}${path}`, {
         ...init,
         credentials: options.credentials,
         headers,
+        signal: init?.signal ?? controller.signal,
       })
-    } catch {
+    } catch (fetchError) {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new ApiError('Request timed out', 'request_timeout')
+      }
       throw new ApiError('Network error', 'network_error')
+    } finally {
+      clearTimeout(timeoutId)
     }
 
     if (!response.ok) {
