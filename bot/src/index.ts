@@ -22,8 +22,7 @@ function resolveBotToken() {
 
   const legacyBotToken = process.env.BOT_TOKEN?.trim()
   if (legacyBotToken) {
-    console.warn('BOT_TOKEN is deprecated. Set TELEGRAM_BOT_TOKEN in production.')
-    return legacyBotToken
+    console.error('BOT_TOKEN is deprecated and is no longer used. Set TELEGRAM_BOT_TOKEN.')
   }
 
   throw new Error('TELEGRAM_BOT_TOKEN is required for bot startup.')
@@ -62,6 +61,11 @@ async function startBot() {
   })
 
   await bot.telegram.getMe()
+  const webhookInfo = await bot.telegram.getWebhookInfo()
+  if (webhookInfo.url) {
+    console.warn(`Detected active webhook (${webhookInfo.url}). Switching bot to polling mode.`)
+    await bot.telegram.deleteWebhook()
+  }
   await bot.launch({ dropPendingUpdates: true })
   console.log('Telegram Shop bot started')
 

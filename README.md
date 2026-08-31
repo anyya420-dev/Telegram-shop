@@ -63,5 +63,6 @@ npm run build
 - `SESSION_SECRET` — секрет подписи пользовательской сессии
 - `TELEGRAM_BOT_TOKEN` — токен Telegram бота
 - `WEB_APP_URL` — публичный URL Web App
+- `ADMIN_WEB_APP_URL` — публичный URL admin Web App (например `https://.../#/admin`)
 
 ⚠️ Никогда не коммитьте реальные секреты в репозиторий.
